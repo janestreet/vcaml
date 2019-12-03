@@ -1,0 +1,3 @@
+(library (name vcaml) (public_name vcaml)
+ (libraries core async msgpack msgpack_unix nvim_internal)
+ (preprocess (pps ppx_jane)))
