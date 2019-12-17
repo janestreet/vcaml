@@ -1,3 +1,3 @@
 (library (name vcaml) (public_name vcaml)
- (libraries core async msgpack msgpack_unix nvim_internal)
+ (libraries async core_kernel.bus core msgpack msgpack_unix nvim_internal)
  (preprocess (pps ppx_jane)))
