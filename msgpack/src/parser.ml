@@ -55,7 +55,7 @@ let negative_fixint =
   (* A negative fixint is stored as a 5-bit two's complement integer. To bit-extend this
      to be the correct real integer, we set all bits besides the bottom 5.
 
-     The reason that we use the literal -32 is so that the mask works on 
+     The reason that we use the literal -32 is so that the mask works on
      32-bit and 64-bit architectures.
 
      32-bit computer -32: 11111111_11111111_11111111_11100000
@@ -284,4 +284,7 @@ let ext =
 
 let atom = choice [ nil; bool; int; floating; str; bin; ext; uint64; int64 ]
 let msg = fix (fun msg -> choice [ atom; array msg; map msg ])
-let parse s = parse_string msg s |> Result.map_error ~f:(fun s -> Error.of_string s)
+
+let parse s =
+  parse_string ~consume:Prefix msg s |> Result.map_error ~f:(fun s -> Error.of_string s)
+;;

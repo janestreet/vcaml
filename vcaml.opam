@@ -17,8 +17,8 @@ depends: [
   "core"
   "core_kernel"
   "ppx_jane"
-  "angstrom"
-  "angstrom-async"
+  "angstrom"       {>= "0.14.1"}
+  "angstrom-async" {>= "0.14.1"}
   "dune"           {>= "2.0.0"}
   "faraday"
 ]
