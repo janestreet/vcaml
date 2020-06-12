@@ -20,13 +20,21 @@ module Client : sig
   module Connection_type : sig
     type t =
       | Unix of string
+      (** neovim opens up a unix pipe that plugins can connect to, so vcaml
+          (when given a path to this pipe), can connect and start talking to
+          neovim *)
       | Embed of
           { prog : string
           ; args : string list
           ; working_dir : string
           ; env : (string * string) list
           }
+      (** VCaml spawns a neovim instance with all of the provided
+          parameters and then communicates with that process with that
+          processes stdin and stdout *)
       | Child
+      (** The Vcaml program is running as a child of neovim, and
+          communicates with neovim via its own stdin and stdout *)
   end
 
   val attach : Connection_type.t -> (t * Async.Process.t option) Deferred.Or_error.t
