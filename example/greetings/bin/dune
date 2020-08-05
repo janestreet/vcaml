@@ -1,0 +1,2 @@
+(executables (names main) (libraries core vcaml_greetings)
+ (preprocess (pps ppx_jane)))

@@ -6,6 +6,10 @@ val get_chan_info : chan:int -> Channel_info.t Or_error.t Api_call.t
 val list_bufs : Buf.t list Or_error.t Api_call.t
 val list_chans : Channel_info.t list Or_error.t Api_call.t
 val get_current_buf : Buf.t Or_error.t Api_call.t
+val set_current_buf : buffer:Buf.t -> unit Or_error.t Api_call.t
+val get_current_win : Window.t Or_error.t Api_call.t
+val set_current_win : window:Window.t -> unit Or_error.t Api_call.t
+val list_wins : Window.t list Or_error.t Api_call.t
 
 (**
    Calls many API methods atomically.
@@ -36,11 +40,21 @@ val get_current_buf : Buf.t Or_error.t Api_call.t
 val call_atomic : calls:Msgpack.t list -> Msgpack.t list Or_error.t Api_call.t
 
 val eval : expr:string -> Msgpack.t Or_error.t Api_call.t
+val call_function : fn:string -> args:Msgpack.t list -> Msgpack.t Or_error.t Api_call.t
 
 val feedkeys
   :  keys:string
   -> mode:string
   -> escape_csi:bool
+  -> unit Or_error.t Api_call.t
+
+val set_client_info
+  :  ?version:Client_info.Version.t
+  -> ?methods:Client_info.Client_method.t String.Map.t
+  -> ?attributes:string String.Map.t
+  -> name:string
+  -> type_:Client_info.Client_type.t
+  -> unit
   -> unit Or_error.t Api_call.t
 
 module Untested : sig
@@ -74,7 +88,6 @@ module Untested : sig
     -> string Or_error.t Api_call.t
 
   val execute_lua : code:string -> args:Msgpack.t list -> Msgpack.t Or_error.t Api_call.t
-  val call_function : fn:string -> args:Msgpack.t list -> Msgpack.t Or_error.t Api_call.t
 
   val call_dict_function
     :  dict:Msgpack.t
@@ -97,10 +110,6 @@ module Untested : sig
   val out_write : str:string -> unit Or_error.t Api_call.t
   val err_write : str:string -> unit Or_error.t Api_call.t
   val err_writeln : str:string -> unit Or_error.t Api_call.t
-  val set_current_buf : buffer:Buf.t -> unit Or_error.t Api_call.t
-  val list_wins : Window.t list Or_error.t Api_call.t
-  val get_current_win : Window.t Or_error.t Api_call.t
-  val set_current_win : window:Window.t -> unit Or_error.t Api_call.t
   val list_tabpages : Tabpage.t list Or_error.t Api_call.t
   val get_current_tabpage : Tabpage.t Or_error.t Api_call.t
   val set_current_tabpage : tabpage:Tabpage.t -> unit Or_error.t Api_call.t
@@ -116,15 +125,6 @@ module Untested : sig
     -> Nvim_command.t String.Map.t Or_error.t Api_call.t
 
   val get_api_info : Msgpack.t list Or_error.t Api_call.t
-
-  val set_client_info
-    :  ?version:Client_info.Version.t
-    -> ?methods:Client_info.Client_method.t String.Map.t
-    -> ?attributes:string String.Map.t
-    -> name:string
-    -> type_:Client_info.Client_type.t
-    -> unit
-    -> unit Or_error.t Api_call.t
 
   val parse_expression
     :  expr:string

@@ -22,7 +22,12 @@ module Client : sig
       | Unix of string
       (** neovim opens up a unix pipe that plugins can connect to, so vcaml
           (when given a path to this pipe), can connect and start talking to
-          neovim *)
+          neovim
+          A note on using this kind of connection: if the VCaml plugin is being
+          run as a bang (!) command, api calls such as command and command_output
+          may hang, as they must wait until the invocation of the plugin terminates
+          before being executed by neovim.
+      *)
       | Embed of
           { prog : string
           ; args : string list

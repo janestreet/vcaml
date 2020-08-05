@@ -1,0 +1,3 @@
+(library (name vcaml_greetings)
+ (libraries async core core_kernel.uuid core.uuid vcaml)
+ (preprocess (pps ppx_jane)))

@@ -162,6 +162,55 @@ let buf_events { events; _ } =
   r
 ;;
 
+let interleave_slashes name =
+  name
+  |> String.to_list
+  |> List.map ~f:(fun c -> [ '\\'; c ])
+  |> List.join
+  |> String.of_char_list
+;;
+
+let badd_api_call name =
+  (* For input to :badd, you can escape any keyboard character with a slash. For example,
+     \h\i is interpreted as hi. Notably, things like \n, \t, and \r get sent to n, t, and
+     r instead of their usual string meanings. As a result, it makes sense to escape all
+     characters, since certain characters (e.g. space) require being escaped, and
+     escaping characters behaves nicely even on characters which don't require it. *)
+  let escaped_name = interleave_slashes name in
+  Nvim_internal.Wrappers.nvim_command ~command:(sprintf "badd %s" escaped_name)
+  |> Api_call.of_api_result
+;;
+
+let bufnr_api_call name =
+  let escaped_name = String.escaped name in
+  Nvim_internal.Wrappers.nvim_eval ~expr:(sprintf "bufnr(\"%s\")" escaped_name)
+  |> Api_call.of_api_result
+;;
+
+let add_buffer_before_searching name =
+  let open Api_call.Let_syntax in
+  let%map badd_or_err = badd_api_call name
+  and bufnr_or_err = bufnr_api_call name in
+  Or_error.both badd_or_err bufnr_or_err
+  |> Or_error.bind ~f:(fun ((), buffer) -> Nvim_internal.Types.Buffer.of_msgpack buffer)
+;;
+
+let search_for_buffer name =
+  let open Api_call.Let_syntax in
+  let%map result = bufnr_api_call name in
+  result |> Or_error.bind ~f:Nvim_internal.Types.Buffer.of_msgpack
+;;
+
+(* If we call vim's bufnr command with a string x, it may resolve to a different buffer
+   y, if x is a prefix of y and x is not a prefix of any other open buffers in vim. As a
+   result, we need to perform a :badd prior to calling bufnr, with the caveat that :badd
+   cannot be used for the default buffer (whose name is the empty string). *)
+let find_by_name_or_create ~name =
+  match name with
+  | "" -> search_for_buffer name
+  | _ -> add_buffer_before_searching name
+;;
+
 let attach
       ?(opts = [])
       ({ attach_sequencer; buffers_attached; _ } as cli)
@@ -319,15 +368,6 @@ module Untested = struct
   let clear_highlight ~buffer ~ns_id ~line_start ~line_end =
     Nvim_internal.Wrappers.nvim_buf_clear_highlight ~buffer ~ns_id ~line_start ~line_end
     |> Api_call.of_api_result
-  ;;
-
-  let find_by_name_or_create ~name =
-    let open Api_call.Let_syntax in
-    let%map result =
-      Nvim_internal.Wrappers.nvim_eval ~expr:(sprintf "bufnr(\"%s\", 1)" name)
-      |> Api_call.of_api_result
-    in
-    Or_error.bind ~f:Nvim_internal.Types.Buffer.of_msgpack result
   ;;
 
   let set_scratch ~buffer =

@@ -139,7 +139,7 @@ module Defun = struct
       | Nullary return_type ->
         let args = f [] in
         let open Api_call.Let_syntax in
-        let%map result = Client.Untested.call_function ~fn:function_name ~args in
+        let%map result = Client.call_function ~fn:function_name ~args in
         let open Or_error.Let_syntax in
         let%bind result = result in
         Extract.value

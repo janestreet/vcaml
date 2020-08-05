@@ -40,5 +40,6 @@ type t = Types.Client_info.t =
   ; name : string option
   ; type_ : Types.Client_info.client_type option
   }
+[@@deriving sexp_of]
 
 val of_msgpack : Msgpack.t -> t Or_error.t

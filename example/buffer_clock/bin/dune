@@ -1,0 +1,2 @@
+(executables (names main) (libraries core vcaml_buffer_clock)
+ (preprocess (pps ppx_jane)))

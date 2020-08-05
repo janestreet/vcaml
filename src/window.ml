@@ -1,6 +1,6 @@
 open Core
 
-type t = Types.Window.t
+type t = Types.Window.t [@@deriving sexp]
 
 type position =
   { row : int
@@ -9,6 +9,14 @@ type position =
 
 let to_msgpack = Types.Window.to_msgpack
 let of_msgpack = Types.Window.of_msgpack
+
+let get_height ~window =
+  Nvim_internal.Wrappers.nvim_win_get_height ~window |> Api_call.of_api_result
+;;
+
+let set_height ~window ~height =
+  Nvim_internal.Wrappers.nvim_win_set_height ~window ~height |> Api_call.of_api_result
+;;
 
 module Untested = struct
   let get_buf ~window =
@@ -29,14 +37,6 @@ module Untested = struct
   let set_cursor ~window ~row ~col =
     let pos = [ Msgpack.Integer row; Integer col ] in
     Nvim_internal.Wrappers.nvim_win_set_cursor ~window ~pos |> Api_call.of_api_result
-  ;;
-
-  let get_height ~window =
-    Nvim_internal.Wrappers.nvim_win_get_height ~window |> Api_call.of_api_result
-  ;;
-
-  let set_height ~window ~height =
-    Nvim_internal.Wrappers.nvim_win_set_height ~window ~height |> Api_call.of_api_result
   ;;
 
   let get_width ~window =

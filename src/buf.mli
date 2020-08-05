@@ -52,6 +52,8 @@ val set_lines
   -> replacement:string list
   -> unit Or_error.t Api_call.t
 
+val find_by_name_or_create : name:string -> t Or_error.t Api_call.t
+
 (** Attach to an existing buffer and receive a pipe of updates pretaining to this buffer.
 
     The [opts] parameter is currently unused but may become used by neovim in the future.
@@ -114,7 +116,6 @@ module Untested : sig
   val set_name : buffer:t -> name:string -> unit Or_error.t Api_call.t
   val is_valid : buffer:t -> bool Or_error.t Api_call.t
   val get_mark : buffer:t -> name:string -> mark Or_error.t Api_call.t
-  val find_by_name_or_create : name:string -> t Or_error.t Api_call.t
   val set_scratch : buffer:t -> unit Api_call.t
 
   val add_highlight

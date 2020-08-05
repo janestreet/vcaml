@@ -38,12 +38,90 @@ let call_atomic ~calls =
 
 let eval ~expr = Nvim_internal.Wrappers.nvim_eval ~expr |> Api_call.of_api_result
 
+let call_function ~fn ~args =
+  Nvim_internal.Wrappers.nvim_call_function ~fn ~args |> Api_call.of_api_result
+;;
+
 let get_current_buf =
   Nvim_internal.Wrappers.nvim_get_current_buf |> Api_call.of_api_result
 ;;
 
+let set_current_buf ~buffer =
+  Nvim_internal.Wrappers.nvim_set_current_buf ~buffer |> Api_call.of_api_result
+;;
+
 let feedkeys ~keys ~mode ~escape_csi =
   Nvim_internal.Wrappers.nvim_feedkeys ~keys ~mode ~escape_csi |> Api_call.of_api_result
+;;
+
+let set_client_info
+      ?(version =
+        { Types.Client_info.major = None
+        ; minor = None
+        ; patch = None
+        ; prerelease = None
+        ; commit = None
+        })
+      ?(methods = String.Map.empty)
+      ?(attributes = String.Map.empty)
+      ~name
+      ~(type_ : Types.Client_info.client_type)
+      ()
+  =
+  let open Msgpack in
+  let version =
+    match version with
+    | { major; minor; patch; prerelease; commit } ->
+      List.filter_opt
+        [ Option.map major ~f:(fun i -> String "major", Integer i)
+        ; Option.map minor ~f:(fun i -> String "minor", Integer i)
+        ; Option.map patch ~f:(fun i -> String "patch", Integer i)
+        ; Option.map prerelease ~f:(fun s -> String "prerelease", String s)
+        ; Option.map commit ~f:(fun s -> String "commit", String s)
+        ]
+  in
+  let type_ =
+    match type_ with
+    | `Remote -> "remote"
+    | `Ui -> "ui"
+    | `Embedder -> "embedder"
+    | `Host -> "host"
+    | `Plugin -> "plugin"
+  in
+  let convert_method { Types.Client_info.async; nargs; opts } =
+    Map
+      (((String "async", Boolean async)
+        :: List.map (Option.to_list nargs) ~f:(function
+          | `Fixed i -> String "nargs", Integer i
+          | `Range (lo, hi) -> String "nargs", Array [ Integer lo; Integer hi ]))
+       @ (Map.to_alist opts |> List.map ~f:(fun (a, b) -> String a, b)))
+  in
+  let methods =
+    Map.map methods ~f:convert_method
+    |> Map.to_alist
+    |> List.map ~f:(fun (a, b) -> String a, b)
+  in
+  let attributes =
+    Map.to_alist attributes |> List.map ~f:(fun (a, b) -> String a, String b)
+  in
+  Nvim_internal.Wrappers.nvim_set_client_info ~name ~version ~type_ ~methods ~attributes
+  |> Api_call.of_api_result
+;;
+
+let get_current_win =
+  Nvim_internal.Wrappers.nvim_get_current_win |> Api_call.of_api_result
+;;
+
+let set_current_win ~window =
+  Nvim_internal.Wrappers.nvim_set_current_win ~window |> Api_call.of_api_result
+;;
+
+let list_wins =
+  let open Api_call.Let_syntax in
+  let%map result = Nvim_internal.Wrappers.nvim_list_wins |> Api_call.of_api_result in
+  Or_error.bind
+    ~f:(fun r -> List.map r ~f:Window.of_msgpack |> Or_error.combine_errors)
+    result
 ;;
 
 module Untested = struct
@@ -79,10 +157,6 @@ module Untested = struct
 
   let execute_lua ~code ~args =
     Nvim_internal.Wrappers.nvim_execute_lua ~code ~args |> Api_call.of_api_result
-  ;;
-
-  let call_function ~fn ~args =
-    Nvim_internal.Wrappers.nvim_call_function ~fn ~args |> Api_call.of_api_result
   ;;
 
   let call_dict_function ~dict ~fn ~args =
@@ -152,26 +226,6 @@ module Untested = struct
     Nvim_internal.Wrappers.nvim_err_writeln ~str |> Api_call.of_api_result
   ;;
 
-  let set_current_buf ~buffer =
-    Nvim_internal.Wrappers.nvim_set_current_buf ~buffer |> Api_call.of_api_result
-  ;;
-
-  let list_wins =
-    let open Api_call.Let_syntax in
-    let%map result = Nvim_internal.Wrappers.nvim_list_wins |> Api_call.of_api_result in
-    Or_error.bind
-      ~f:(fun r -> List.map r ~f:Window.of_msgpack |> Or_error.combine_errors)
-      result
-  ;;
-
-  let get_current_win =
-    Nvim_internal.Wrappers.nvim_get_current_win |> Api_call.of_api_result
-  ;;
-
-  let set_current_win ~window =
-    Nvim_internal.Wrappers.nvim_set_current_win ~window |> Api_call.of_api_result
-  ;;
-
   let list_tabpages =
     let open Api_call.Let_syntax in
     let%map result =
@@ -234,65 +288,6 @@ module Untested = struct
   ;;
 
   let get_api_info = Nvim_internal.Wrappers.nvim_get_api_info |> Api_call.of_api_result
-
-  let set_client_info
-        ?(version =
-          { Types.Client_info.major = None
-          ; minor = None
-          ; patch = None
-          ; prerelease = None
-          ; commit = None
-          })
-        ?(methods = String.Map.empty)
-        ?(attributes = String.Map.empty)
-        ~name
-        ~(type_ : Types.Client_info.client_type)
-        ()
-    =
-    let open Msgpack in
-    let version =
-      match version with
-      | { major; minor; patch; prerelease; commit } ->
-        List.filter_opt
-          [ Option.map major ~f:(fun i -> String "major", Integer i)
-          ; Option.map minor ~f:(fun i -> String "minor", Integer i)
-          ; Option.map patch ~f:(fun i -> String "patch", Integer i)
-          ; Option.map prerelease ~f:(fun s -> String "prerelease", String s)
-          ; Option.map commit ~f:(fun s -> String "commit", String s)
-          ]
-    in
-    let type_ =
-      match type_ with
-      | `Remote -> "remote"
-      | `Ui -> "ui"
-      | `Embedder -> "embedder"
-      | `Host -> "host"
-      | `Plugin -> "plugin"
-    in
-    let convert_method { Types.Client_info.async; nargs; opts } =
-      Map
-        (((String "async", Boolean async)
-          :: List.map (Option.to_list nargs) ~f:(function
-            | `Fixed i -> String "nargs", Integer i
-            | `Range (lo, hi) -> String "nargs", Array [ Integer lo; Integer hi ]))
-         @ (Map.to_alist opts |> List.map ~f:(fun (a, b) -> String a, b)))
-    in
-    let methods =
-      Map.map methods ~f:convert_method
-      |> Map.to_alist
-      |> List.map ~f:(fun (a, b) -> String a, b)
-    in
-    let attributes =
-      Map.to_alist attributes |> List.map ~f:(fun (a, b) -> String a, String b)
-    in
-    Nvim_internal.Wrappers.nvim_set_client_info
-      ~name
-      ~version
-      ~type_
-      ~methods
-      ~attributes
-    |> Api_call.of_api_result
-  ;;
 
   let parse_expression ~expr ~flags ~highlight =
     Nvim_internal.Wrappers.nvim_parse_expression ~expr ~flags ~highlight
