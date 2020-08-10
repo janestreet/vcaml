@@ -110,10 +110,7 @@ module Make (M : Connection) () = struct
         return ()
     in
     match%bind
-      Angstrom_async.parse_many
-        Msgpack.Internal.Parser.msg
-        handle_message
-        (M.reader conn)
+      Angstrom_async.parse_many Msgpack.Internal.Parser.msg handle_message (M.reader conn)
     with
     | Ok () -> return ()
     | Error s ->

@@ -81,8 +81,7 @@ let create_clock_buffer pipe ~terminate_var ~time_source () =
   let%bind buf, _new_win = start_plugin ~client ~terminate_var in
   let writing_buf_err = start_buffer_updates ~client ~buf ~time_source in
   let shutdown_received = Ivar.read terminate_var in
-  Deferred.ok
-    (Deferred.any_unit [ Deferred.ignore_m writing_buf_err; shutdown_received ])
+  Deferred.ok (Deferred.any_unit [ Deferred.ignore_m writing_buf_err; shutdown_received ])
 ;;
 
 let main =

@@ -13,7 +13,9 @@ let get_string_or_error msg =
 let make_nvim_rpc_call ~client ~chan_id ~name ~payload =
   Vcaml.run_join
     client
-    (Client.call_function ~fn:"rpcrequest" ~args:[ Integer chan_id; String name; payload ])
+    (Client.call_function
+       ~fn:"rpcrequest"
+       ~args:[ Integer chan_id; String name; payload ])
 ;;
 
 let%expect_test "plugin responds to RPC requests and shuts down" =

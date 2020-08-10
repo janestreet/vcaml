@@ -11,8 +11,5 @@ module For_testing : sig
     -> terminate_var:unit Ivar.t
     -> unit Deferred.Or_error.t
 
-  val get_rpc_chan_for_testing
-    :  client:Client.t
-    -> name:string
-    -> int Deferred.Or_error.t
+  val get_rpc_chan_for_testing : client:Client.t -> name:string -> int Deferred.Or_error.t
 end

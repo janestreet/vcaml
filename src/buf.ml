@@ -109,8 +109,7 @@ module Event = struct
   let for_buffer buf =
     let equal = Nvim_internal.Types.Buffer.equal in
     function
-    | Lines { buffer; _ } | Changed_tick { buffer; _ } | Detach buffer ->
-      equal buffer buf
+    | Lines { buffer; _ } | Changed_tick { buffer; _ } | Detach buffer -> equal buffer buf
   ;;
 end
 
@@ -301,8 +300,7 @@ module Untested = struct
   let get_commands ?(opts = []) ~buffer =
     let open Api_call.Let_syntax in
     let%map result =
-      Nvim_internal.Wrappers.nvim_buf_get_commands ~buffer ~opts
-      |> Api_call.of_api_result
+      Nvim_internal.Wrappers.nvim_buf_get_commands ~buffer ~opts |> Api_call.of_api_result
     in
     let open Or_error.Let_syntax in
     let%bind result = result in
@@ -318,8 +316,7 @@ module Untested = struct
   ;;
 
   let set_var ~buffer ~name ~value =
-    Nvim_internal.Wrappers.nvim_buf_set_var ~buffer ~name ~value
-    |> Api_call.of_api_result
+    Nvim_internal.Wrappers.nvim_buf_set_var ~buffer ~name ~value |> Api_call.of_api_result
   ;;
 
   let del_var ~buffer ~name =

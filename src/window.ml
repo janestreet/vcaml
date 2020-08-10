@@ -52,8 +52,7 @@ module Untested = struct
   ;;
 
   let set_var ~window ~name ~value =
-    Nvim_internal.Wrappers.nvim_win_set_var ~window ~name ~value
-    |> Api_call.of_api_result
+    Nvim_internal.Wrappers.nvim_win_set_var ~window ~name ~value |> Api_call.of_api_result
   ;;
 
   let del_var ~window ~name =

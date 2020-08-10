@@ -85,13 +85,7 @@ val nvim_buf_get_name : buffer:Buffer.t -> string api_result
 val nvim_buf_set_name : buffer:Buffer.t -> name:string -> unit api_result
 val nvim_buf_is_loaded : buffer:Buffer.t -> bool api_result
 val nvim_buf_is_valid : buffer:Buffer.t -> bool api_result
-
-val buffer_insert
-  :  buffer:Buffer.t
-  -> lnum:int
-  -> lines:Msgpack.t list
-  -> unit api_result
-
+val buffer_insert : buffer:Buffer.t -> lnum:int -> lines:Msgpack.t list -> unit api_result
 val nvim_buf_get_mark : buffer:Buffer.t -> name:string -> Msgpack.t list api_result
 
 val nvim_buf_add_highlight

@@ -29,8 +29,7 @@ let rec inject : type t. t Types.Phantom.t -> t -> Msgpack.t =
     | Custom { to_msgpack; _ } -> to_msgpack obj
 ;;
 
-let rec value : type t. ?err_msg:string -> t Types.Phantom.t -> Msgpack.t -> t Or_error.t
-  =
+let rec value : type t. ?err_msg:string -> t Types.Phantom.t -> Msgpack.t -> t Or_error.t =
   fun ?(err_msg = "witness does not match message type") ->
   let open Types.Phantom in
   fun witness msg ->

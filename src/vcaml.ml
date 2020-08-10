@@ -213,9 +213,7 @@ module Defun = struct
   end
 end
 
-let wrap_viml_function ~type_ ~function_name =
-  Defun.Vim.make_fn function_name type_ Fn.id
-;;
+let wrap_viml_function ~type_ ~function_name = Defun.Vim.make_fn function_name type_ Fn.id
 
 let construct_getset ~name ~type_ ~remote_get ~remote_set =
   let get =
@@ -236,9 +234,7 @@ let construct_getset ~name ~type_ ~remote_get ~remote_set =
 ;;
 
 let wrap_var =
-  construct_getset
-    ~remote_get:Client.Untested.get_var
-    ~remote_set:Client.Untested.set_var
+  construct_getset ~remote_get:Client.Untested.get_var ~remote_set:Client.Untested.set_var
 ;;
 
 let wrap_get_vvar ~name ~type_ =

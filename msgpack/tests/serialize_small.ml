@@ -326,6 +326,5 @@ let%expect_test "fixext16" =
   let obj = Extension { type_id = 0x5; data = Bytes.init 16 ~f:(fun _ -> '\x80') } in
   let s = string_of_t_exn obj in
   print_hex s;
-  [%expect
-    {| \xd8\x05\x80\x80\x80\x80\x80\x80\x80\x80\x80\x80\x80\x80\x80\x80\x80\x80 |}]
+  [%expect {| \xd8\x05\x80\x80\x80\x80\x80\x80\x80\x80\x80\x80\x80\x80\x80\x80\x80\x80 |}]
 ;;

@@ -41,12 +41,7 @@ val call_atomic : calls:Msgpack.t list -> Msgpack.t list Or_error.t Api_call.t
 
 val eval : expr:string -> Msgpack.t Or_error.t Api_call.t
 val call_function : fn:string -> args:Msgpack.t list -> Msgpack.t Or_error.t Api_call.t
-
-val feedkeys
-  :  keys:string
-  -> mode:string
-  -> escape_csi:bool
-  -> unit Or_error.t Api_call.t
+val feedkeys : keys:string -> mode:string -> escape_csi:bool -> unit Or_error.t Api_call.t
 
 val set_client_info
   :  ?version:Client_info.Version.t
