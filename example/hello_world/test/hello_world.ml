@@ -11,5 +11,6 @@ let%expect_test "plugin echoes a message" =
       let%map message = run_join client (Client.command_output ~command:"2 messages") in
       print_s [%message (message : string)])
   in
-  [%expect "(message \"Hello world!\")"]
+  [%expect "(message \"Hello world!\")"];
+  return ()
 ;;

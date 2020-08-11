@@ -1,0 +1,2 @@
+(executables (names main) (libraries core mli_plugin)
+ (preprocess (pps ppx_jane)))

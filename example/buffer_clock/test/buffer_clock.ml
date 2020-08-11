@@ -64,5 +64,6 @@ let%expect_test "plugin opens a new buffer/window which updates until buffer del
   (buffer_contents_now ("2020-01-01 00:00:00.000000000Z"))
   (buffer_contents_after_update ("2020-01-01 00:00:01.000000000Z"))
   (terminate_var Empty)
-  (terminate_var (Full ()))|}]
+  (terminate_var (Full ()))|}];
+  return ()
 ;;

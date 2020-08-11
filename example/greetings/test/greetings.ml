@@ -49,5 +49,6 @@ let%expect_test "plugin responds to RPC requests and shuts down" =
     {|
       (rpc_response "Hello, Jane!")
       (terminate_var Empty)
-      (terminate_var (Full ())) |}]
+      (terminate_var (Full ())) |}];
+  return ()
 ;;
