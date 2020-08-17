@@ -36,7 +36,7 @@ module Client = struct
 
   open Connection_type
 
-  module Child = struct
+  module Make_child () = struct
     module T = struct
       type t =
         { reader : Reader.t
@@ -52,7 +52,7 @@ module Client = struct
     ;;
   end
 
-  module Embedded = struct
+  module Make_embedded () = struct
     open Async
 
     module T = struct
@@ -85,6 +85,7 @@ module Client = struct
       let%bind.Deferred.Or_error client = T.attach cli in
       Deferred.Or_error.return (client, None)
     | Embed { prog; args; working_dir; env } ->
+      let module Embedded = Make_embedded () in
       let module T = Transport.Make (Embedded) in
       let%bind.Deferred.Or_error client, process =
         Embedded.spawn ~prog ~args ~working_dir ~env
@@ -92,6 +93,7 @@ module Client = struct
       let%bind.Deferred.Or_error client = T.attach client in
       Deferred.Or_error.return (client, Some process)
     | Child ->
+      let module Child = Make_child () in
       let module T = Transport.Make (Child) in
       let%bind.Deferred.Or_error client = T.attach (Child.self ()) in
       Deferred.Or_error.return (client, None)
@@ -99,6 +101,41 @@ module Client = struct
 
   let embed ~prog ~args ~working_dir ~env =
     attach (Embed { prog; args; working_dir; env })
+  ;;
+
+  let is_channel_with_name ~channel_info ~name =
+    let open Option.Let_syntax in
+    let channel_has_same_name =
+      let%bind { name = name_opt; _ } = channel_info.Channel_info.client in
+      let%map chan_name = name_opt in
+      String.equal chan_name name
+    in
+    Option.value channel_has_same_name ~default:false
+  ;;
+
+  let find_rpc_channel_with_name ~client ~name =
+    let open Deferred.Or_error.Let_syntax in
+    let%bind channel_list = Api_call.run_join client Client.list_chans in
+    let matching_channel_opt =
+      List.find channel_list ~f:(fun channel_info ->
+        is_channel_with_name ~channel_info ~name)
+    in
+    match matching_channel_opt with
+    | Some { id; _ } -> return id
+    | None ->
+      Deferred.Or_error.error_string "Cannot find rpc with the correct name for plugin"
+  ;;
+
+  (* Returns neovim's id for the channel over which neovim and the client communicate.
+     This can be useful when you want to register an RPC event to fire upon a certain
+     event happening in vim (e.g. keypress or autocmd), since registering events require
+     the channel id. *)
+  let get_rpc_channel_id client =
+    let name = Uuid.to_string (Uuid_unix.create ()) in
+    let%bind.Deferred.Or_error () =
+      Api_call.run_join client (Client.set_client_info ~name ~type_:`Plugin ())
+    in
+    find_rpc_channel_with_name ~client ~name
   ;;
 end
 

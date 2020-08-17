@@ -1,0 +1,2 @@
+(library (name vcaml_test) (public_name vcaml.test)
+ (libraries async core vcaml) (preprocess (pps ppx_jane)))

@@ -50,6 +50,8 @@ module Client : sig
     -> working_dir:string
     -> env:(string * string) list
     -> (t * Async.Process.t option) Deferred.Or_error.t
+
+  val get_rpc_channel_id : t -> int Deferred.Or_error.t
 end
 
 (** A [Type.t] is a reified values of a primitive type used in nvim. *)

@@ -1,3 +1,3 @@
 (library (name vcaml_greetings)
- (libraries async core core_kernel.uuid core.uuid vcaml)
+ (libraries async core core_kernel.uuid core.uuid vcaml vcaml_plugin)
  (preprocess (pps ppx_jane)))

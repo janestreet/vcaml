@@ -1,2 +1,2 @@
-(library (name vcaml_hello_world) (libraries async core vcaml)
+(library (name vcaml_hello_world) (libraries async core vcaml vcaml_plugin)
  (preprocess (pps ppx_jane)))

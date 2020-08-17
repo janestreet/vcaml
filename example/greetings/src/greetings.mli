@@ -4,12 +4,10 @@ open Vcaml
 
 val main : Command.t
 
-module For_testing : sig
-  val start_plugin_for_testing
-    :  client:Client.t
-    -> name:string
-    -> terminate_var:unit Ivar.t
-    -> unit Deferred.Or_error.t
-
-  val get_rpc_chan_for_testing : client:Client.t -> name:string -> int Deferred.Or_error.t
-end
+val test
+  :  ?before_plugin:(client:Client.t -> unit Deferred.Or_error.t)
+  -> ?during_plugin:
+       (client:Client.t -> chan_id:int -> state:unit -> unit Deferred.Or_error.t)
+  -> ?after_plugin:(client:Client.t -> state:unit -> unit Deferred.Or_error.t)
+  -> unit
+  -> unit Deferred.t
