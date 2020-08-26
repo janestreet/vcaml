@@ -1,0 +1,2 @@
+(executables (names main) (libraries core msgpack_debug)
+ (preprocess (pps ppx_jane)))
