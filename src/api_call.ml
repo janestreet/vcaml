@@ -1,6 +1,14 @@
 open Core
 open Async
 
+(* Api_call.t is an applicative which means that it can be defined either as
+   the tripple [map, both, return] or via [map, apply, return].  Because
+   [Api_call.t] never contain functions in practice (though it is possible via
+   [return]), it is easier to think about as an implementation based off both.
+   We define the operation [both : 'a api_call -> 'b api_call -> ('a * 'b)
+   api_call], which atomically receives its values from neovim before combining
+   them. *)
+
 type _ t =
   | Single : 'a Nvim_internal.Types.api_result -> 'a Or_error.t t
   | Map : ('a -> 'b) * 'a t -> 'b t
@@ -71,20 +79,52 @@ let rec run : type a. Types.client -> a t -> a Or_error.t Deferred.t =
 
 let run_join cli t = run cli t >>| Or_error.join
 let map_bind x ~f = Map_bind (f, x)
-let return x = Const x
 let both x y = Pair (x, y)
 
-(* Api_call.t is an applicative which means that it can be defined either as
-   the tripple [map, both, return] or via [map, apply, return].  Because
-   [Api_call.t] never contain functions in practice (though it is possible via
-   [return]), it is easier to think about as an implementation based off both.
-   We define the operation [both : 'a api_call -> 'b api_call -> ('a * 'b)
-   api_call], which atomically receives its values from neovim before combining
-   them. *)
-module Let_syntax = struct
-  module Let_syntax = struct
+module T = Applicative.Make_using_map2 (struct
+    type nonrec 'a t = 'a t
+
     let map x ~f = Map (f, x)
-    let both x y = Pair (x, y)
+    let map2 a b ~f = both a b |> map ~f:(fun (a, b) -> f a b)
     let return x = Const x
-  end
+    let map = `Custom map
+  end)
+
+include T
+
+module Open_on_rhs_intf = struct
+  module type S = sig end
+end
+
+include Applicative.Make_let_syntax
+    (struct
+      type nonrec 'a t = 'a t
+
+      include T
+    end)
+    (Open_on_rhs_intf)
+    ()
+
+module Or_error = struct
+  module Open_on_rhs_intf = Open_on_rhs_intf
+
+  module T = Applicative.Make_using_map2 (struct
+      type nonrec 'a t = 'a Or_error.t t
+
+      let map x ~f = map x ~f:(Or_error.map ~f)
+      let map2 a b ~f = map2 a b ~f:(Or_error.map2 ~f)
+      let return x = Const (Or_error.return x)
+      let map = `Custom map
+    end)
+
+  include T
+
+  include Applicative.Make_let_syntax
+      (struct
+        type nonrec 'a t = 'a Or_error.t t
+
+        include T
+      end)
+      (Open_on_rhs_intf)
+      ()
 end

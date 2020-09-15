@@ -38,14 +38,13 @@ let wins_api_call =
 
 let update_buffer_with_current_time ~client ~buffer ~time_source () =
   let%bind res_or_err =
-    Vcaml.run_join
-      client
-      (Buf.set_lines
-         ~buffer
-         ~start:0
-         ~end_:1
-         ~strict_indexing:false
-         ~replacement:[ Time_ns.to_string (Time_source.now time_source) ])
+    Buf.set_lines
+      ~buffer
+      ~start:0
+      ~end_:1
+      ~strict_indexing:false
+      ~replacement:[ Time_ns.to_string (Time_source.now time_source) ]
+    |> run_join client
   in
   let%map () = Time_source.after time_source (Time_ns.Span.of_int_ms 1000) in
   match res_or_err with
@@ -65,10 +64,10 @@ let start_buffer_updates ~time_source ~client ~buffer ~shutdown =
 
 let start_plugin ~time_source ~client ~buffer ~shutdown =
   let open Deferred.Or_error.Let_syntax in
-  let%bind orig_win, new_win = Vcaml.run_join client wins_api_call in
-  let%bind () = Vcaml.run_join client (win_update_api_call ~new_win ~buffer) in
+  let%bind orig_win, new_win = run_join client wins_api_call in
+  let%bind () = win_update_api_call ~new_win ~buffer |> run_join client in
   (* Restore the user to their original window *)
-  let%bind () = Vcaml.run_join client (Client.set_current_win ~window:orig_win) in
+  let%bind () = Client.set_current_win ~window:orig_win |> run_join client in
   Async.don't_wait_for (start_buffer_updates ~time_source ~client ~buffer ~shutdown);
   return new_win
 ;;
@@ -88,7 +87,7 @@ module Make_buffer_clock (T : Time_source_arg) = Vcaml_plugin.Make_persistent (s
     let startup (client, shutdown) =
       let open Deferred.Or_error.Let_syntax in
       let%bind buffer =
-        Vcaml.run_join client (Buf.find_by_name_or_create ~name:"Vcaml_buffer_clock")
+        Buf.find_by_name_or_create ~name:"Vcaml_buffer_clock" |> run_join client
       in
       let%bind win = start_plugin ~time_source:T.time_source ~client ~buffer ~shutdown in
       let%map () =

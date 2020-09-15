@@ -15,6 +15,13 @@ An RPC plugin which creates a long-running process and communicates greetings
 back over RPC.
 
 ### Buffer Clock
-A buffer plugin which creates a new window containing a clock with the current
-time, and which runs until the buffer is deleted.
+A buffer-managing plugin which creates a new window containing a clock with the
+current time, and which runs until the buffer is deleted.
 
+### Simple Editor
+A buffer-managing-plugin which implements a tiny text editor using 
+rebound keys in normal mode!  The example demonstrates how to bind keys, 
+and how to respond to RPCs sent by the vim instance.
+
+To run it, open up a new neovim terminal (`:term`), and run
+`simple_editor/bin/main.exe`.

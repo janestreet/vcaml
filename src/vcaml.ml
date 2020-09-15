@@ -308,6 +308,4 @@ let convert_msgpack_response type_ call =
          type_)
 ;;
 
-module Api_call = struct
-  module Let_syntax = Api_call.Let_syntax
-end
+module Api_call = Api_call

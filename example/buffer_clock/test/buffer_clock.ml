@@ -5,26 +5,20 @@ open! Vcaml_buffer_clock
 open Deferred.Or_error.Let_syntax
 module State = Vcaml_buffer_clock.Buffer_clock.State
 
-let kill_buffer_api_call ~window =
+let kill_buffer_in_window ~window =
   let%map.Api_call set_win_or_err = Client.set_current_win ~window
   and delete_buf_or_err = Client.command ~command:"bd!" in
   Or_error.all_unit [ set_win_or_err; delete_buf_or_err ]
 ;;
 
-let kill_buffer_in_window ~client ~window =
-  Vcaml.run_join client (kill_buffer_api_call ~window)
-;;
-
 let check_window_count ~client =
-  let%map win_list = Vcaml.run_join client Client.list_wins in
+  let%map win_list = Client.list_wins |> run_join client in
   List.length win_list
 ;;
 
 let print_buffer_contents ~client ~buffer =
   let%map contents =
-    Vcaml.run_join
-      client
-      (Buf.get_lines ~buffer ~start:0 ~end_:(-1) ~strict_indexing:false)
+    Buf.get_lines ~buffer ~start:0 ~end_:(-1) ~strict_indexing:false |> run_join client
   in
   print_s [%message (contents : string list)]
 ;;
@@ -44,7 +38,7 @@ let during_plugin ~time_source ~client ~chan_id:_ ~state:{ State.window; buffer 
       (Time_source.advance_by_alarms_by time_source (Time_ns.Span.of_int_ms 1000))
   in
   let%bind () = print_buffer_contents ~client ~buffer in
-  kill_buffer_in_window ~client ~window
+  kill_buffer_in_window ~window |> run_join client
 ;;
 
 let%expect_test "plugin opens a new buffer/window which updates until buffer deletion" =

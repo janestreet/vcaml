@@ -124,6 +124,11 @@ let list_wins =
     result
 ;;
 
+let replace_termcodes ~str ~from_part ~do_lt ~special =
+  Nvim_internal.Wrappers.nvim_replace_termcodes ~str ~from_part ~do_lt ~special
+  |> Api_call.of_api_result
+;;
+
 module Untested = struct
   let ui_attach ~width ~height ~options =
     Nvim_internal.Wrappers.nvim_ui_attach ~width ~height ~options
@@ -149,11 +154,6 @@ module Untested = struct
   ;;
 
   let input ~keys = Nvim_internal.Wrappers.nvim_input ~keys |> Api_call.of_api_result
-
-  let replace_termcodes ~str ~from_part ~do_lt ~special =
-    Nvim_internal.Wrappers.nvim_replace_termcodes ~str ~from_part ~do_lt ~special
-    |> Api_call.of_api_result
-  ;;
 
   let execute_lua ~code ~args =
     Nvim_internal.Wrappers.nvim_execute_lua ~code ~args |> Api_call.of_api_result

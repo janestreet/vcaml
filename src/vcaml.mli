@@ -103,12 +103,12 @@ end
 type 'a api_call = 'a Api_call.t
 
 module Api_call : sig
-  module Let_syntax : sig
-    module Let_syntax : sig
-      val map : 'a api_call -> f:('a -> 'b) -> 'b api_call
-      val both : 'a api_call -> 'b api_call -> ('a * 'b) api_call
-      val return : 'a -> 'a api_call
-    end
+  include Applicative.S with type 'a t := 'a api_call
+  include Applicative.Let_syntax with type 'a t := 'a api_call
+
+  module Or_error : sig
+    include Applicative.S with type 'a t := 'a Or_error.t api_call
+    include Applicative.Let_syntax with type 'a t := 'a Or_error.t api_call
   end
 end
 

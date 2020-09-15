@@ -70,9 +70,29 @@ module Make_persistent (P : Persistent_arg) : S with type state = P.state = stru
     | None -> return ()
     | Some fn_name ->
       let%map.Deferred.Or_error (_ : Msgpack.t) =
-        Vcaml.run_join client (Client.call_function ~fn:fn_name ~args:[ Integer chan_id ])
+        Client.call_function ~fn:fn_name ~args:[ Integer chan_id ] |> run_join client
       in
       ()
+  ;;
+
+  let send_dummy_request ~client =
+    Vcaml.run_join client (Client.call_function ~fn:"abs" ~args:[ Integer 0 ])
+  ;;
+
+  (* Due to a bug in the way that neovim handles messages
+     (https://github.com/neovim/neovim/issues/12722), it is possible that synchronous RPCs
+     which kick off asynchronous updates under the hood will hang. As a result, we send
+     dummy requests to neovim occasionally, to ensure that the messages are actually being
+     consumed by neovim and things don't hang on people who create persistent plugins. *)
+  let start_heartbeating_neovim client =
+    let open Deferred.Let_syntax in
+    don't_wait_for
+    @@ Deferred.repeat_until_finished () (fun () ->
+      let%bind () = Async.after (Core.sec 0.1) in
+      match%map send_dummy_request ~client with
+      | Ok _ -> `Repeat ()
+      (* We think that the only scenario where this call will fail is when neovim dies. *)
+      | Error _ -> `Finished ())
   ;;
 
   let run_persistent_plugin_with_before_during_and_after
@@ -84,6 +104,7 @@ module Make_persistent (P : Persistent_arg) : S with type state = P.state = stru
     let terminate_var = Ivar.create () in
     let shutdown () = Ivar.fill_if_empty terminate_var () in
     let%bind chan_id = Client.get_rpc_channel_id client in
+    start_heartbeating_neovim client;
     let%bind () = before_plugin ~client in
     let%bind state = P.startup (client, shutdown) in
     let%bind () =

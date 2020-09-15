@@ -30,13 +30,13 @@ let%expect_test "command, list_bufs, Buf.get_name" =
   let%bind () =
     with_client ~f:(fun client ->
       let open Deferred.Or_error.Let_syntax in
-      let%bind () = run_join client (Client.command ~command:"e foo.txt") in
-      let%bind () = run_join client (Client.command ~command:"e bar.txt") in
-      let%bind () = run_join client (Client.command ~command:"e baz.txt") in
-      let%bind buffers = run_join client Client.list_bufs in
+      let%bind () = Client.command ~command:"e foo.txt" |> run_join client in
+      let%bind () = Client.command ~command:"e bar.txt" |> run_join client in
+      let%bind () = Client.command ~command:"e baz.txt" |> run_join client in
+      let%bind buffers = Client.list_bufs |> run_join client in
       let%map buffer_names =
         buffers
-        |> List.map ~f:(fun buffer -> run_join client (Vcaml.Buf.get_name ~buffer))
+        |> List.map ~f:(fun buffer -> Vcaml.Buf.get_name ~buffer |> run_join client)
         |> Deferred.Or_error.combine_errors
         |> Deferred.Or_error.map ~f:(fun filenames ->
           List.map filenames ~f:(fun file ->
@@ -79,11 +79,11 @@ let%expect_test "set_current_buf" =
   let%bind () =
     with_client ~f:(fun client ->
       let open Deferred.Or_error.Let_syntax in
-      let%bind () = run_join client (Client.command ~command:"e foo.txt") in
-      let%bind expected_buf = run_join client Client.get_current_buf in
-      let%bind () = run_join client (Client.command ~command:"e bar.txt") in
-      let%bind () = run_join client (Client.set_current_buf ~buffer:expected_buf) in
-      let%bind actual_buf = run_join client Client.get_current_buf in
+      let%bind () = Client.command ~command:"e foo.txt" |> run_join client in
+      let%bind expected_buf = Client.get_current_buf |> run_join client in
+      let%bind () = Client.command ~command:"e bar.txt" |> run_join client in
+      let%bind () = Client.set_current_buf ~buffer:expected_buf |> run_join client in
+      let%bind actual_buf = Client.get_current_buf |> run_join client in
       print_s [%message (expected_buf : Vcaml.Buf.t) (actual_buf : Vcaml.Buf.t)];
       return ())
   in
@@ -96,7 +96,7 @@ let%expect_test "call_function" =
     with_client ~f:(fun client ->
       let open Deferred.Or_error.Let_syntax in
       let%bind strlen =
-        run_join client (Client.call_function ~fn:"strlen" ~args:[ String "foo" ])
+        Client.call_function ~fn:"strlen" ~args:[ String "foo" ] |> run_join client
       in
       print_s [%message (strlen : Msgpack.t)];
       return ())
@@ -106,7 +106,7 @@ let%expect_test "call_function" =
 ;;
 
 let get_current_chan ~client =
-  let%map.Deferred.Or_error chan_list = run_join client Client.list_chans in
+  let%map.Deferred.Or_error chan_list = Client.list_chans |> run_join client in
   (List.hd_exn chan_list).client
 ;;
 
@@ -122,21 +122,20 @@ let%expect_test "set_client_info" =
       let open Deferred.Or_error.Let_syntax in
       let%bind client_before_setting_info = get_current_chan ~client in
       let%bind () =
-        run_join
-          client
-          (Client.set_client_info
-             ~version:
-               { major = Some 1
-               ; minor = Some 2
-               ; patch = Some 3
-               ; prerelease = Some "test_prerelease"
-               ; commit = Some "test_commit"
-               }
-             ~methods:(String.Map.of_alist_exn [ "test_method", test_method ])
-             ~attributes:(String.Map.of_alist_exn [ "attr1", "val1" ])
-             ~name:"foo"
-             ~type_:`Embedder
-             ())
+        Client.set_client_info
+          ~version:
+            { major = Some 1
+            ; minor = Some 2
+            ; patch = Some 3
+            ; prerelease = Some "test_prerelease"
+            ; commit = Some "test_commit"
+            }
+          ~methods:(String.Map.of_alist_exn [ "test_method", test_method ])
+          ~attributes:(String.Map.of_alist_exn [ "attr1", "val1" ])
+          ~name:"foo"
+          ~type_:`Embedder
+          ()
+        |> run_join client
       in
       let%bind client_after_setting_info = get_current_chan ~client in
       print_s
@@ -162,10 +161,10 @@ let%expect_test "get_current_win, set_current_win" =
   let%bind () =
     with_client ~f:(fun client ->
       let open Deferred.Or_error.Let_syntax in
-      let%bind original_win = run_join client Client.get_current_win in
-      let%bind () = run_join client (Client.command ~command:"split") in
-      let%bind win_after_split = run_join client Client.get_current_win in
-      let%bind () = run_join client (Client.set_current_win ~window:original_win) in
+      let%bind original_win = Client.get_current_win |> run_join client in
+      let%bind () = Client.command ~command:"split" |> run_join client in
+      let%bind win_after_split = Client.get_current_win |> run_join client in
+      let%bind () = Client.set_current_win ~window:original_win |> run_join client in
       let%bind win_after_set = run_join client Client.get_current_win in
       print_s
         [%message
@@ -182,12 +181,39 @@ let%expect_test "list_wins" =
   let%bind () =
     with_client ~f:(fun client ->
       let open Deferred.Or_error.Let_syntax in
-      let%bind () = run_join client (Client.command ~command:"split") in
-      let%bind () = run_join client (Client.command ~command:"split") in
-      let%bind win_list = run_join client Client.list_wins in
+      let%bind () = Client.command ~command:"split" |> run_join client in
+      let%bind () = Client.command ~command:"split" |> run_join client in
+      let%bind win_list = Client.list_wins |> run_join client in
       print_s [%message (win_list : Window.t list)];
       return ())
   in
   [%expect "(win_list (1002 1001 1000))"];
+  return ()
+;;
+
+let%expect_test "replace_termcodes" =
+  let%bind () =
+    with_client ~f:(fun client ->
+      let open Deferred.Or_error.Let_syntax in
+      let%bind escaped_keys =
+        Client.replace_termcodes
+          ~str:"ifoobar<ESC><Left><Left>XXX"
+          ~from_part:true
+          ~do_lt:false
+          ~special:true
+        |> run_join client
+      in
+      let%bind () =
+        Client.feedkeys ~keys:escaped_keys ~mode:"n" ~escape_csi:true |> run_join client
+      in
+      let%bind buffer = Client.get_current_buf |> run_join client in
+      let%bind lines =
+        Vcaml.Buf.get_lines ~buffer ~start:0 ~end_:(-1) ~strict_indexing:false
+        |> run_join client
+      in
+      print_s [%message (lines : string list)];
+      return ())
+  in
+  [%expect {| (lines (bar)) |}];
   return ()
 ;;

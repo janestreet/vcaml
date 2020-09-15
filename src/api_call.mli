@@ -7,16 +7,14 @@ open Async
 type 'a t
 
 val map_bind : 'a Or_error.t t -> f:('a -> 'b Or_error.t) -> 'b Or_error.t t
-val both : 'a t -> 'b t -> ('a * 'b) t
-val return : 'a -> 'a t
 val of_api_result : 'a Nvim_internal.Types.api_result -> 'a Or_error.t t
 val run : Types.client -> 'a t -> 'a Or_error.t Deferred.t
 val run_join : Types.client -> 'a Or_error.t t -> 'a Or_error.t Deferred.t
 
-module Let_syntax : sig
-  module Let_syntax : sig
-    val map : 'a t -> f:('a -> 'b) -> 'b t
-    val both : 'a t -> 'b t -> ('a * 'b) t
-    val return : 'a -> 'a t
-  end
+include Applicative.S with type 'a t := 'a t
+include Applicative.Let_syntax with type 'a t := 'a t
+
+module Or_error : sig
+  include Applicative.S with type 'a t := 'a Or_error.t t
+  include Applicative.Let_syntax with type 'a t := 'a Or_error.t t
 end

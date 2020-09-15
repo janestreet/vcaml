@@ -18,25 +18,25 @@ let set_height ~window ~height =
   Nvim_internal.Wrappers.nvim_win_set_height ~window ~height |> Api_call.of_api_result
 ;;
 
+let get_cursor ~window =
+  let open Api_call.Let_syntax in
+  let%map cursor =
+    Nvim_internal.Wrappers.nvim_win_get_cursor ~window |> Api_call.of_api_result
+  in
+  let open Or_error.Let_syntax in
+  match%bind cursor with
+  | [ Msgpack.Integer row; Integer col ] -> Ok { row; col }
+  | _ -> Or_error.error_string "malformed result from [nvim_win_get_cursor]"
+;;
+
+let set_cursor ~window ~row ~col =
+  let pos = [ Msgpack.Integer row; Integer col ] in
+  Nvim_internal.Wrappers.nvim_win_set_cursor ~window ~pos |> Api_call.of_api_result
+;;
+
 module Untested = struct
   let get_buf ~window =
     Nvim_internal.Wrappers.nvim_win_get_buf ~window |> Api_call.of_api_result
-  ;;
-
-  let get_cursor ~window =
-    let open Api_call.Let_syntax in
-    let%map cursor =
-      Nvim_internal.Wrappers.nvim_win_get_cursor ~window |> Api_call.of_api_result
-    in
-    let open Or_error.Let_syntax in
-    match%bind cursor with
-    | [ Msgpack.Integer row; Integer col ] -> Ok { row; col }
-    | _ -> Or_error.error_string "malformed result from [nvim_win_get_cursor]"
-  ;;
-
-  let set_cursor ~window ~row ~col =
-    let pos = [ Msgpack.Integer row; Integer col ] in
-    Nvim_internal.Wrappers.nvim_win_set_cursor ~window ~pos |> Api_call.of_api_result
   ;;
 
   let get_width ~window =

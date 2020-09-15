@@ -1,11 +1,6 @@
 open Core_kernel
 open Async
 
-let bitsize =
-  let open Int.O in
-  2 ** 32
-;;
-
 type event =
   { method_name : string
   ; params : Msgpack.t list
@@ -144,11 +139,12 @@ module Make (M : Connection) () = struct
   ;;
 
   let call (conn, _) ~method_name ~parameters =
+    let cross_plat_int_max = Int.pow 2 31 in
     let open Msgpack in
     let msg_id = Id_factory.create () |> Id_factory.to_int_exn in
     let method_name = String method_name in
     let query_msg =
-      Array [ Integer 0; Integer (msg_id mod bitsize); method_name; parameters ]
+      Array [ Integer 0; Integer (msg_id % cross_plat_int_max); method_name; parameters ]
     in
     let result_box = register msg_id in
     let query = Msgpack.string_of_t_exn query_msg in

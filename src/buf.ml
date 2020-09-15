@@ -273,6 +273,11 @@ let attach
   Throttle.enqueue attach_sequencer run_attach
 ;;
 
+let set_option ~buffer ~name ~value =
+  Nvim_internal.Wrappers.nvim_buf_set_option ~buffer ~name ~value
+  |> Api_call.of_api_result
+;;
+
 module Untested = struct
   let line_count ~buffer =
     Api_call.of_api_result (Nvim_internal.Wrappers.nvim_buf_line_count ~buffer)
@@ -325,11 +330,6 @@ module Untested = struct
 
   let get_option ~buffer ~name =
     Nvim_internal.Wrappers.nvim_buf_get_option ~buffer ~name |> Api_call.of_api_result
-  ;;
-
-  let set_option ~buffer ~name ~value =
-    Nvim_internal.Wrappers.nvim_buf_set_option ~buffer ~name ~value
-    |> Api_call.of_api_result
   ;;
 
   let set_name ~buffer ~name =

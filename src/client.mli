@@ -52,6 +52,13 @@ val set_client_info
   -> unit
   -> unit Or_error.t Api_call.t
 
+val replace_termcodes
+  :  str:string
+  -> from_part:bool
+  -> do_lt:bool
+  -> special:bool
+  -> string Or_error.t Api_call.t
+
 module Untested : sig
   val ui_attach
     :  width:int
@@ -74,14 +81,6 @@ module Untested : sig
     -> (Msgpack.t * Msgpack.t) list Or_error.t Api_call.t
 
   val input : keys:string -> int Or_error.t Api_call.t
-
-  val replace_termcodes
-    :  str:string
-    -> from_part:bool
-    -> do_lt:bool
-    -> special:bool
-    -> string Or_error.t Api_call.t
-
   val execute_lua : code:string -> args:Msgpack.t list -> Msgpack.t Or_error.t Api_call.t
 
   val call_dict_function

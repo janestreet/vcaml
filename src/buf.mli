@@ -87,6 +87,8 @@ val attach
   -> send_buffer:bool
   -> Event.t Pipe.Reader.t Deferred.Or_error.t
 
+val set_option : buffer:t -> name:string -> value:Msgpack.t -> unit Or_error.t Api_call.t
+
 module Untested : sig
   val line_count : buffer:t -> int Or_error.t Api_call.t
   val get_var : buffer:t -> name:string -> Msgpack.t Or_error.t Api_call.t
@@ -106,13 +108,6 @@ module Untested : sig
   val set_var : buffer:t -> name:string -> value:Msgpack.t -> unit Or_error.t Api_call.t
   val del_var : buffer:t -> name:string -> unit Or_error.t Api_call.t
   val get_option : buffer:t -> name:string -> Msgpack.t Or_error.t Api_call.t
-
-  val set_option
-    :  buffer:t
-    -> name:string
-    -> value:Msgpack.t
-    -> unit Or_error.t Api_call.t
-
   val set_name : buffer:t -> name:string -> unit Or_error.t Api_call.t
   val is_valid : buffer:t -> bool Or_error.t Api_call.t
   val get_mark : buffer:t -> name:string -> mark Or_error.t Api_call.t

@@ -34,7 +34,7 @@ let%expect_test "events for some edits" =
       let feedkeys_call =
         Client.feedkeys ~keys:"ohello, world!" ~mode:"nx" ~escape_csi:false
       in
-      let%bind () = Vcaml.run_join client feedkeys_call in
+      let%bind () = feedkeys_call |> run_join client in
       return ())
   in
   [%expect
@@ -56,20 +56,15 @@ let%expect_test "feedkeys, get_lines, events for those edits" =
     with_event_printing ~f:(fun client ->
       let open Deferred.Or_error.Let_syntax in
       let%bind () =
-        run_join client (Client.feedkeys ~keys:"ihello" ~mode:"nx" ~escape_csi:false)
+        Client.feedkeys ~keys:"ihello" ~mode:"nx" ~escape_csi:false |> run_join client
       in
       let%bind () =
-        run_join client (Client.feedkeys ~keys:"oworld" ~mode:"nx" ~escape_csi:false)
+        Client.feedkeys ~keys:"oworld" ~mode:"nx" ~escape_csi:false |> run_join client
       in
       let%bind cur_buf = run_join client Client.get_current_buf in
       let%map lines =
-        run_join
-          client
-          (Vcaml.Buf.get_lines
-             ~buffer:cur_buf
-             ~start:0
-             ~end_:(-1)
-             ~strict_indexing:true)
+        Vcaml.Buf.get_lines ~buffer:cur_buf ~start:0 ~end_:(-1) ~strict_indexing:true
+        |> run_join client
       in
       print_s [%message (lines : string list)])
   in
@@ -95,7 +90,7 @@ let%expect_test "set_lines, events for those edits" =
   let%bind () =
     with_event_printing ~f:(fun client ->
       let open Deferred.Or_error.Let_syntax in
-      let%bind cur_buf = run_join client Client.get_current_buf in
+      let%bind cur_buf = Client.get_current_buf |> run_join client in
       let command =
         let%map.Api_call _set_lines =
           Buf.set_lines
@@ -129,15 +124,15 @@ let%expect_test "find_by_name_or_create no name prefixes" =
   let%bind () =
     with_client ~f:(fun client ->
       let open Deferred.Or_error.Let_syntax in
-      let%bind original_buf = run_join client Client.get_current_buf in
+      let%bind original_buf = Client.get_current_buf |> run_join client in
       let%bind new_buf =
-        run_join client (Buf.find_by_name_or_create ~name:"test_buffer_name")
+        Buf.find_by_name_or_create ~name:"test_buffer_name" |> run_join client
       in
       let%bind original_buf_name =
-        run_join client (Buf.get_name ~buffer:original_buf)
+        Buf.get_name ~buffer:original_buf |> run_join client
       in
       let%bind found_buf =
-        run_join client (Buf.find_by_name_or_create ~name:original_buf_name)
+        Buf.find_by_name_or_create ~name:original_buf_name |> run_join client
       in
       print_s [%message (original_buf : Buf.t) (new_buf : Buf.t) (found_buf : Buf.t)];
       return ())
@@ -154,10 +149,10 @@ let%expect_test "find_by_name_or_create name prefixes" =
     with_client ~f:(fun client ->
       let open Deferred.Or_error.Let_syntax in
       let%bind new_buf =
-        run_join client (Buf.find_by_name_or_create ~name:"test_buffer_name")
+        Buf.find_by_name_or_create ~name:"test_buffer_name" |> run_join client
       in
       let%bind new_buf_prefix_name =
-        run_join client (Buf.find_by_name_or_create ~name:"test_buffer")
+        Buf.find_by_name_or_create ~name:"test_buffer" |> run_join client
       in
       print_s [%message (new_buf : Buf.t) (new_buf_prefix_name : Buf.t)];
       return ())
@@ -172,13 +167,13 @@ let%expect_test "find_by_name_or_create buffers with weird characters" =
     with_client ~f:(fun client ->
       let open Deferred.Or_error.Let_syntax in
       let%bind buf_with_whitespace =
-        run_join client (Buf.find_by_name_or_create ~name:"  ")
+        Buf.find_by_name_or_create ~name:"  " |> run_join client
       in
       let%bind buf_with_slash =
-        run_join client (Buf.find_by_name_or_create ~name:"\\")
+        Buf.find_by_name_or_create ~name:"\\" |> run_join client
       in
       let%bind buf_with_quotes =
-        run_join client (Buf.find_by_name_or_create ~name:"\"\"")
+        Buf.find_by_name_or_create ~name:"\"\"" |> run_join client
       in
       print_s
         [%message
@@ -192,5 +187,44 @@ let%expect_test "find_by_name_or_create buffers with weird characters" =
     ((buf_with_whitespace (Buffer (Integer 2)))
      (buf_with_slash (Buffer (Integer 3)))
      (buf_with_quotes (Buffer (Integer 4)))) |}];
+  return ()
+;;
+
+let%expect_test "set_option" =
+  let%bind () =
+    with_client ~f:(fun client ->
+      let open Deferred.Or_error.Let_syntax in
+      let%bind buffer = Client.get_current_buf |> run_join client in
+      let%bind.Deferred modify_success =
+        Buf.set_lines
+          ~buffer
+          ~start:0
+          ~end_:(-1)
+          ~strict_indexing:false
+          ~replacement:[ "foo!" ]
+        |> run_join client
+      in
+      print_s [%message (modify_success : unit Or_error.t)];
+      let%bind () =
+        Buf.set_option ~buffer ~name:"modifiable" ~value:(Boolean false)
+        |> run_join client
+      in
+      let%bind.Deferred modify_error =
+        Buf.set_lines
+          ~buffer
+          ~start:0
+          ~end_:(-1)
+          ~strict_indexing:false
+          ~replacement:[ "bar!" ]
+        |> run_join client
+      in
+      print_s [%message (modify_error : unit Or_error.t)];
+      return ())
+  in
+  [%expect
+    {|
+    (modify_success (Ok ()))
+    (modify_error
+     (Error ("Vim returned error" "Failed to save undo information"))) |}];
   return ()
 ;;

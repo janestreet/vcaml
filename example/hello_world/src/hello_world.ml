@@ -7,7 +7,7 @@ open Vcaml
 
 module Echo_hello_world = Vcaml_plugin.Make_oneshot (struct
     let execute client =
-      Vcaml.run_join client (Client.command ~command:"echom 'Hello world!'")
+      Client.command ~command:"echom 'Hello world!'" |> run_join client
     ;;
   end)
 

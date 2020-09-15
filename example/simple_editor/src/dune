@@ -1,0 +1,2 @@
+(library (name vcaml_simple_editor) (libraries async core vcaml vcaml_plugin)
+ (preprocess (pps ppx_jane)))
