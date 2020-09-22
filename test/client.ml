@@ -28,7 +28,7 @@ let%expect_test "command output" =
 
 let%expect_test "command, list_bufs, Buf.get_name" =
   let%bind () =
-    with_client ~f:(fun client ->
+    with_client (fun client ->
       let open Deferred.Or_error.Let_syntax in
       let%bind () = Client.command ~command:"e foo.txt" |> run_join client in
       let%bind () = Client.command ~command:"e bar.txt" |> run_join client in
@@ -77,7 +77,7 @@ let%expect_test "neovim environment" =
 
 let%expect_test "set_current_buf" =
   let%bind () =
-    with_client ~f:(fun client ->
+    with_client (fun client ->
       let open Deferred.Or_error.Let_syntax in
       let%bind () = Client.command ~command:"e foo.txt" |> run_join client in
       let%bind expected_buf = Client.get_current_buf |> run_join client in
@@ -93,7 +93,7 @@ let%expect_test "set_current_buf" =
 
 let%expect_test "call_function" =
   let%bind () =
-    with_client ~f:(fun client ->
+    with_client (fun client ->
       let open Deferred.Or_error.Let_syntax in
       let%bind strlen =
         Client.call_function ~fn:"strlen" ~args:[ String "foo" ] |> run_join client
@@ -118,7 +118,7 @@ let%expect_test "set_client_info" =
     }
   in
   let%bind () =
-    with_client ~f:(fun client ->
+    with_client (fun client ->
       let open Deferred.Or_error.Let_syntax in
       let%bind client_before_setting_info = get_current_chan ~client in
       let%bind () =
@@ -159,7 +159,7 @@ let%expect_test "set_client_info" =
 
 let%expect_test "get_current_win, set_current_win" =
   let%bind () =
-    with_client ~f:(fun client ->
+    with_client (fun client ->
       let open Deferred.Or_error.Let_syntax in
       let%bind original_win = Client.get_current_win |> run_join client in
       let%bind () = Client.command ~command:"split" |> run_join client in
@@ -179,7 +179,7 @@ let%expect_test "get_current_win, set_current_win" =
 
 let%expect_test "list_wins" =
   let%bind () =
-    with_client ~f:(fun client ->
+    with_client (fun client ->
       let open Deferred.Or_error.Let_syntax in
       let%bind () = Client.command ~command:"split" |> run_join client in
       let%bind () = Client.command ~command:"split" |> run_join client in
@@ -193,7 +193,7 @@ let%expect_test "list_wins" =
 
 let%expect_test "replace_termcodes" =
   let%bind () =
-    with_client ~f:(fun client ->
+    with_client (fun client ->
       let open Deferred.Or_error.Let_syntax in
       let%bind escaped_keys =
         Client.replace_termcodes

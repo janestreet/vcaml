@@ -72,12 +72,16 @@ end
 
 let%expect_test "splits open a new window and allows the user to send keys" =
   let sequencer = Async.Sequencer.create () in
-  let (module M) = Simple_editor.For_testing.create_plugin ~sequencer in
+  let (module Plugin) = Simple_editor.For_testing.create_plugin ~sequencer in
   let%bind.Deferred () =
-    M.test
-      ~before_plugin:Alphabet_test.before_plugin
-      ~during_plugin:(Alphabet_test.during_plugin ~sequencer)
-      ()
+    Vcaml_plugin.For_testing.with_client (fun client ->
+      let%bind () = Alphabet_test.before_plugin ~client in
+      let%bind _state =
+        Plugin.run_for_testing
+          ~during_plugin:(Alphabet_test.during_plugin ~sequencer ~client)
+          client
+      in
+      return ())
   in
   [%expect
     {|
@@ -107,8 +111,11 @@ module Backspace_test = struct
 
   let%expect_test "backspace" =
     let sequencer = Async.Sequencer.create () in
-    let (module M) = Simple_editor.For_testing.create_plugin ~sequencer in
-    let%bind.Deferred () = M.test ~during_plugin:(during_plugin ~sequencer) () in
+    let (module Plugin) = Simple_editor.For_testing.create_plugin ~sequencer in
+    let%bind.Deferred _state =
+      Vcaml_plugin.For_testing.with_client (fun client ->
+        Plugin.run_for_testing ~during_plugin:(during_plugin ~client ~sequencer) client)
+    in
     [%expect {| (contents ("ti a drink with jam and bread")) |}];
     Deferred.return ()
   ;;
@@ -132,8 +139,11 @@ module Enter_test = struct
 
   let%expect_test "enter" =
     let sequencer = Async.Sequencer.create () in
-    let (module M) = Simple_editor.For_testing.create_plugin ~sequencer in
-    let%bind.Deferred () = M.test ~during_plugin:(during_plugin ~sequencer) () in
+    let (module Plugin) = Simple_editor.For_testing.create_plugin ~sequencer in
+    let%bind.Deferred _state =
+      Vcaml_plugin.For_testing.with_client (fun client ->
+        Plugin.run_for_testing ~during_plugin:(during_plugin ~client ~sequencer) client)
+    in
     [%expect {| (contents ("" "second line" "third line" "fourth line")) |}];
     Deferred.return ()
   ;;

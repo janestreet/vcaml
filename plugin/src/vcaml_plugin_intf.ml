@@ -23,23 +23,14 @@ module Rpc_handler = struct
   let create_async ~name ~type_ ~f = Async_handler { name; type_; f }
 end
 
-module type S = sig
-  type state
-
-  val run : unit -> unit Deferred.Or_error.t
-  val command : summary:string -> unit -> Command.t
-
-  val test
-    :  ?before_plugin:(client:Client.t -> unit Deferred.Or_error.t)
-    -> ?during_plugin:
-         (client:Client.t -> chan_id:int -> state:state -> unit Deferred.Or_error.t)
-    -> ?after_plugin:(client:Client.t -> state:state -> unit Deferred.Or_error.t)
-    -> unit
-    -> unit Deferred.t
-end
-
 module type Oneshot_arg = sig
   val execute : Client.t -> unit Deferred.Or_error.t
+end
+
+module type Oneshot_s = sig
+  val run : unit -> unit Deferred.Or_error.t
+  val run_for_testing : Client.t -> unit Deferred.Or_error.t
+  val command : summary:string -> unit -> Command.t
 end
 
 module type Persistent_arg = sig
@@ -51,10 +42,32 @@ module type Persistent_arg = sig
   val on_shutdown : Client.t * state -> unit Deferred.Or_error.t
 end
 
+module type Persistent_s = sig
+  type state
+
+  val run : unit -> unit Deferred.Or_error.t
+  val command : summary:string -> unit -> Command.t
+
+  val run_for_testing
+    :  ?during_plugin:(chan_id:int -> state:state -> unit Deferred.Or_error.t)
+    -> Client.t
+    -> state Deferred.Or_error.t
+end
+
 module type Intf = sig
-  module type S = S
-  module type Oneshot_arg = Oneshot_arg
-  module type Persistent_arg = Persistent_arg
+  module Oneshot : sig
+    module type Arg = Oneshot_arg
+    module type S = Oneshot_s
+
+    module Make (O : Arg) : S
+  end
+
+  module Persistent : sig
+    module type Arg = Persistent_arg
+    module type S = Persistent_s
+
+    module Make (P : Arg) : S with type state = P.state
+  end
 
   val setup_buffer_events
     :  client:Client.t
@@ -64,8 +77,16 @@ module type Intf = sig
     -> on_buffer_close:('state -> Client.t -> unit Deferred.Or_error.t)
     -> unit Deferred.Or_error.t
 
-  module Make_oneshot (O : Oneshot_arg) : S with type state = unit
-  module Make_persistent (P : Persistent_arg) : S with type state = P.state
   module Rpc_handler = Rpc_handler
-  module Testing = Testing
+
+  module For_testing : sig
+    val run_rpc_call
+      :  client:Client.t
+      -> chan_id:int
+      -> name:string
+      -> args:Msgpack.t list
+      -> Msgpack.t Deferred.Or_error.t
+
+    val with_client : (Client.t -> 'a Deferred.Or_error.t) -> 'a Deferred.t
+  end
 end

@@ -11,11 +11,10 @@ end
 
 val main : Command.t
 
-val test
-  :  time_source:Time_source.t
-  -> ?before_plugin:(client:Client.t -> unit Deferred.Or_error.t)
-  -> ?during_plugin:
-       (client:Client.t -> chan_id:int -> state:State.t -> unit Deferred.Or_error.t)
-  -> ?after_plugin:(client:Client.t -> state:State.t -> unit Deferred.Or_error.t)
-  -> unit
-  -> unit Deferred.t
+module For_testing : sig
+  val run
+    :  time_source:Time_source.t
+    -> ?during_plugin:(chan_id:int -> state:State.t -> unit Deferred.Or_error.t)
+    -> Client.t
+    -> State.t Deferred.Or_error.t
+end

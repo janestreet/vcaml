@@ -2,29 +2,19 @@ open! Core
 open! Async
 open! Vcaml
 
-module Printing_oneshot_plugin = Vcaml_plugin.Make_oneshot (struct
+module Printing_oneshot_plugin = Vcaml_plugin.Oneshot.Make (struct
     let execute _client =
       print_endline "Oneshot.execute";
       Deferred.Or_error.return ()
     ;;
   end)
 
-let before_plugin ~client:_ =
-  print_endline "before_plugin";
-  Deferred.Or_error.return ()
-;;
-
-let during_plugin ~client:_ ~chan_id:_ ~state:_ =
+let during_plugin ~chan_id:_ ~state:_ =
   print_endline "during_plugin";
   Deferred.Or_error.return ()
 ;;
 
-let after_plugin ~client:_ ~state:_ =
-  print_endline "after_plugin";
-  Deferred.Or_error.return ()
-;;
-
-module Printing_persistent_plugin = Vcaml_plugin.Make_persistent (struct
+module Printing_persistent_plugin = Vcaml_plugin.Persistent.Make (struct
     type state = string
 
     let rpc_handlers = []
@@ -43,40 +33,43 @@ module Printing_persistent_plugin = Vcaml_plugin.Make_persistent (struct
     ;;
   end)
 
-let%expect_test "testing oneshot plugin calls before, execute, and after in order" =
-  let%map () = Printing_oneshot_plugin.test ~before_plugin ~after_plugin () in
-  [%expect {|
-    before_plugin
-    Oneshot.execute
-    after_plugin |}]
+let%expect_test "oneshot plugin executes as expected" =
+  let%map () =
+    Vcaml_plugin.For_testing.with_client Printing_oneshot_plugin.run_for_testing
+  in
+  [%expect {| Oneshot.execute |}]
 ;;
 
-let%expect_test "testing oneshot plugin and providing a during_plugin function gives \
-                 warning and does not call during_plugin"
-  =
+let%expect_test "oneshot plugin can be called multiple times with the same client" =
   let%map () =
-    Printing_oneshot_plugin.test ~before_plugin ~during_plugin ~after_plugin ()
+    Vcaml_plugin.For_testing.with_client (fun client ->
+      let open Deferred.Or_error.Let_syntax in
+      print_endline "before_plugin";
+      let%bind () = Printing_oneshot_plugin.run_for_testing client in
+      let%bind () = Printing_oneshot_plugin.run_for_testing client in
+      print_endline "after_plugin";
+      return ())
   in
   [%expect
     {|
-    Warning: supplying a during_plugin function when testing a oneshot plugin will not call the during_plugin.
     before_plugin
+    Oneshot.execute
     Oneshot.execute
     after_plugin
     |}]
 ;;
 
-let%expect_test "testing persistent plugin calls before, startup, during, on_shutdown, \
-                 and after in order"
-  =
-  let%map () =
-    Printing_persistent_plugin.test ~before_plugin ~during_plugin ~after_plugin ()
+let%expect_test "persistent plugin calls  startup, during, on_shutdown in order" =
+  let%map state =
+    Vcaml_plugin.For_testing.with_client
+      (Printing_persistent_plugin.run_for_testing ~during_plugin)
   in
+  printf "after plugin has access to the test state: %s\n" state;
   [%expect
     {|
-    before_plugin
     Persistent.startup
     during_plugin
     (Persistent.on_shutdown (state test_state))
-    after_plugin |}]
+    after plugin has access to the test state: test_state
+    |}]
 ;;

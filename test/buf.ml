@@ -7,7 +7,7 @@ open Test_client
 let with_event_printing ~f =
   (* These tests may be fragile; the nvim docs don't specify exactly how [nvim_buf_lines_event] events
      are grouped or reported. *)
-  with_client ~f:(fun client ->
+  with_client (fun client ->
     let%bind events = Buf.attach ~buffer:`Current ~send_buffer:true client in
     let events = Or_error.ok_exn events in
     Async.don't_wait_for
@@ -122,7 +122,7 @@ let%expect_test "set_lines, events for those edits" =
 
 let%expect_test "find_by_name_or_create no name prefixes" =
   let%bind () =
-    with_client ~f:(fun client ->
+    with_client (fun client ->
       let open Deferred.Or_error.Let_syntax in
       let%bind original_buf = Client.get_current_buf |> run_join client in
       let%bind new_buf =
@@ -146,7 +146,7 @@ let%expect_test "find_by_name_or_create no name prefixes" =
 
 let%expect_test "find_by_name_or_create name prefixes" =
   let%bind () =
-    with_client ~f:(fun client ->
+    with_client (fun client ->
       let open Deferred.Or_error.Let_syntax in
       let%bind new_buf =
         Buf.find_by_name_or_create ~name:"test_buffer_name" |> run_join client
@@ -164,7 +164,7 @@ let%expect_test "find_by_name_or_create name prefixes" =
 
 let%expect_test "find_by_name_or_create buffers with weird characters" =
   let%bind () =
-    with_client ~f:(fun client ->
+    with_client (fun client ->
       let open Deferred.Or_error.Let_syntax in
       let%bind buf_with_whitespace =
         Buf.find_by_name_or_create ~name:"  " |> run_join client
@@ -192,7 +192,7 @@ let%expect_test "find_by_name_or_create buffers with weird characters" =
 
 let%expect_test "set_option" =
   let%bind () =
-    with_client ~f:(fun client ->
+    with_client (fun client ->
       let open Deferred.Or_error.Let_syntax in
       let%bind buffer = Client.get_current_buf |> run_join client in
       let%bind.Deferred modify_success =

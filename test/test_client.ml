@@ -18,7 +18,7 @@ let args =
   ]
 ;;
 
-let with_client ~f =
+let with_client f =
   let temp_dir = Core.Filename.temp_dir "neovim" "test" in
   let nvim_log_file = Core.(temp_dir ^/ "nvim_low_level_log.txt") in
   let%bind client, _process =
@@ -28,14 +28,13 @@ let with_client ~f =
       ~env:[ "NVIM_LOG_FILE", nvim_log_file ]
       ~working_dir:temp_dir
   in
-  let%bind () = f client in
-  return ()
+  f client
 ;;
 
-let with_client ~f = Deferred.map (with_client ~f) ~f:Or_error.ok_exn
+let with_client f = with_client f |> Deferred.map ~f:ok_exn
 
 let simple k to_sexp =
-  with_client ~f:(fun client ->
+  with_client (fun client ->
     let%map result = Vcaml.run_join client k in
     print_s (to_sexp result))
 ;;

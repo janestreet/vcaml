@@ -79,7 +79,7 @@ module type Time_source_arg = sig
   val time_source : Time_source.t
 end
 
-module Make_buffer_clock (T : Time_source_arg) = Vcaml_plugin.Make_persistent (struct
+module Make_buffer_clock (T : Time_source_arg) = Vcaml_plugin.Persistent.Make (struct
     type state = State.t
 
     let rpc_handlers = []
@@ -117,11 +117,13 @@ let main =
     ()
 ;;
 
-let test ~time_source =
-  let module Test_plugin =
-    Make_buffer_clock (struct
-      let time_source = time_source
-    end)
-  in
-  Test_plugin.test
-;;
+module For_testing = struct
+  let run ~time_source =
+    let module Test_plugin =
+      Make_buffer_clock (struct
+        let time_source = time_source
+      end)
+    in
+    Test_plugin.run_for_testing
+  ;;
+end

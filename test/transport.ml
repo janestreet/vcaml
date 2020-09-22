@@ -15,7 +15,7 @@ let register_dummy_rpc_handler ~name client =
 let%expect_test "we can have two separate Embedded connections with RPC handlers sharing \
                  names without error (no bleeding state)"
   =
-  let%bind () = with_client ~f:(register_dummy_rpc_handler ~name:"test") in
-  let%map () = with_client ~f:(register_dummy_rpc_handler ~name:"test") in
+  let%bind () = with_client (register_dummy_rpc_handler ~name:"test") in
+  let%map () = with_client (register_dummy_rpc_handler ~name:"test") in
   [%expect {| |}]
 ;;

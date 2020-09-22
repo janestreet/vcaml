@@ -28,7 +28,7 @@ module Greetings_plugin_arg = struct
   let on_shutdown = Fn.const (Deferred.Or_error.return ())
 end
 
-module Greetings_plugin = Vcaml_plugin.Make_persistent (Greetings_plugin_arg)
+module Greetings_plugin = Vcaml_plugin.Persistent.Make (Greetings_plugin_arg)
 
 let main =
   Greetings_plugin.command
@@ -36,13 +36,12 @@ let main =
     ()
 ;;
 
-let test =
-  let module Plugin_for_test =
-    Vcaml_plugin.Make_persistent (struct
+module For_testing = struct
+  module Plugin_for_test = Vcaml_plugin.Persistent.Make (struct
       include Greetings_plugin_arg
 
       let vimscript_notify_fn = None
     end)
-  in
-  Plugin_for_test.test
-;;
+
+  let run = Plugin_for_test.run_for_testing
+end

@@ -1,12 +1,9 @@
 open! Core
 open! Async
-open! Vcaml
 
 val main : Command.t
 
-module For_testing : sig
-  val next : Client.t -> unit Deferred.Or_error.t
-  val prev : Client.t -> unit Deferred.Or_error.t
-  val list_raw : Client.t -> unit Deferred.Or_error.t
-  val list_fzf : Client.t -> unit Deferred.Or_error.t
-end
+module Next_file_pattern : Vcaml_plugin.Oneshot.S
+module Prev_file_pattern : Vcaml_plugin.Oneshot.S
+module Echo_file_patterns : Vcaml_plugin.Oneshot.S
+module List_file_patterns_in_fzf : Vcaml_plugin.Oneshot.S

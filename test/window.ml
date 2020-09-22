@@ -6,7 +6,7 @@ open Test_client
 
 let%expect_test "get_height, set_height" =
   let%bind () =
-    with_client ~f:(fun client ->
+    with_client (fun client ->
       let open Deferred.Or_error.Let_syntax in
       let%bind win = Vcaml.Client.get_current_win |> run_join client in
       let%bind () = Window.set_height ~window:win ~height:10 |> run_join client in
@@ -20,7 +20,7 @@ let%expect_test "get_height, set_height" =
 
 let%expect_test "get_cursor, set_cursor" =
   let%bind () =
-    with_client ~f:(fun client ->
+    with_client (fun client ->
       let open Deferred.Or_error.Let_syntax in
       let%bind win = Vcaml.Client.get_current_win |> run_join client in
       let%bind () =

@@ -254,7 +254,7 @@ let create_simple_editor ~sequencer =
     ;;
   end
   in
-  (module Vcaml_plugin.Make_persistent (Simple_editor) : Vcaml_plugin.S
+  (module Vcaml_plugin.Persistent.Make (Simple_editor) : Vcaml_plugin.Persistent.S
      with type state = State.t)
 ;;
 

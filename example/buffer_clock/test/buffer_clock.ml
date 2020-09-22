@@ -28,8 +28,6 @@ let print_window_count client =
   print_s [%message (current_window_count : int)]
 ;;
 
-let before_plugin ~client = print_window_count client
-
 let during_plugin ~time_source ~client ~chan_id:_ ~state:{ State.window; buffer } =
   let%bind () = print_window_count client in
   let%bind () = print_buffer_contents ~client ~buffer in
@@ -43,16 +41,15 @@ let during_plugin ~time_source ~client ~chan_id:_ ~state:{ State.window; buffer 
 
 let%expect_test "plugin opens a new buffer/window which updates until buffer deletion" =
   let now_str = "2020-01-01 00:00:00.000000000Z" in
-  let after_plugin ~client:_ ~state:_ = Deferred.Or_error.return () in
   let mock_time_source = Time_source.create ~now:(Time_ns.of_string now_str) () in
   let mock_time_source_readonly = Time_source.read_only mock_time_source in
-  let%map.Deferred () =
-    Buffer_clock.test
-      ~time_source:mock_time_source_readonly
-      ~before_plugin
-      ~during_plugin:(during_plugin ~time_source:mock_time_source)
-      ~after_plugin
-      ()
+  let%map.Deferred _state =
+    Vcaml_plugin.For_testing.with_client (fun client ->
+      let%bind () = print_window_count client in
+      Buffer_clock.For_testing.run
+        client
+        ~time_source:mock_time_source_readonly
+        ~during_plugin:(during_plugin ~time_source:mock_time_source ~client))
   in
   [%expect
     {|

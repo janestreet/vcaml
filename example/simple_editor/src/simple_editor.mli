@@ -13,5 +13,5 @@ val main : Command.t
 module For_testing : sig
   val create_plugin
     :  sequencer:unit Async.Sequencer.t
-    -> (module Vcaml_plugin.S with type state = State.t)
+    -> (module Vcaml_plugin.Persistent.S with type state = State.t)
 end
