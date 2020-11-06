@@ -267,16 +267,20 @@ let%expect_test "cycling backward from a redundant mli puts us at the start of t
 
 let%expect_test "listing files in fzf attempts a call to fzf#run" =
   let%bind result =
-    try_with (fun () ->
-      Vcaml_plugin.For_testing.with_client (fun client ->
-        let%bind.Deferred.Or_error () =
-          setup_client
-            ~empty_files:[ "foo.ml"; "foo.mli" ]
-            ~files_with_includes:[]
-            ~entry_point:"foo.ml"
-            ~client
-        in
-        List_file_patterns_in_fzf.run_for_testing client))
+    try_with
+      ~run:
+        `Schedule
+      ~rest:`Log
+      (fun () ->
+         Vcaml_plugin.For_testing.with_client (fun client ->
+           let%bind.Deferred.Or_error () =
+             setup_client
+               ~empty_files:[ "foo.ml"; "foo.mli" ]
+               ~files_with_includes:[]
+               ~entry_point:"foo.ml"
+               ~client
+           in
+           List_file_patterns_in_fzf.run_for_testing client))
   in
   Result.iter_error result ~f:(fun exn_ -> print_s [%message (exn_ : exn)]);
   (* The regular (fzf) version of list cannot be tested directly, as the headless vim does
