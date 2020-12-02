@@ -1,4 +1,7 @@
-# MessagePack Debugger
+---
+title: MessagePack Debugger
+uuid: 3f9e4dc1-f2ee-3338-29ef-c43dbbe2e144
+---
 
 The purpose of this program is to assist in debugging MessagePack unix sockets (e.g. the
 connection between neovim and a VCaml plugin). The debugger acts as a man-in-the-middle,
