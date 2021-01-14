@@ -112,7 +112,6 @@ module Untested : sig
   val get_color_by_name : name:string -> int Or_error.t Api_call.t
   val get_color_map : (Msgpack.t * Msgpack.t) list Or_error.t Api_call.t
   val get_mode : (Msgpack.t * Msgpack.t) list Or_error.t Api_call.t
-  val get_keymap : mode:string -> Keymap.t list Or_error.t Api_call.t
 
   val get_commands
     :  opts:(Msgpack.t * Msgpack.t) list
@@ -129,11 +128,4 @@ module Untested : sig
   val list_uis : Msgpack.t list Or_error.t Api_call.t
   val get_proc_children : pid:int -> Msgpack.t list Or_error.t Api_call.t
   val get_proc : pid:int -> Msgpack.t Or_error.t Api_call.t
-
-  val keymap
-    :  lhs:string
-    -> rhs:string
-    -> mode:string
-    -> opts:bool String.Map.t
-    -> unit Or_error.t Api_call.t
 end

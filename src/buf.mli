@@ -93,7 +93,6 @@ module Untested : sig
   val line_count : buffer:t -> int Or_error.t Api_call.t
   val get_var : buffer:t -> name:string -> Msgpack.t Or_error.t Api_call.t
   val get_changedtick : buffer:t -> int Or_error.t Api_call.t
-  val get_keymap : buffer:t -> mode:string -> Keymap.t list Or_error.t Api_call.t
 
   (** Gets a map of buffer-local user-commands.
 

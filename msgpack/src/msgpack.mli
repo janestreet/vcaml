@@ -11,7 +11,7 @@ module Custom : sig
     { type_id : int
     ; data : Bytes.t
     }
-  [@@deriving sexp, equal]
+  [@@deriving compare, sexp]
 end
 
 type t = Message.t =
@@ -26,7 +26,9 @@ type t = Message.t =
   | String of string
   | Binary of Bytes.t
   | Extension of Custom.t
-[@@deriving sexp, equal]
+[@@deriving sexp]
+
+include Comparable.S with type t := t
 
 val t_of_string : string -> t Or_error.t
 val t_of_string_exn : string -> t

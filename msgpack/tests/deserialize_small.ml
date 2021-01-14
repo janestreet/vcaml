@@ -3,7 +3,7 @@ open Msgpack
 
 let equal_int a b =
   match a, b with
-  | Integer a, Integer b -> a = b
+  | Integer a, Integer b -> Int.( = ) a b
   | Int64 a, Int64 b -> Int64.( = ) a b
   | Int64 a, Integer b -> Int64.( = ) a (Int64.of_int b)
   | Integer a, Int64 b -> Int64.( = ) (Int64.of_int a) b

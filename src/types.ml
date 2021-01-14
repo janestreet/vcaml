@@ -19,7 +19,7 @@ module Window = struct
     | Extension { type_id; data } when Int.equal type_id window_tyid ->
       let open Or_error in
       t_of_string (Bytes.to_string data) >>= Nvim_internal.Types.Window.of_msgpack
-    | _ -> Or_error.error_string "not a buffer message!"
+    | msg -> Or_error.error_s [%message "not a window message!" (msg : Msgpack.t)]
   ;;
 
   let to_msgpack t =
@@ -48,7 +48,7 @@ module Buf = struct
       let open Or_error.Let_syntax in
       let%bind msg = t_of_string (Bytes.to_string data) in
       Nvim_internal.Types.Buffer.of_msgpack msg
-    | _ -> Or_error.error_string "not a buffer message!"
+    | msg -> Or_error.error_s [%message "not a buffer message!" (msg : Msgpack.t)]
   ;;
 
   let to_msgpack t =
@@ -76,7 +76,7 @@ module Tabpage = struct
     | Extension { type_id; data } when Int.equal type_id tabpage_tyid ->
       let open Or_error in
       t_of_string (Bytes.to_string data) >>= Nvim_internal.Types.Tabpage.of_msgpack
-    | _ -> Or_error.error_string "not a buffer message!"
+    | msg -> Or_error.error_s [%message "not a tabpage message!" (msg : Msgpack.t)]
   ;;
 
   let to_msgpack t =

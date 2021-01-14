@@ -7,9 +7,10 @@ module type Nvim_ext = sig
   val to_msgpack : t -> Msgpack.t
 end
 
-module Buffer : Nvim_ext
-module Tabpage : Nvim_ext
-module Window : Nvim_ext
+module Buffer : Nvim_ext with type t = private int
+module Window : Nvim_ext with type t = private int
+
+module Tabpage : Nvim_ext with type t = private Int64.t
 
 module Phantom : sig
   (** For use in pattern matching.  e.g. if you have a

@@ -291,17 +291,6 @@ module Untested = struct
     Nvim_internal.Wrappers.nvim_buf_get_changedtick ~buffer |> Api_call.of_api_result
   ;;
 
-  let get_keymap ~buffer ~mode =
-    let open Api_call.Let_syntax in
-    let%map result =
-      Nvim_internal.Wrappers.nvim_buf_get_keymap ~buffer ~mode |> Api_call.of_api_result
-    in
-    let open Or_error.Let_syntax in
-    let%bind result = result in
-    List.map ~f:(Keymap.Untested.of_msgpack ~to_buf:of_msgpack) result
-    |> Or_error.combine_errors
-  ;;
-
   let get_commands ?(opts = []) ~buffer =
     let open Api_call.Let_syntax in
     let%map result =

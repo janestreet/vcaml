@@ -259,16 +259,6 @@ module Untested = struct
   let get_color_map = Nvim_internal.Wrappers.nvim_get_color_map |> Api_call.of_api_result
   let get_mode = Nvim_internal.Wrappers.nvim_get_mode |> Api_call.of_api_result
 
-  let get_keymap ~mode =
-    let open Api_call.Let_syntax in
-    let%map result =
-      Nvim_internal.Wrappers.nvim_get_keymap ~mode |> Api_call.of_api_result
-    in
-    let open Or_error.Let_syntax in
-    let%bind result = result in
-    List.map result ~f:Keymap.Untested.of_msgpack |> Or_error.combine_errors
-  ;;
-
   let get_commands ~opts =
     let open Api_call.Let_syntax in
     let%map result =
@@ -301,8 +291,4 @@ module Untested = struct
   ;;
 
   let get_proc ~pid = Nvim_internal.Wrappers.nvim_get_proc ~pid |> Api_call.of_api_result
-
-  let keymap ~lhs ~rhs ~mode ~opts:_ =
-    command ~command:(sprintf "%snoremap %s %s" mode lhs rhs)
-  ;;
 end
