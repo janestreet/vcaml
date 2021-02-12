@@ -90,10 +90,11 @@ let set_client_info
   in
   let convert_method { Types.Client_info.async; nargs; opts } =
     Map
-      (((String "async", Boolean async)
-        :: List.map (Option.to_list nargs) ~f:(function
-          | `Fixed i -> String "nargs", Integer i
-          | `Range (lo, hi) -> String "nargs", Array [ Integer lo; Integer hi ]))
+      ((String "async", Boolean async)
+       ::
+       List.map (Option.to_list nargs) ~f:(function
+         | `Fixed i -> String "nargs", Integer i
+         | `Range (lo, hi) -> String "nargs", Array [ Integer lo; Integer hi ])
        @ (Map.to_alist opts |> List.map ~f:(fun (a, b) -> String a, b)))
   in
   let methods =

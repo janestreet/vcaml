@@ -96,7 +96,8 @@ module Open_on_rhs_intf = struct
   module type S = sig end
 end
 
-include Applicative.Make_let_syntax
+include
+  Applicative.Make_let_syntax
     (struct
       type nonrec 'a t = 'a t
 
@@ -119,7 +120,8 @@ module Or_error = struct
 
   include T
 
-  include Applicative.Make_let_syntax
+  include
+    Applicative.Make_let_syntax
       (struct
         type nonrec 'a t = 'a Or_error.t t
 
