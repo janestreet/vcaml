@@ -1,11 +1,11 @@
 open! Core
 
-type t = Types.Chan_info.t =
+type t = Types.Channel_info.t =
   { id : int
   ; stream : [ `Stdio | `Stderr | `Socket | `Job ]
   ; mode : [ `Bytes | `Terminal | `Rpc ]
   ; pty : string option
-  ; buffer : Types.Buf.t option
+  ; buffer : Types.Buffer.t option
   ; client : Types.Client_info.t option
   }
 [@@deriving sexp_of]
@@ -34,7 +34,7 @@ let of_msgpack obj =
     | _ -> Or_error.error_string "malformed channel info"
   in
   let%bind pty = Extract.and_convert_optional m "pty" Extract.string in
-  let%bind buffer = Extract.and_convert_optional m "buffer" Buf.of_msgpack in
+  let%bind buffer = Extract.and_convert_optional m "buffer" Types.Buffer.of_msgpack in
   let%bind client = Extract.and_convert_optional m "client" Client_info.of_msgpack in
-  return { Types.Chan_info.id; stream; mode; pty; buffer; client }
+  return { Types.Channel_info.id; stream; mode; pty; buffer; client }
 ;;

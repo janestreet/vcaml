@@ -30,7 +30,7 @@ module type S = sig
 
   val register_method
     :  name:string
-    -> f:(Msgpack.t list -> Msgpack.t Or_error.t)
+    -> f:(Msgpack.t list -> Msgpack.t Deferred.Or_error.t)
     -> unit Or_error.t
 end
 
@@ -46,12 +46,12 @@ module Make (M : Connection) () = struct
 
   let subscribe ((_, notifications_bus) : t) = Async_bus.pipe1_exn notifications_bus
 
-  let synchronous_callbacks : (Msgpack.t list -> Msgpack.t Or_error.t) String.Table.t =
+  let callbacks : (Msgpack.t list -> Msgpack.t Deferred.Or_error.t) String.Table.t =
     String.Table.create ()
   ;;
 
   let register_method ~name ~f =
-    match Hashtbl.add synchronous_callbacks ~key:name ~data:f with
+    match Hashtbl.add callbacks ~key:name ~data:f with
     | `Ok -> Ok ()
     | `Duplicate -> Or_error.errorf "duplicate method name %s" name
   ;;
@@ -60,52 +60,48 @@ module Make (M : Connection) () = struct
     let handle_message = function
       | Msgpack.Array [ Integer 1; Integer msgid; Nil; result ] ->
         (match Hashtbl.find pending_requests msgid with
-         | None ->
-           Log.Global.error "Unknown message ID: %d" msgid;
-           return ()
-         | Some box ->
-           Ivar.fill box (Ok result);
-           return ())
-      | Msgpack.Array [ Integer 1; Integer msgid; err; Nil ] ->
+         | None -> Log.Global.error "Unknown message ID: %d" msgid
+         | Some box -> Ivar.fill box (Ok result))
+      | Array [ Integer 1; Integer msgid; err; Nil ] ->
         (match Hashtbl.find pending_requests msgid with
+         | None -> Log.Global.error "Unknown message ID: %d" msgid
+         | Some box -> Ivar.fill box (Error err))
+      | Array [ Integer 2; String method_name; Array params ] ->
+        Bus.write notifications_bus { method_name; params }
+      | Array [ Integer 0; Integer msgid; String method_name; Array params ] ->
+        let respond msg = Writer.write (M.writer conn) (Msgpack.string_of_t_exn msg) in
+        (match Hashtbl.find callbacks method_name with
          | None ->
-           Log.Global.error "Unknown message ID: %d" msgid;
-           return ()
-         | Some box ->
-           Ivar.fill box (Error err);
-           return ())
-      | Msgpack.Array [ Integer 2; String method_name; Array params ] ->
-        Bus.write notifications_bus { method_name; params };
-        return ()
-      | Msgpack.Array [ Integer 0; Integer msgid; String method_name; Array params ] ->
-        let resp =
-          match Hashtbl.find synchronous_callbacks method_name with
-          | None ->
-            Msgpack.Array
-              [ Msgpack.Integer 1
-              ; Integer msgid
-              ; String (sprintf "no method %s" method_name)
-              ; Nil
-              ]
-          | Some f ->
-            (match Or_error.try_with_join (fun () -> f params) with
-             | Ok r -> Msgpack.Array [ Msgpack.Integer 1; Integer msgid; Nil; r ]
-             | Error e ->
-               Msgpack.Array
-                 [ Msgpack.Integer 1
-                 ; Integer msgid
-                 ; String (e |> [%sexp_of: Error.t] |> Sexp.to_string)
-                 ; Nil
-                 ])
-        in
-        Async.Writer.write (M.writer conn) (Msgpack.string_of_t_exn resp);
-        return ()
-      | msg ->
-        Log.Global.error !"unexpected msgpack response: %{sexp:Msgpack.t}\n" msg;
-        return ()
+           Array
+             [ Integer 1; Integer msgid; String (sprintf "no method %s" method_name); Nil ]
+           |> respond
+         | Some f ->
+           don't_wait_for
+             (let%map result =
+                Deferred.Or_error.try_with_join ~run:`Now ~rest:`Raise (fun () -> f params)
+              in
+              let response : Msgpack.t =
+                match result with
+                | Ok r -> Array [ Integer 1; Integer msgid; Nil; r ]
+                | Error e ->
+                  Array
+                    [ Integer 1
+                    ; Integer msgid
+                    ; String (e |> [%sexp_of: Error.t] |> Sexp.to_string)
+                    ; Nil
+                    ]
+              in
+              respond response))
+      | msg -> Log.Global.error !"unexpected msgpack response: %{sexp:Msgpack.t}\n" msg
     in
     match%bind
-      Angstrom_async.parse_many Msgpack.Internal.Parser.msg handle_message (M.reader conn)
+      Angstrom_async.parse_many
+        Msgpack.Internal.Parser.msg
+        (fun msg ->
+           (* Force synchronous message handling. *)
+           handle_message msg;
+           return ())
+        (M.reader conn)
     with
     | Ok () -> return ()
     | Error s ->

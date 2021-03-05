@@ -9,7 +9,7 @@ let register_dummy_rpc_handler ~name client =
        client
        ~name
        ~type_:Defun.Ocaml.Sync.(Type.Nil @-> return Type.Nil)
-       ~f:(fun () -> Or_error.return ()))
+       ~f:(fun () -> Deferred.Or_error.return ()))
 ;;
 
 let%expect_test "we can have two separate Embedded connections with RPC handlers sharing \

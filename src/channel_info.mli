@@ -1,11 +1,11 @@
 open! Core
 
-type t = Types.Chan_info.t =
+type t = Types.Channel_info.t =
   { id : int
   ; stream : [ `Stdio | `Stderr | `Socket | `Job ]
   ; mode : [ `Bytes | `Terminal | `Rpc ]
   ; pty : string option
-  ; buffer : Types.Buf.t option
+  ; buffer : Types.Buffer.t option
   ; client : Types.Client_info.t option
   }
 [@@deriving sexp_of]

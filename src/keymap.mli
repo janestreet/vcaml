@@ -31,7 +31,7 @@ type t =
   { lhs : string
   ; rhs : string
   ; mode : Mode.t
-  ; scope : [ `Global | `Buffer_local of Types.Buf.t ]
+  ; scope : [ `Global | `Buffer_local of Types.Buffer.t ]
   ; expr : bool
   ; nowait : bool
   ; silent : bool
@@ -45,9 +45,9 @@ type t =
    in any of the constituent modes. Queries for [Language] mode return only language
    mappings. *)
 val get
-  :  scope:[ `Global | `Buffer_local of Types.Buf.t ]
+  :  scope:[ `Global | `Buffer_local of Types.Buffer.t ]
   -> mode:Mode.t
-  -> t list Or_error.t Api_call.t
+  -> t list Api_call.Or_error.t
 
 (** Add a keymapping. Only use [recursive] if you really know what you are doing. Also
     note that [nowait] is only meaningful for buffer-local mappings; on global mappings it
@@ -62,4 +62,4 @@ val set
   -> rhs:string
   -> mode:Mode.t
   -> unit
-  -> unit Or_error.t Api_call.t
+  -> unit Api_call.Or_error.t

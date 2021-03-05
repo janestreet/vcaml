@@ -3,7 +3,7 @@ open Vcaml
 
 module State : sig
   type t =
-    { buffer : Buf.t
+    { buffer : Buffer.t
     ; window : Window.t
     }
 end

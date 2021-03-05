@@ -25,7 +25,7 @@ end
 
 module State = struct
   type t =
-    { buffer : Buf.t
+    { buffer : Buffer.t
     ; window : Window.t
     }
 end
@@ -35,7 +35,7 @@ let create_simple_editor ~sequencer =
     type state = State.t
 
     let set_modifiable buffer value =
-      Buf.set_option ~buffer ~name:"modifiable" ~value:(Boolean value)
+      Buffer.set_option ~buffer ~name:"modifiable" ~value:(Boolean value)
     ;;
 
     let get_split_window =
@@ -89,7 +89,7 @@ let create_simple_editor ~sequencer =
     let startup (client, _shutdown) =
       let%bind chan_id = Client.get_rpc_channel_id client in
       let%bind buffer =
-        Buf.find_by_name_or_create ~name:"simple-editor" |> run_join client
+        Buffer.find_by_name_or_create ~name:"simple-editor" |> run_join client
       in
       let%bind new_win = run_join client get_split_window in
       let%bind () =
@@ -104,7 +104,7 @@ let create_simple_editor ~sequencer =
     let on_shutdown (_client, _state) = return ()
 
     let get_nth_line ~client ~buffer n =
-      Buf.get_lines ~buffer ~start:(n - 1) ~end_:n ~strict_indexing:true
+      Buffer.get_lines ~buffer ~start:(n - 1) ~end_:n ~strict_indexing:true
       |> run_join client
     ;;
 
@@ -120,7 +120,7 @@ let create_simple_editor ~sequencer =
       with_modifiable
         ~buffer
         ~api_call:
-          (Buf.set_lines
+          (Buffer.set_lines
              ~buffer
              ~start:start_at
              ~end_:(start_at + num_lines)

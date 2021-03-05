@@ -11,7 +11,7 @@ module Buffer_data = struct
 
   let fetch_from_vim client =
     let%bind buffer = Client.get_current_buf |> Vcaml.run_join client in
-    let%bind filename = Buf.get_name ~buffer |> Vcaml.run_join client in
+    let%bind filename = Buffer.get_name ~buffer |> Vcaml.run_join client in
     let%bind.Deferred file_patterns = File_pattern.list filename in
     return { file_patterns; current_file_pattern = File_pattern.of_filename filename }
   ;;
@@ -23,7 +23,7 @@ let swap_vim_in_direction swap_in_direction client =
   | None -> return ()
   | Some file_pattern ->
     let%bind new_buffer =
-      Buf.find_by_name_or_create ~name:(File_pattern.to_filename file_pattern)
+      Buffer.find_by_name_or_create ~name:(File_pattern.to_filename file_pattern)
       |> Vcaml.run_join client
     in
     Client.set_current_buf ~buffer:new_buffer |> Vcaml.run_join client

@@ -16,11 +16,12 @@ depends: [
   "base"
   "core"
   "core_kernel"
+  "expect_test_helpers_async"
   "ppx_jane"
   "textutils"
-  "angstrom"       {>= "0.14.1"}
-  "angstrom-async" {>= "0.14.1"}
-  "dune"           {>= "2.0.0"}
+  "angstrom"                  {>= "0.14.1"}
+  "angstrom-async"            {>= "0.14.1"}
+  "dune"                      {>= "2.0.0"}
   "faraday"
 ]
 synopsis: "OCaml bindings for the Neovim API"

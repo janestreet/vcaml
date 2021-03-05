@@ -1,6 +1,9 @@
 open Core_kernel
 open Async_kernel
 
+(** Implements the Msgpack RPC protocol.
+    See https://github.com/msgpack-rpc/msgpack-rpc/blob/master/spec.md *)
+
 module type Connection = sig
   type t
 
@@ -30,7 +33,7 @@ module type S = sig
 
   val register_method
     :  name:string
-    -> f:(Msgpack.t list -> Msgpack.t Or_error.t)
+    -> f:(Msgpack.t list -> Msgpack.t Deferred.Or_error.t)
     -> unit Or_error.t
 end
 

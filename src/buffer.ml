@@ -1,30 +1,6 @@
 open Core
 open Async
-
-type t = Types.Buf.t
-
-let sexp_of_t t =
-  Sexp.(
-    List
-      [ Atom "Buffer"; Nvim_internal.Types.Buffer.to_msgpack t |> [%sexp_of: Msgpack.t] ])
-;;
-
-module Table = Types.Buf.Table
-
-type mark =
-  { row : int
-  ; col : int
-  }
-
-type which_buffer =
-  [ `Current
-  | `Numbered of t
-  ]
-
-open Types
-
-let to_msgpack = Types.Buf.to_msgpack
-let of_msgpack = Types.Buf.of_msgpack
+include Types.Buffer
 
 (* We can't use [Vcaml.Client.eval] because of dependency cycles
 
@@ -33,15 +9,15 @@ let of_msgpack = Types.Buf.of_msgpack
    from [`Current] event listen requests.
 *)
 let current_buffer =
-  let query : Msgpack.t Nvim_internal.Types.api_result =
+  let query : Msgpack.t Types.Api_result.t =
     { name = "nvim_eval"
     ; params = Array [ String "bufnr(\"%\")" ]
-    ; witness = Nvim_internal.Types.Phantom.Object
+    ; witness = Types.Phantom.Object
     }
   in
   let open Api_call.Let_syntax in
   let%map result = Api_call.of_api_result query in
-  Or_error.bind ~f:Nvim_internal.Types.Buffer.of_msgpack result
+  Or_error.bind ~f:of_msgpack result
 ;;
 
 module Event = struct
@@ -66,7 +42,7 @@ module Event = struct
     match method_name with
     | "nvim_buf_lines_event" ->
       (match params with
-       | [ (Extension _ as buf)
+       | [ (Extension _ as buffer)
          ; changedtick
          ; Integer firstline
          ; Integer lastline
@@ -79,7 +55,7 @@ module Event = struct
                | String s -> s
                | _ -> failwith "short-circuit"))
          in
-         let%bind buffer = of_msgpack buf |> Or_error.ok in
+         let%bind buffer = of_msgpack buffer |> Or_error.ok in
          let%bind changedtick =
            match changedtick with
            | Nil -> Some None
@@ -90,30 +66,26 @@ module Event = struct
        | _ -> None)
     | "nvim_buf_changedtick_event" ->
       (match params with
-       | [ (Extension _ as buf); Integer changedtick ] ->
-         let%bind buffer = of_msgpack buf |> Or_error.ok in
+       | [ (Extension _ as buffer); Integer changedtick ] ->
+         let%bind buffer = of_msgpack buffer |> Or_error.ok in
          Some (Changed_tick { buffer; changedtick })
-       | [ (Extension _ as buf); Nil ] ->
-         let%bind buffer = of_msgpack buf |> Or_error.ok in
+       | [ (Extension _ as buffer); Nil ] ->
+         let%bind buffer = of_msgpack buffer |> Or_error.ok in
          Some (Changed_tick { buffer; changedtick = 0 })
        | _ -> None)
     | "nvim_buf_detach_event" ->
       (match params with
-       | [ (Extension _ as buf) ] ->
-         let%bind buffer = of_msgpack buf |> Or_error.ok in
+       | [ (Extension _ as buffer) ] ->
+         let%bind buffer = of_msgpack buffer |> Or_error.ok in
          Some (Detach buffer)
        | _ -> None)
     | _ -> None
   ;;
 
-  let for_buffer buf =
-    let equal = Nvim_internal.Types.Buffer.equal in
-    function
-    | Lines { buffer; _ } | Changed_tick { buffer; _ } | Detach buffer -> equal buffer buf
+  let for_buffer t = function
+    | Lines { buffer; _ } | Changed_tick { buffer; _ } | Detach buffer -> t = buffer
   ;;
 end
-
-open Msgpack
 
 let get_name ~buffer =
   Nvim_internal.Wrappers.nvim_buf_get_name ~buffer |> Api_call.of_api_result
@@ -134,7 +106,7 @@ let get_lines ~buffer ~start ~end_ ~strict_indexing =
 ;;
 
 let set_lines ~buffer ~start ~end_ ~strict_indexing ~replacement =
-  let replacement = List.map ~f:(fun v -> String v) replacement in
+  let replacement = List.map ~f:(fun v -> Msgpack.String v) replacement in
   Nvim_internal.Wrappers.nvim_buf_set_lines
     ~buffer
     ~start
@@ -144,7 +116,8 @@ let set_lines ~buffer ~start ~end_ ~strict_indexing ~replacement =
   |> Api_call.of_api_result
 ;;
 
-let buf_events { events; _ } =
+let buf_events client =
+  let events = (Types.Client.Private.of_public client).events in
   let r, w = Pipe.create () in
   let s =
     Bus.subscribe_exn events [%here] ~f:(fun e ->
@@ -191,13 +164,13 @@ let add_buffer_before_searching name =
   let%map badd_or_err = badd_api_call name
   and bufnr_or_err = bufnr_api_call name in
   Or_error.both badd_or_err bufnr_or_err
-  |> Or_error.bind ~f:(fun ((), buffer) -> Nvim_internal.Types.Buffer.of_msgpack buffer)
+  |> Or_error.bind ~f:(fun ((), buffer) -> of_msgpack buffer)
 ;;
 
 let search_for_buffer name =
   let open Api_call.Let_syntax in
   let%map result = bufnr_api_call name in
-  result |> Or_error.bind ~f:Nvim_internal.Types.Buffer.of_msgpack
+  result |> Or_error.bind ~f:of_msgpack
 ;;
 
 (* If we call vim's bufnr command with a string x, it may resolve to a different buffer
@@ -210,67 +183,64 @@ let find_by_name_or_create ~name =
   | _ -> add_buffer_before_searching name
 ;;
 
-let attach
-      ?(opts = [])
-      ({ attach_sequencer; buffers_attached; _ } as cli)
-      ~(buffer : which_buffer)
-      ~send_buffer
-  =
-  let buffer_query =
-    match buffer with
-    | `Current -> Nvim_internal.Types.Buffer.of_msgpack (Integer 0) |> Or_error.ok_exn
-    | `Numbered b -> b
-  in
-  let attach =
-    Api_call.of_api_result
-      (Nvim_internal.Wrappers.nvim_buf_attach ~buffer:buffer_query ~send_buffer ~opts)
-  in
-  let curr_bufnr =
-    match buffer with
-    | `Current -> current_buffer
-    | `Numbered b -> Api_call.return (Ok b)
-  in
-  let call = Api_call.both attach curr_bufnr in
-  let open Deferred.Or_error.Let_syntax in
-  (* We always run the actual attach because it's possible that the user has deleted the
-     buffer (and so we want to fail with an error).
-  *)
-  let%bind success, bufnr = Api_call.run cli call in
-  let run_attach () =
+let attach ?(opts = []) client ~(buffer : [ `Current | `Numbered of t ]) ~send_buffer =
+  match Types.Client.Private.of_public client with
+  | { buffers_attached; attach_sequencer; _ } ->
+    let buffer_query =
+      match buffer with
+      | `Current -> Unsafe.of_int 0
+      | `Numbered b -> b
+    in
+    let attach =
+      Api_call.of_api_result
+        (Nvim_internal.Wrappers.nvim_buf_attach ~buffer:buffer_query ~send_buffer ~opts)
+    in
+    let curr_bufnr =
+      match buffer with
+      | `Current -> current_buffer
+      | `Numbered b -> Api_call.return (Ok b)
+    in
+    let call = Api_call.both attach curr_bufnr in
     let open Deferred.Or_error.Let_syntax in
-    if%bind Deferred.return success
-    then (
-      let%bind bufnr = Deferred.return bufnr in
-      Hashtbl.change buffers_attached bufnr ~f:(function
-        | Some x -> Some (x + 1)
-        | None -> Some 1);
-      let incoming = Pipe.filter (buf_events cli) ~f:(Event.for_buffer bufnr) in
-      let r =
-        Pipe.create_reader ~close_on_exception:false (fun w ->
-          Pipe.iter incoming ~f:(function
-            | Event.Detach _ as evt ->
-              let open Deferred.Let_syntax in
-              (* Write without pushback here because we don't want the scheduler
-                 interrupting us *)
-              Pipe.write_without_pushback_if_open w evt;
-              Pipe.close w;
-              Hashtbl.remove buffers_attached bufnr;
-              return ()
-            | evt -> Pipe.write_if_open w evt))
-      in
-      upon (Pipe.closed r) (fun () ->
-        upon
-          (Api_call.run_join
-             cli
-             (Nvim_internal.Wrappers.nvim_buf_detach ~buffer:bufnr
-              |> Api_call.of_api_result))
-          (function
-            | Ok true -> Hashtbl.remove buffers_attached bufnr
-            | _ -> Log.Global.error "failed to detach from buffer, ignoring"));
-      return r)
-    else Deferred.Or_error.error_string "unable to connect to buffer"
-  in
-  Throttle.enqueue attach_sequencer run_attach
+    (* We always run the actual attach because it's possible that the user has deleted the
+       buffer (and so we want to fail with an error).
+    *)
+    let%bind success, bufnr = Api_call.run client call in
+    let run_attach () =
+      let open Deferred.Or_error.Let_syntax in
+      if%bind Deferred.return success
+      then (
+        let%bind bufnr = Deferred.return bufnr in
+        Hashtbl.change buffers_attached bufnr ~f:(function
+          | Some x -> Some (x + 1)
+          | None -> Some 1);
+        let incoming = Pipe.filter (buf_events client) ~f:(Event.for_buffer bufnr) in
+        let r =
+          Pipe.create_reader ~close_on_exception:false (fun w ->
+            Pipe.iter incoming ~f:(function
+              | Event.Detach _ as evt ->
+                let open Deferred.Let_syntax in
+                (* Write without pushback here because we don't want the scheduler
+                   interrupting us *)
+                Pipe.write_without_pushback_if_open w evt;
+                Pipe.close w;
+                Hashtbl.remove buffers_attached bufnr;
+                return ()
+              | evt -> Pipe.write_if_open w evt))
+        in
+        upon (Pipe.closed r) (fun () ->
+          upon
+            (Api_call.run_join
+               client
+               (Nvim_internal.Wrappers.nvim_buf_detach ~buffer:bufnr
+                |> Api_call.of_api_result))
+            (function
+              | Ok true -> Hashtbl.remove buffers_attached bufnr
+              | _ -> Log.Global.error "failed to detach from buffer, ignoring"));
+        return r)
+      else Deferred.Or_error.error_string "unable to connect to buffer"
+    in
+    Throttle.enqueue attach_sequencer run_attach
 ;;
 
 let set_option ~buffer ~name ~value =
@@ -329,14 +299,15 @@ module Untested = struct
     Nvim_internal.Wrappers.nvim_buf_is_valid ~buffer |> Api_call.of_api_result
   ;;
 
-  let get_mark ~buffer ~name =
+  let get_mark ~buffer ~sym =
     let open Api_call.Let_syntax in
     let%map pos =
-      Nvim_internal.Wrappers.nvim_buf_get_mark ~buffer ~name |> Api_call.of_api_result
+      Nvim_internal.Wrappers.nvim_buf_get_mark ~buffer ~name:(Char.to_string sym)
+      |> Api_call.of_api_result
     in
     let open Or_error.Let_syntax in
     match%bind pos with
-    | [ Integer row; Integer col ] -> Ok { row; col }
+    | [ Integer row; Integer col ] -> Ok { Mark.sym; row; col }
     | _ -> Or_error.error_string "malformed result from [nvim_buf_get_mark]"
   ;;
 

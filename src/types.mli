@@ -1,47 +1,29 @@
 open! Core
 open! Async
+include module type of Nvim_internal.Types
 
-module Window : sig
-  type t = Nvim_internal.Types.Window.t
+module Client : sig
+  type t
 
-  include Sexpable.S with type t := t
-  include Hashable.S with type t := t
-  include Comparable.S with type t := t
+  module Private : sig
+    type public := t
 
-  val of_msgpack : Msgpack.t -> t Or_error.t
-  val to_msgpack : t -> Msgpack.t
+    type t =
+      { events : (Msgpack_rpc.event -> unit) Bus.Read_only.t
+      ; call_nvim_api_fn :
+          'a. 'a Nvim_internal.Types.Api_result.t -> 'a Deferred.Or_error.t
+      ; register_request :
+          name:string
+          -> f:(Msgpack.t list -> Msgpack.t Deferred.Or_error.t)
+          -> unit Or_error.t
+      ; buffers_attached : int Nvim_internal.Types.Buffer.Table.t
+      ; attach_sequencer : unit Sequencer.t
+      }
+
+    val to_public : t -> public
+    val of_public : public -> t
+  end
 end
-
-module Buf : sig
-  type t = Nvim_internal.Types.Buffer.t [@@deriving sexp_of]
-
-  include Sexpable.S with type t := t
-  include Hashable.S with type t := t
-  include Comparable.S with type t := t
-
-  val of_msgpack : Msgpack.t -> t Or_error.t
-  val to_msgpack : t -> Msgpack.t
-end
-
-module Tabpage : sig
-  type t = Nvim_internal.Types.Tabpage.t [@@deriving sexp_of]
-
-  include Sexpable.S with type t := t
-  include Hashable.S with type t := t
-  include Comparable.S with type t := t
-
-  val of_msgpack : Msgpack.t -> t Or_error.t
-  val to_msgpack : t -> Msgpack.t
-end
-
-type client =
-  { events : (Msgpack_rpc.event -> unit) Bus.Read_only.t
-  ; call_nvim_api_fn : 'a. 'a Nvim_internal.Types.api_result -> 'a Deferred.Or_error.t
-  ; register_request :
-      name:string -> f:(Msgpack.t list -> Msgpack.t Or_error.t) -> unit Or_error.t
-  ; buffers_attached : int Buf.Table.t
-  ; attach_sequencer : unit Sequencer.t
-  }
 
 module Client_info : sig
   type version =
@@ -79,15 +61,13 @@ module Client_info : sig
   [@@deriving sexp_of]
 end
 
-module Chan_info : sig
+module Channel_info : sig
   type t =
     { id : int
     ; stream : [ `Stdio | `Stderr | `Socket | `Job ]
     ; mode : [ `Bytes | `Terminal | `Rpc ]
     ; pty : string option
-    ; buffer : Buf.t option
+    ; buffer : Nvim_internal.Types.Buffer.t option
     ; client : Client_info.t option
     }
 end
-
-module Phantom = Nvim_internal.Types.Phantom

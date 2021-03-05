@@ -5,7 +5,7 @@ open Vcaml
 module State : sig
   type t =
     { window : Window.t
-    ; buffer : Buf.t
+    ; buffer : Buffer.t
     }
 end
 

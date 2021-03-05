@@ -1,19 +1,9 @@
 open Async
 open Core
 
-type t = Types.Buf.t [@@deriving sexp_of]
-
-module Table : Hashtbl.S with type key = t
-
-type mark =
-  { row : int
-  ; col : int
-  }
-
-type which_buffer =
-  [ `Current
-  | `Numbered of t
-  ]
+include module type of struct
+  include Types.Buffer
+end
 
 module Event : sig
   type nonrec t =
@@ -33,16 +23,14 @@ module Event : sig
   [@@deriving sexp_of]
 end
 
-val of_msgpack : Msgpack.t -> t Or_error.t
-val to_msgpack : t -> Msgpack.t
-val get_name : buffer:t -> string Or_error.t Api_call.t
+val get_name : buffer:t -> string Api_call.Or_error.t
 
 val get_lines
   :  buffer:t
   -> start:int
   -> end_:int
   -> strict_indexing:bool
-  -> string list Or_error.t Api_call.t
+  -> string list Api_call.Or_error.t
 
 val set_lines
   :  buffer:t
@@ -50,9 +38,9 @@ val set_lines
   -> end_:int
   -> strict_indexing:bool
   -> replacement:string list
-  -> unit Or_error.t Api_call.t
+  -> unit Api_call.Or_error.t
 
-val find_by_name_or_create : name:string -> t Or_error.t Api_call.t
+val find_by_name_or_create : name:string -> t Api_call.Or_error.t
 
 (** Attach to an existing buffer and receive a pipe of updates pretaining to this buffer.
 
@@ -82,17 +70,17 @@ val find_by_name_or_create : name:string -> t Or_error.t Api_call.t
 *)
 val attach
   :  ?opts:(Msgpack.t * Msgpack.t) list
-  -> Types.client
-  -> buffer:which_buffer
+  -> Types.Client.t
+  -> buffer:[ `Current | `Numbered of t ]
   -> send_buffer:bool
   -> Event.t Pipe.Reader.t Deferred.Or_error.t
 
-val set_option : buffer:t -> name:string -> value:Msgpack.t -> unit Or_error.t Api_call.t
+val set_option : buffer:t -> name:string -> value:Msgpack.t -> unit Api_call.Or_error.t
 
 module Untested : sig
-  val line_count : buffer:t -> int Or_error.t Api_call.t
-  val get_var : buffer:t -> name:string -> Msgpack.t Or_error.t Api_call.t
-  val get_changedtick : buffer:t -> int Or_error.t Api_call.t
+  val line_count : buffer:t -> int Api_call.Or_error.t
+  val get_var : buffer:t -> name:string -> Msgpack.t Api_call.Or_error.t
+  val get_changedtick : buffer:t -> int Api_call.Or_error.t
 
   (** Gets a map of buffer-local user-commands.
 
@@ -102,14 +90,14 @@ module Untested : sig
   val get_commands
     :  ?opts:(Msgpack.t * Msgpack.t) list
     -> buffer:t
-    -> Nvim_command.t String.Map.t Or_error.t Api_call.t
+    -> Nvim_command.t String.Map.t Api_call.Or_error.t
 
-  val set_var : buffer:t -> name:string -> value:Msgpack.t -> unit Or_error.t Api_call.t
-  val del_var : buffer:t -> name:string -> unit Or_error.t Api_call.t
-  val get_option : buffer:t -> name:string -> Msgpack.t Or_error.t Api_call.t
-  val set_name : buffer:t -> name:string -> unit Or_error.t Api_call.t
-  val is_valid : buffer:t -> bool Or_error.t Api_call.t
-  val get_mark : buffer:t -> name:string -> mark Or_error.t Api_call.t
+  val set_var : buffer:t -> name:string -> value:Msgpack.t -> unit Api_call.Or_error.t
+  val del_var : buffer:t -> name:string -> unit Api_call.Or_error.t
+  val get_option : buffer:t -> name:string -> Msgpack.t Api_call.Or_error.t
+  val set_name : buffer:t -> name:string -> unit Api_call.Or_error.t
+  val is_valid : buffer:t -> bool Api_call.Or_error.t
+  val get_mark : buffer:t -> sym:char -> Mark.t Api_call.Or_error.t
   val set_scratch : buffer:t -> unit Api_call.t
 
   val add_highlight
@@ -119,12 +107,12 @@ module Untested : sig
     -> line:int
     -> col_start:int
     -> col_end:int
-    -> int Or_error.t Api_call.t
+    -> int Api_call.Or_error.t
 
   val clear_highlight
     :  buffer:t
     -> ns_id:int
     -> line_start:int
     -> line_end:int
-    -> unit Or_error.t Api_call.t
+    -> unit Api_call.Or_error.t
 end

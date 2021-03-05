@@ -1,15 +1,17 @@
 open Core
 
-val command : command:string -> unit Or_error.t Api_call.t
-val command_output : command:string -> string Or_error.t Api_call.t
-val get_chan_info : chan:int -> Channel_info.t Or_error.t Api_call.t
-val list_bufs : Buf.t list Or_error.t Api_call.t
-val list_chans : Channel_info.t list Or_error.t Api_call.t
-val get_current_buf : Buf.t Or_error.t Api_call.t
-val set_current_buf : buffer:Buf.t -> unit Or_error.t Api_call.t
-val get_current_win : Window.t Or_error.t Api_call.t
-val set_current_win : window:Window.t -> unit Or_error.t Api_call.t
-val list_wins : Window.t list Or_error.t Api_call.t
+type t = Types.Client.t
+
+val command : command:string -> unit Api_call.Or_error.t
+val command_output : command:string -> string Api_call.Or_error.t
+val get_chan_info : chan:int -> Channel_info.t Api_call.Or_error.t
+val list_bufs : Types.Buffer.t list Api_call.Or_error.t
+val list_chans : Channel_info.t list Api_call.Or_error.t
+val get_current_buf : Types.Buffer.t Api_call.Or_error.t
+val set_current_buf : buffer:Types.Buffer.t -> unit Api_call.Or_error.t
+val get_current_win : Window.t Api_call.Or_error.t
+val set_current_win : window:Window.t -> unit Api_call.Or_error.t
+val list_wins : Window.t list Api_call.Or_error.t
 
 (**
    Calls many API methods atomically.
@@ -37,11 +39,11 @@ val list_wins : Window.t list Or_error.t Api_call.t
    occurred, the values from all preceding calls will still
    be returned.
 *)
-val call_atomic : calls:Msgpack.t list -> Msgpack.t list Or_error.t Api_call.t
+val call_atomic : calls:Msgpack.t list -> Msgpack.t list Api_call.Or_error.t
 
-val eval : expr:string -> Msgpack.t Or_error.t Api_call.t
-val call_function : fn:string -> args:Msgpack.t list -> Msgpack.t Or_error.t Api_call.t
-val feedkeys : keys:string -> mode:string -> escape_csi:bool -> unit Or_error.t Api_call.t
+val eval : expr:string -> Msgpack.t Api_call.Or_error.t
+val call_function : fn:string -> args:Msgpack.t list -> Msgpack.t Api_call.Or_error.t
+val feedkeys : keys:string -> mode:string -> escape_csi:bool -> unit Api_call.Or_error.t
 
 val set_client_info
   :  ?version:Client_info.Version.t
@@ -50,82 +52,82 @@ val set_client_info
   -> name:string
   -> type_:Client_info.Client_type.t
   -> unit
-  -> unit Or_error.t Api_call.t
+  -> unit Api_call.Or_error.t
 
 val replace_termcodes
   :  str:string
   -> from_part:bool
   -> do_lt:bool
   -> special:bool
-  -> string Or_error.t Api_call.t
+  -> string Api_call.Or_error.t
 
 module Untested : sig
   val ui_attach
     :  width:int
     -> height:int
     -> options:(Msgpack.t * Msgpack.t) list
-    -> unit Or_error.t Api_call.t
+    -> unit Api_call.Or_error.t
 
-  val ui_detach : unit Or_error.t Api_call.t
-  val ui_try_resize : width:int -> height:int -> unit Or_error.t Api_call.t
-  val ui_set_option : name:string -> value:Msgpack.t -> unit Or_error.t Api_call.t
+  val ui_detach : unit Api_call.Or_error.t
+  val ui_try_resize : width:int -> height:int -> unit Api_call.Or_error.t
+  val ui_set_option : name:string -> value:Msgpack.t -> unit Api_call.Or_error.t
 
   val get_hl_by_name
     :  name:string
     -> rgb:bool
-    -> (Msgpack.t * Msgpack.t) list Or_error.t Api_call.t
+    -> (Msgpack.t * Msgpack.t) list Api_call.Or_error.t
 
   val get_hl_by_id
     :  hl_id:int
     -> rgb:bool
-    -> (Msgpack.t * Msgpack.t) list Or_error.t Api_call.t
+    -> (Msgpack.t * Msgpack.t) list Api_call.Or_error.t
 
-  val input : keys:string -> int Or_error.t Api_call.t
-  val execute_lua : code:string -> args:Msgpack.t list -> Msgpack.t Or_error.t Api_call.t
+  val input : keys:string -> int Api_call.Or_error.t
+  val execute_lua : code:string -> args:Msgpack.t list -> Msgpack.t Api_call.Or_error.t
 
   val call_dict_function
     :  dict:Msgpack.t
     -> fn:string
     -> args:Msgpack.t list
-    -> Msgpack.t Or_error.t Api_call.t
+    -> Msgpack.t Api_call.Or_error.t
 
-  val strwidth : text:string -> int Or_error.t Api_call.t
-  val list_runtime_paths : string list Or_error.t Api_call.t
-  val set_current_dir : dir:string -> unit Or_error.t Api_call.t
-  val get_current_line : string Or_error.t Api_call.t
-  val set_current_line : line:string -> unit Or_error.t Api_call.t
-  val del_current_line : unit Or_error.t Api_call.t
-  val get_var : name:string -> Msgpack.t Or_error.t Api_call.t
-  val set_var : name:string -> value:Msgpack.t -> unit Or_error.t Api_call.t
-  val del_var : name:string -> unit Or_error.t Api_call.t
-  val get_vvar : name:string -> Msgpack.t Or_error.t Api_call.t
-  val get_option : name:string -> Msgpack.t Or_error.t Api_call.t
-  val set_option : name:string -> value:Msgpack.t -> unit Or_error.t Api_call.t
-  val out_write : str:string -> unit Or_error.t Api_call.t
-  val err_write : str:string -> unit Or_error.t Api_call.t
-  val err_writeln : str:string -> unit Or_error.t Api_call.t
-  val list_tabpages : Tabpage.t list Or_error.t Api_call.t
-  val get_current_tabpage : Tabpage.t Or_error.t Api_call.t
-  val set_current_tabpage : tabpage:Tabpage.t -> unit Or_error.t Api_call.t
-  val subscribe : event:string -> unit Or_error.t Api_call.t
-  val unsubscribe : event:string -> unit Or_error.t Api_call.t
-  val get_color_by_name : name:string -> int Or_error.t Api_call.t
-  val get_color_map : (Msgpack.t * Msgpack.t) list Or_error.t Api_call.t
-  val get_mode : (Msgpack.t * Msgpack.t) list Or_error.t Api_call.t
+  val strwidth : text:string -> int Api_call.Or_error.t
+  val list_runtime_paths : string list Api_call.Or_error.t
+  val set_current_dir : dir:string -> unit Api_call.Or_error.t
+  val get_current_line : string Api_call.Or_error.t
+  val set_current_line : line:string -> unit Api_call.Or_error.t
+  val del_current_line : unit Api_call.Or_error.t
+  val get_var : name:string -> Msgpack.t Api_call.Or_error.t
+  val set_var : name:string -> value:Msgpack.t -> unit Api_call.Or_error.t
+  val del_var : name:string -> unit Api_call.Or_error.t
+  val get_vvar : name:string -> Msgpack.t Api_call.Or_error.t
+  val get_option : name:string -> Msgpack.t Api_call.Or_error.t
+  val set_option : name:string -> value:Msgpack.t -> unit Api_call.Or_error.t
+  val out_write : str:string -> unit Api_call.Or_error.t
+  val err_write : str:string -> unit Api_call.Or_error.t
+  val err_writeln : str:string -> unit Api_call.Or_error.t
+  val list_tabpages : Tabpage.t list Api_call.Or_error.t
+  val get_current_tabpage : Tabpage.t Api_call.Or_error.t
+  val set_current_tabpage : tabpage:Tabpage.t -> unit Api_call.Or_error.t
+  val subscribe : event:string -> unit Api_call.Or_error.t
+  val unsubscribe : event:string -> unit Api_call.Or_error.t
+  val get_color_by_name : name:string -> int Api_call.Or_error.t
+  val get_color_map : (Msgpack.t * Msgpack.t) list Api_call.Or_error.t
+  val get_mode : (Msgpack.t * Msgpack.t) list Api_call.Or_error.t
 
   val get_commands
     :  opts:(Msgpack.t * Msgpack.t) list
-    -> Nvim_command.t String.Map.t Or_error.t Api_call.t
+    -> Nvim_command.t String.Map.t Api_call.Or_error.t
 
-  val get_api_info : Msgpack.t list Or_error.t Api_call.t
+  val get_api_info : Msgpack.t list Api_call.Or_error.t
 
   val parse_expression
     :  expr:string
     -> flags:string
     -> highlight:bool
-    -> (Msgpack.t * Msgpack.t) list Or_error.t Api_call.t
+    -> (Msgpack.t * Msgpack.t) list Api_call.Or_error.t
 
-  val list_uis : Msgpack.t list Or_error.t Api_call.t
-  val get_proc_children : pid:int -> Msgpack.t list Or_error.t Api_call.t
-  val get_proc : pid:int -> Msgpack.t Or_error.t Api_call.t
+  val list_uis : Msgpack.t list Api_call.Or_error.t
+  val get_proc_children : pid:int -> Msgpack.t list Api_call.Or_error.t
+  val get_proc : pid:int -> Msgpack.t Api_call.Or_error.t
 end

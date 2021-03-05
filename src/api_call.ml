@@ -2,7 +2,7 @@ open Core
 open Async
 
 (* Api_call.t is an applicative which means that it can be defined either as
-   the tripple [map, both, return] or via [map, apply, return].  Because
+   the triple [map, both, return] or via [map, apply, return].  Because
    [Api_call.t] never contain functions in practice (though it is possible via
    [return]), it is easier to think about as an implementation based off both.
    We define the operation [both : 'a api_call -> 'b api_call -> ('a * 'b)
@@ -10,7 +10,7 @@ open Async
    them. *)
 
 type _ t =
-  | Single : 'a Nvim_internal.Types.api_result -> 'a Or_error.t t
+  | Single : 'a Types.Api_result.t -> 'a Or_error.t t
   | Map : ('a -> 'b) * 'a t -> 'b t
   | Map_bind : ('a -> 'b Or_error.t) * 'a Or_error.t t -> 'b Or_error.t t
   | Pair : 'a t * 'b t -> ('a * 'b) t
@@ -18,13 +18,12 @@ type _ t =
 
 let of_api_result x = Single x
 
-let call_atomic { Types.call_nvim_api_fn; _ } ~calls =
-  Nvim_internal.Wrappers.nvim_call_atomic ~calls |> call_nvim_api_fn
+let call_atomic client ~calls =
+  Nvim_internal.Wrappers.nvim_call_atomic ~calls
+  |> (Types.Client.Private.of_public client).call_nvim_api_fn
 ;;
 
-let rec collect_calls : type a. a t -> Msgpack.t list =
-  let open Nvim_internal.Types in
-  function
+let rec collect_calls : type a. a t -> Msgpack.t list = function
   | Single { name; params; _ } -> [ Msgpack.Array [ String name; params ] ]
   | Map (_, c) -> collect_calls c
   | Map_bind (_, c) -> collect_calls c
@@ -33,36 +32,32 @@ let rec collect_calls : type a. a t -> Msgpack.t list =
 ;;
 
 let rec extract_results
-  : type a. Msgpack.t list -> a t -> Types.client -> a * Msgpack.t list
+  : type a. Msgpack.t list -> a t -> Types.Client.t -> a * Msgpack.t list
   =
-  fun l shape cli ->
-  let open Nvim_internal.Types in
+  fun l shape client ->
   match l, shape with
   | l, Const x -> x, l
-  | [], Single _ ->
-    Or_error.error_string "got bad response from vim: wrong number of responses", []
-  | [], Map _ -> failwith "got bad response from vim: wrong number of responses"
-  | [], Pair _ -> failwith "got bad response from vim: wrong number of responses"
+  | [], (Single _ | Map _ | Pair _) ->
+    failwith "got bad response from vim: wrong number of responses"
   | obj :: rest, Single { witness; _ } -> Extract.value witness obj, rest
   | l, Map (f, c) ->
-    let obj, rest = extract_results l c cli in
+    let obj, rest = extract_results l c client in
     f obj, rest
   | l, Map_bind (f, c) ->
-    let obj, rest = extract_results l c cli in
+    let obj, rest = extract_results l c client in
     Or_error.bind ~f obj, rest
   | l, Pair (a, b) ->
-    let left, remaining = extract_results l a cli in
-    let right, rest = extract_results remaining b cli in
+    let left, remaining = extract_results l a client in
+    let right, rest = extract_results remaining b client in
     (left, right), rest
 ;;
 
-let rec run : type a. Types.client -> a t -> a Or_error.t Deferred.t =
-  fun ({ Types.call_nvim_api_fn; _ } as client) res ->
+let rec run : type a. Types.Client.t -> a t -> a Deferred.Or_error.t =
+  fun client res ->
   match res with
   | Const x -> return (Ok x)
   | Single api ->
-    let%map result = call_nvim_api_fn api in
-    Ok result
+    (Types.Client.Private.of_public client).call_nvim_api_fn api |> Deferred.ok
   | Map (f, c) -> run client c |> Deferred.Or_error.map ~f
   | Map_bind (f, c) ->
     let%map result = run client c in
@@ -77,7 +72,7 @@ let rec run : type a. Types.client -> a t -> a Or_error.t Deferred.t =
      | _ -> Or_error.error_string "got bad response from vim: bad format")
 ;;
 
-let run_join cli t = run cli t >>| Or_error.join
+let run_join client t = run client t >>| Or_error.join
 let map_bind x ~f = Map_bind (f, x)
 let both x y = Pair (x, y)
 
@@ -107,10 +102,12 @@ include
     ()
 
 module Or_error = struct
+  type nonrec 'a t = 'a Or_error.t t
+
   module Open_on_rhs_intf = Open_on_rhs_intf
 
   module T = Applicative.Make_using_map2 (struct
-      type nonrec 'a t = 'a Or_error.t t
+      type nonrec 'a t = 'a t
 
       let map x ~f = map x ~f:(Or_error.map ~f)
       let map2 a b ~f = map2 a b ~f:(Or_error.map2 ~f)
@@ -123,10 +120,12 @@ module Or_error = struct
   include
     Applicative.Make_let_syntax
       (struct
-        type nonrec 'a t = 'a Or_error.t t
+        type nonrec 'a t = 'a t
 
         include T
       end)
       (Open_on_rhs_intf)
       ()
+
+  let error_s sexp = Const (Or_error.error_s sexp)
 end

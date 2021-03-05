@@ -13,12 +13,14 @@ let get_client () =
 
 let handle_buffer_event ~client ~event ~on_buffer_event ~on_buffer_close ~state =
   match event with
-  | (Buf.Event.Lines _ | Changed_tick _) as event -> on_buffer_event state client event
+  | (Buffer.Event.Lines _ | Changed_tick _) as event -> on_buffer_event state client event
   | Detach _ -> on_buffer_close state client
 ;;
 
 let setup_buffer_events ~client ~buffer ~state ~on_buffer_event ~on_buffer_close =
-  let%bind pipe_reader = Buf.attach client ~buffer:(`Numbered buffer) ~send_buffer:true in
+  let%bind pipe_reader =
+    Buffer.attach client ~buffer:(`Numbered buffer) ~send_buffer:true
+  in
   Async.don't_wait_for
   @@ Pipe.iter pipe_reader ~f:(fun event ->
     let%bind.Deferred handle_res =

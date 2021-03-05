@@ -1,9 +1,5 @@
 open Core
-
-type t = Types.Tabpage.t
-
-let of_msgpack = Types.Tabpage.of_msgpack
-let to_msgpack = Types.Tabpage.to_msgpack
+include Types.Tabpage
 
 module Untested = struct
   let list_wins ~tabpage =

@@ -71,9 +71,9 @@ module type Intf = sig
 
   val setup_buffer_events
     :  client:Client.t
-    -> buffer:Buf.t
+    -> buffer:Buffer.t
     -> state:'state
-    -> on_buffer_event:('state -> Client.t -> Buf.Event.t -> unit Deferred.Or_error.t)
+    -> on_buffer_event:('state -> Client.t -> Buffer.Event.t -> unit Deferred.Or_error.t)
     -> on_buffer_close:('state -> Client.t -> unit Deferred.Or_error.t)
     -> unit Deferred.Or_error.t
 

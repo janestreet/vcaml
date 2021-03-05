@@ -48,7 +48,7 @@ let escape_and_feedkeys ~client ~keys ~sequencer =
 ;;
 
 let get_contents ~client ~buffer =
-  Buf.get_lines ~buffer ~start:0 ~end_:(-1) ~strict_indexing:true |> run_join client
+  Buffer.get_lines ~buffer ~start:0 ~end_:(-1) ~strict_indexing:true |> run_join client
 ;;
 
 let kill_plugin ~client = Client.command ~command:"q!" |> run_join client

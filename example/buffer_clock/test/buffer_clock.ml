@@ -18,7 +18,7 @@ let check_window_count ~client =
 
 let print_buffer_contents ~client ~buffer =
   let%map contents =
-    Buf.get_lines ~buffer ~start:0 ~end_:(-1) ~strict_indexing:false |> run_join client
+    Buffer.get_lines ~buffer ~start:0 ~end_:(-1) ~strict_indexing:false |> run_join client
   in
   print_s [%message (contents : string list)]
 ;;

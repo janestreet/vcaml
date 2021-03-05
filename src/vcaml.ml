@@ -1,26 +1,22 @@
+module Unshadow = struct
+  module Buffer = Buffer
+end
+
 open Core
 open Async
-module Internal = Nvim_internal
-module Client_info = Client_info
+module Api_call = Api_call
+module Buffer = Unshadow.Buffer
 module Channel_info = Channel_info
-module Nvim_command = Nvim_command
+module Client_info = Client_info
+module Internal = Nvim_internal
 module Keymap = Keymap
-module Type = Types.Phantom
-module Buf = Buf
-module Window = Window
+module Nvim_command = Nvim_command
 module Tabpage = Tabpage
+module Type = Types.Phantom
+module Window = Window
 
 module Client = struct
   include Client
-
-  type t = Types.client =
-    { events : (Msgpack_rpc.event -> unit) Bus.Read_only.t
-    ; call_nvim_api_fn : 'a. 'a Internal.Types.api_result -> 'a Deferred.Or_error.t
-    ; register_request :
-        name:string -> f:(Msgpack.t list -> Msgpack.t Or_error.t) -> unit Or_error.t
-    ; buffers_attached : int Buf.Table.t
-    ; attach_sequencer : unit Sequencer.t
-    }
 
   module Connection_type = struct
     type t =
@@ -82,7 +78,7 @@ module Client = struct
       let module T = Transport.Make (Msgpack_unix) in
       let%bind s = Msgpack_unix.Unix_socket.open_from_filename sock_name in
       let cli = Msgpack_unix.connect s in
-      let%bind.Deferred.Or_error client = T.attach cli in
+      let%bind client = T.attach cli in
       Deferred.Or_error.return (client, None)
     | Embed { prog; args; working_dir; env } ->
       let module Embedded = Make_embedded () in
@@ -90,12 +86,12 @@ module Client = struct
       let%bind.Deferred.Or_error client, process =
         Embedded.spawn ~prog ~args ~working_dir ~env
       in
-      let%bind.Deferred.Or_error client = T.attach client in
+      let%bind client = T.attach client in
       Deferred.Or_error.return (client, Some process)
     | Child ->
       let module Child = Make_child () in
       let module T = Transport.Make (Child) in
-      let%bind.Deferred.Or_error client = T.attach (Child.self ()) in
+      let%bind client = T.attach (Child.self ()) in
       Deferred.Or_error.return (client, None)
   ;;
 
@@ -139,12 +135,10 @@ module Client = struct
   ;;
 end
 
-type 'a api_call = 'a Api_call.t
-
 module Property = struct
   type 'a t =
-    { get : 'a Or_error.t api_call
-    ; set : 'a -> unit Or_error.t api_call
+    { get : 'a Api_call.Or_error.t
+    ; set : 'a -> unit Api_call.Or_error.t
     }
 end
 
@@ -154,7 +148,7 @@ let run_join = Api_call.run_join
 module Defun = struct
   module Vim = struct
     type ('f, 'leftmost_input, 'out) t =
-      | Nullary : 'output Type.t -> ('output Or_error.t Api_call.t, unit, 'output) t
+      | Nullary : 'output Type.t -> ('output Api_call.Or_error.t, unit, 'output) t
       | Cons : 'a Type.t * ('b, _, 'output) t -> ('a -> 'b, 'a, 'output) t
 
     let return t = Nullary t
@@ -193,26 +187,32 @@ module Defun = struct
   module Ocaml = struct
     module Sync = struct
       type ('f, 'leftmost_input) t =
-        | Nullary : 'output Type.t -> ('output Or_error.t, unit) t
+        | Nullary :
+            ('output Type.t
+             * ('output_deferred_or_error, 'output Deferred.Or_error.t) Type_equal.t)
+            -> ('output_deferred_or_error, unit) t
         | Cons : 'a Type.t * ('b, _) t -> ('a -> 'b, 'a) t
 
-      let return t = Nullary t
+      let return t = Nullary (t, T)
 
       let rec make_fn
         : type fn i.
-          Types.client -> (fn, i) t -> fn -> Msgpack.t list -> Msgpack.t Or_error.t
+          Types.Client.t
+          -> (fn, i) t
+          -> fn
+          -> Msgpack.t list
+          -> Msgpack.t Deferred.Or_error.t
         =
         fun client arity f l ->
+        let open Deferred.Or_error.Let_syntax in
         match arity, l with
-        | Nullary return_type, [] -> f |> Or_error.map ~f:(Extract.inject return_type)
-        | Nullary return_type, [ Msgpack.Nil ] ->
-          f |> Or_error.map ~f:(Extract.inject return_type)
+        | Nullary (return_type, T), ([] | [ Nil ]) ->
+          let%map v = f in
+          Extract.inject return_type v
         | Cons (leftmost, rest), x :: xs ->
-          Extract.value leftmost x
-          |> Or_error.bind ~f:(fun v ->
-            let f' = f v in
-            make_fn client rest f' xs)
-        | _, _ -> Or_error.error_s [%message "Wrong number of arguments"]
+          let%bind v = Extract.value leftmost x |> Deferred.return in
+          make_fn client rest (f v) xs
+        | _, _ -> Deferred.Or_error.error_s [%message "Wrong number of arguments"]
       ;;
 
       let ( @-> ) a b = Cons (a, b)
@@ -221,14 +221,16 @@ module Defun = struct
     module Async = struct
       type 'f t =
         | Unit : unit Deferred.t t
+        | Rest : (Msgpack.t list -> unit Deferred.t) t
         | Cons : 'a Type.t * 'b t -> ('a -> 'b) t
 
       let rec make_fn
         : type fn.
-          Types.client -> string -> fn t -> fn -> Msgpack.t list -> unit Deferred.t
+          Types.Client.t -> string -> fn t -> fn -> Msgpack.t list -> unit Deferred.t
         =
         fun client name arity f l ->
         match arity, l with
+        | Rest, l -> f l
         | Unit, [] -> return ()
         | Unit, [ Msgpack.Nil ] -> return ()
         | Cons (leftmost, rest), x :: xs ->
@@ -245,6 +247,7 @@ module Defun = struct
       ;;
 
       let unit = Unit
+      let rest = Rest
       let ( @-> ) a b = Cons (a, b)
     end
   end
@@ -288,15 +291,20 @@ let wrap_option =
     ~remote_set:Client.Untested.set_option
 ;;
 
-let register_request_blocking ({ Client.register_request; _ } as client) ~name ~type_ ~f =
-  register_request ~name ~f:(Defun.Ocaml.Sync.make_fn client type_ f)
+let register_request_blocking client ~name ~type_ ~f =
+  (Types.Client.Private.of_public client).register_request
+    ~name
+    ~f:(Defun.Ocaml.Sync.make_fn client type_ f)
 ;;
 
-let register_request_async ({ Client.events; _ } as client) ~name ~type_ ~f =
-  Bus.iter_exn events [%here] ~f:(fun { Msgpack_rpc.method_name; params } ->
-    if not (String.equal method_name name)
-    then ()
-    else Defun.Ocaml.Async.make_fn client name type_ f params |> don't_wait_for)
+let register_request_async client ~name ~type_ ~f =
+  Bus.iter_exn
+    (Types.Client.Private.of_public client).events
+    [%here]
+    ~f:(fun { Msgpack_rpc.method_name; params } ->
+      if not (String.equal method_name name)
+      then ()
+      else Defun.Ocaml.Async.make_fn client name type_ f params |> don't_wait_for)
 ;;
 
 let convert_msgpack_response type_ call =
@@ -307,5 +315,3 @@ let convert_msgpack_response type_ call =
          ~err_msg:"return type given to [convert_msgpack_response] is incorrect"
          type_)
 ;;
-
-module Api_call = Api_call

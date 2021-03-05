@@ -6,6 +6,13 @@ module Internal : sig
   module Serializer : module type of Serializer
 end
 
+module type Msgpackable = sig
+  type t
+
+  val of_msgpack : Message.t -> t Or_error.t
+  val to_msgpack : t -> Message.t
+end
+
 module Custom : sig
   type t = Message.custom =
     { type_id : int

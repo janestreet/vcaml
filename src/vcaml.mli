@@ -1,3 +1,4 @@
+module Unshadow_buffer := Buffer
 open! Core
 open Async
 module Internal = Nvim_internal
@@ -5,14 +6,14 @@ module Client_info = Client_info
 module Channel_info = Channel_info
 module Nvim_command = Nvim_command
 module Keymap = Keymap
-module Buf = Buf
+module Buffer = Unshadow_buffer
 module Window = Window
 module Tabpage = Tabpage
 
 module Client : sig
-  include module type of Client
-
-  type t = Types.client
+  include module type of struct
+    include Client
+  end
 
   (** A value of type [Connection_type.t] describes the type of connection to
       use, along with the information necessary to construct the [Msgpack_rpc]
@@ -54,34 +55,16 @@ module Client : sig
   val get_rpc_channel_id : t -> int Deferred.Or_error.t
 end
 
-(** A [Type.t] is a reified values of a primitive type used in nvim. *)
-module Type : sig
-  type 'ty t =
-    | Nil : unit t
-    | Integer : int t
-    | Boolean : bool t
-    | Array : 'a t -> 'a list t
-    | Tuple : 'a t * int -> 'a list t
-    | Dict : (Msgpack.t * Msgpack.t) list t
-    | String : string t
-    | Buffer : Buf.t t
-    | Tabpage : Tabpage.t t
-    | Window : Window.t t
-    | Object : Msgpack.t t
-    | Custom :
-        { of_msgpack : Msgpack.t -> 'a Or_error.t
-        ; to_msgpack : 'a -> Msgpack.t
-        }
-        -> 'a t
-end
+(** A [Type.t] is a reified value of a primitive type used in nvim. *)
+module Type = Types.Phantom
 
-(** A ['a api_call] is a thunked call to neovim returning a Msgpack-encoded
-    ['a]. No RPC traffic is generated until an [api_call] is invoked via [run]
+(** A ['a Api_call.t] is a thunked call to neovim returning a Msgpack-encoded
+    ['a]. No RPC traffic is generated until an [Api_call.t] is invoked via [run]
     or [run_join].
 
-    [api_call]'s can be manipulated with an applicative-like interface.
+    [Api_call.t]'s can be manipulated with an applicative-like interface.
 
-    A good mental model is that invoking a ['a api_call] should cause exactly
+    A good mental model is that invoking a ['a Api_call.t] should cause exactly
     one RPC message to be sent to the neovim client, and that any operations
     within will not be interrupted. Calls with side effects will occur in the
     order written, so
@@ -100,26 +83,20 @@ end
     other pending operations, including user input.
 
     You can run an [Api_call.t] with [run] or [run_join]. *)
-type 'a api_call = 'a Api_call.t
-
 module Api_call : sig
-  include Applicative.S with type 'a t := 'a api_call
-  include Applicative.Let_syntax with type 'a t := 'a api_call
-
-  module Or_error : sig
-    include Applicative.S with type 'a t := 'a Or_error.t api_call
-    include Applicative.Let_syntax with type 'a t := 'a Or_error.t api_call
-  end
+  include Applicative.S with type 'a t = 'a Api_call.t
+  include Applicative.Let_syntax with type 'a t := 'a Api_call.t
+  module Or_error = Api_call.Or_error
 end
 
-val run : Client.t -> 'a api_call -> 'a Or_error.t Deferred.t
-val run_join : Client.t -> 'a Or_error.t api_call -> 'a Or_error.t Deferred.t
+val run : Client.t -> 'a Api_call.t -> 'a Deferred.Or_error.t
+val run_join : Client.t -> 'a Api_call.Or_error.t -> 'a Deferred.Or_error.t
 
 (** Contains a getter and setter for a given variable or property. *)
 module Property : sig
   type 'a t =
-    { get : 'a Or_error.t api_call
-    ; set : 'a -> unit Or_error.t api_call
+    { get : 'a Api_call.Or_error.t
+    ; set : 'a -> unit Api_call.Or_error.t
     }
 end
 
@@ -131,9 +108,9 @@ module Defun : sig
     type ('f, 'leftmost_input, 'out) t
 
     (** Wraps a [Type.t] to be used as the rightmost (return) type of this function. *)
-    val return : 'a Type.t -> ('a Or_error.t api_call, unit, 'a) t
+    val return : 'a Type.t -> ('a Api_call.Or_error.t, unit, 'a) t
 
-    val unary : 'a Type.t -> 'b Type.t -> ('a -> 'b Or_error.t api_call, 'a, 'b) t
+    val unary : 'a Type.t -> 'b Type.t -> ('a -> 'b Api_call.Or_error.t, 'a, 'b) t
 
     (** Add an extra argument to an existing function arity.
 
@@ -150,21 +127,14 @@ module Defun : sig
     val ( @-> ) : 'a Type.t -> ('b, _, 'output) t -> ('a -> 'b, 'a, 'output) t
   end
 
-  (** [Defun.Ocaml] is analogous to [Defun.Vim], except used to specify
-      OCaml-defined functions callable from neovim.
-
-      A synchronous method call blocks neovim until a response is given. To
-      prevent starvation and deadlocking, then, synchronous callbacks should
-      not call any neovim functions or otherwise cause an async cycle to be
-      run.
-
-      Neovim does not natively expose any way to receive return values from
-      asynchronous method calls. *)
+  (** [Defun.Ocaml] is analogous to [Defun.Vim], except used to specify OCaml-defined
+      functions callable from neovim. See [register_request_blocking] and
+      [register_request_async] below for usage. *)
   module Ocaml : sig
     module Sync : sig
       type ('f, 'leftmost_input) t
 
-      val return : 'a Type.t -> ('a Or_error.t, unit) t
+      val return : 'a Type.t -> ('a Deferred.Or_error.t, unit) t
       val ( @-> ) : 'a Type.t -> ('b, _) t -> ('a -> 'b, 'a) t
     end
 
@@ -172,6 +142,8 @@ module Defun : sig
       type 'f t
 
       val unit : unit Deferred.t t
+
+      val rest : (Msgpack.t list -> unit Deferred.t) t
       val ( @-> ) : 'a Type.t -> 'b t -> ('a -> 'b) t
     end
   end
@@ -183,7 +155,7 @@ end
 
     This is intended for client authors to delegate work back to neovim,
     possibly to call an existing vimscript function. Before reaching for this
-    function, please check the functions available in [Neovim], [Buf], [Window]
+    function, please check the functions available in [Neovim], [Buffer], [Window]
     and [Tabpage] to see that the functionality you intend to wrap isn't
     directly exposed in the API. *)
 val wrap_viml_function
@@ -193,24 +165,20 @@ val wrap_viml_function
 
 val wrap_var : name:string -> type_:'a Type.t -> 'a Property.t
 val wrap_option : name:string -> type_:'a Type.t -> 'a Property.t
-val wrap_get_vvar : name:string -> type_:'a Type.t -> 'a Or_error.t api_call
+val wrap_get_vvar : name:string -> type_:'a Type.t -> 'a Api_call.Or_error.t
 
-(** Register a function callable from neovim. Note that this does not define
-    the function in vimL itself, but instead adds a listener to the neovim
-    msgpack_rpc bus. Such functions can be invoked from neovim via [rpcrequest]
-    or [rpcnotify] along the correct channel. This is so that library wrappers
-    can choose how to implement the actual vimL functions as needed.
+(** [register_request_blocking] and [register_request_async] register functions that can
+    be called from Neovim via [rpcrequest] and [rpcnotify] respectively. This is achieved
+    by adding a listener to the Neovim msgpack_rpc bus.
 
-    A synchronous request sends a request to the OCaml program, and then blocks
-    on receiving a response. This can cause deadlocks if said request itself
-    attempts to perform neovim operations, so synchronous functions should run
-    as quickly as possible without binding on any [Deferred]s. This is enforced
-    by the definition of [Defun.Sync.Type].
+    A blocking request will block Neovim from processing user input or communication over
+    other channels until a response is returned. Neovim will continue to process calls
+    sent over the same channel while a blocking request is in flight, which means nested
+    calls are supported.
 
-    Asynchronous requests cannot directly return values to neovim, but do not
-    block neovim while running. This can be used to indirectly update neovim
-    by, for example, calling another neovim function within the handler (which
-    can itself send another async request, etc). *)
+    Asynchronous requests cannot directly return values to Neovim, but they do not block
+    Neovim while running. They can be used to indirectly update Neovim and avoid blocking
+    user input and other events. *)
 val register_request_blocking
   :  Client.t
   -> name:string
@@ -229,5 +197,5 @@ val register_request_async
    maintainers should instead use the [Custom] variant of [Type.t]. *)
 val convert_msgpack_response
   :  'a Type.t
-  -> Msgpack.t Or_error.t api_call
-  -> 'a Or_error.t api_call
+  -> Msgpack.t Api_call.Or_error.t
+  -> 'a Api_call.Or_error.t

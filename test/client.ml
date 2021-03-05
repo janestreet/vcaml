@@ -26,7 +26,7 @@ let%expect_test "command output" =
   return ()
 ;;
 
-let%expect_test "command, list_bufs, Buf.get_name" =
+let%expect_test "command, list_bufs, Buffer.get_name" =
   let%bind () =
     with_client (fun client ->
       let open Deferred.Or_error.Let_syntax in
@@ -36,18 +36,16 @@ let%expect_test "command, list_bufs, Buf.get_name" =
       let%bind buffers = Client.list_bufs |> run_join client in
       let%map buffer_names =
         buffers
-        |> List.map ~f:(fun buffer -> Vcaml.Buf.get_name ~buffer |> run_join client)
+        |> List.map ~f:(fun buffer -> Vcaml.Buffer.get_name ~buffer |> run_join client)
         |> Deferred.Or_error.combine_errors
         |> Deferred.Or_error.map ~f:(fun filenames ->
           List.map filenames ~f:(fun file ->
             file |> Filename.parts |> List.last_exn))
       in
-      print_s [%message (buffers : Vcaml.Buf.t list) (buffer_names : string list)])
+      print_s [%message (buffers : Vcaml.Buffer.t list) (buffer_names : string list)])
   in
-  [%expect
-    {|
-    ((buffers ((Buffer (Integer 1)) (Buffer (Integer 2)) (Buffer (Integer 3))))
-     (buffer_names (foo.txt bar.txt baz.txt)))|}];
+  [%expect {|
+    ((buffers (1 2 3)) (buffer_names (foo.txt bar.txt baz.txt)))|}];
   return ()
 ;;
 
@@ -84,10 +82,10 @@ let%expect_test "set_current_buf" =
       let%bind () = Client.command ~command:"e bar.txt" |> run_join client in
       let%bind () = Client.set_current_buf ~buffer:expected_buf |> run_join client in
       let%bind actual_buf = Client.get_current_buf |> run_join client in
-      print_s [%message (expected_buf : Vcaml.Buf.t) (actual_buf : Vcaml.Buf.t)];
+      print_s [%message (expected_buf : Vcaml.Buffer.t) (actual_buf : Vcaml.Buffer.t)];
       return ())
   in
-  [%expect "((expected_buf (Buffer (Integer 1))) (actual_buf (Buffer (Integer 1))))"];
+  [%expect "((expected_buf 1) (actual_buf 1))"];
   return ()
 ;;
 
@@ -107,7 +105,7 @@ let%expect_test "call_function" =
 
 let get_current_chan ~client =
   let%map.Deferred.Or_error chan_list = Client.list_chans |> run_join client in
-  (List.hd_exn chan_list).client
+  List.hd_exn chan_list
 ;;
 
 let%expect_test "set_client_info" =
@@ -120,7 +118,7 @@ let%expect_test "set_client_info" =
   let%bind () =
     with_client (fun client ->
       let open Deferred.Or_error.Let_syntax in
-      let%bind client_before_setting_info = get_current_chan ~client in
+      let%bind channel_info_before_setting_client_info = get_current_chan ~client in
       let%bind () =
         Client.set_client_info
           ~version:
@@ -137,7 +135,9 @@ let%expect_test "set_client_info" =
           ()
         |> run_join client
       in
-      let%bind client_after_setting_info = get_current_chan ~client in
+      let%bind channel_info_after_setting_client_info = get_current_chan ~client in
+      let client_before_setting_info = channel_info_before_setting_client_info.client in
+      let client_after_setting_info = channel_info_after_setting_client_info.client in
       print_s
         [%message
           (client_before_setting_info : Client_info.t option)
@@ -208,7 +208,7 @@ let%expect_test "replace_termcodes" =
       in
       let%bind buffer = Client.get_current_buf |> run_join client in
       let%bind lines =
-        Vcaml.Buf.get_lines ~buffer ~start:0 ~end_:(-1) ~strict_indexing:false
+        Vcaml.Buffer.get_lines ~buffer ~start:0 ~end_:(-1) ~strict_indexing:false
         |> run_join client
       in
       print_s [%message (lines : string list)];
@@ -217,3 +217,37 @@ let%expect_test "replace_termcodes" =
   [%expect {| (lines (bar)) |}];
   return ()
 ;;
+
+let%expect_test "Reentrant client" =
+  let result =
+    with_client (fun client ->
+      let open Deferred.Or_error.Let_syntax in
+      let%bind channel =
+        let%map channel = get_current_chan ~client in
+        channel.id
+      in
+      let factorial =
+        (wrap_viml_function
+           ~type_:Defun.Vim.(Integer @-> String @-> Integer @-> return Integer)
+           ~function_name:"rpcrequest")
+          channel
+          "factorial"
+      in
+      Vcaml.register_request_blocking
+        client
+        ~name:"factorial"
+        ~type_:Defun.Ocaml.Sync.(Type.Integer @-> return Integer)
+        ~f:(function
+          | 0 -> return 1
+          | n ->
+            let%map result = run_join client (factorial (n - 1)) in
+            n * result)
+      |> ok_exn;
+      run_join client (factorial 5))
+  in
+  let%bind result = with_timeout (Time.Span.of_int_sec 3) result in
+  print_s [%sexp (result : [ `Result of int | `Timeout ])];
+  [%expect {| (Result 120) |}];
+  return ()
+;;
+

@@ -1,14 +1,10 @@
 open Core
-
-type t = Types.Window.t [@@deriving sexp]
+include Types.Window
 
 type position =
   { row : int
   ; col : int
   }
-
-let to_msgpack = Types.Window.to_msgpack
-let of_msgpack = Types.Window.of_msgpack
 
 let get_height ~window =
   Nvim_internal.Wrappers.nvim_win_get_height ~window |> Api_call.of_api_result

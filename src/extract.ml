@@ -1,5 +1,8 @@
 open Core
 open Msgpack
+module Buffer = Types.Buffer
+module Window = Types.Window
+module Tabpage = Types.Tabpage
 
 let convert_msgpack_error =
   Result.map_error ~f:(function
@@ -8,9 +11,8 @@ let convert_msgpack_error =
     | m -> Error.create "Msgpack error response" m [%sexp_of: Msgpack.t])
 ;;
 
-(* We don't actually need the [_to_msgpack] functions here, as it's valid to simply refer to the
-   underlying objects via their handles (as raw integers).
-*)
+(* Since native Vim functions don't support API extensions and since the API functions can
+   take raw integer arguments, we use the raw encoding here. *)
 let rec inject : type t. t Types.Phantom.t -> t -> Msgpack.t =
   let open Types.Phantom in
   fun witness obj ->
@@ -20,13 +22,13 @@ let rec inject : type t. t Types.Phantom.t -> t -> Msgpack.t =
     | Boolean -> Msgpack.Boolean obj
     | Dict -> Msgpack.Map obj
     | String -> Msgpack.String obj
-    | Buffer -> Types.Buf.to_msgpack obj
-    | Tabpage -> Types.Tabpage.to_msgpack obj
-    | Window -> Types.Window.to_msgpack obj
+    | Buffer -> Buffer.to_msgpack obj
+    | Tabpage -> Tabpage.to_msgpack obj
+    | Window -> Window.to_msgpack obj
     | Object -> obj
     | Array t' -> Msgpack.Array (List.map ~f:(inject t') obj)
     | Tuple (t', _) -> Msgpack.Array (List.map ~f:(inject t') obj)
-    | Custom { to_msgpack; _ } -> to_msgpack obj
+    | Custom (module M) -> M.to_msgpack obj
 ;;
 
 let rec value : type t. ?err_msg:string -> t Types.Phantom.t -> Msgpack.t -> t Or_error.t =
@@ -47,12 +49,13 @@ let rec value : type t. ?err_msg:string -> t Types.Phantom.t -> Msgpack.t -> t O
       Ok (List.filter_map ~f:(fun v -> value ~err_msg t v |> Or_error.ok) vs)
     | Dict, Msgpack.Map kvs -> Ok kvs
     | String, Msgpack.String s -> Ok s
-    | Buffer, Msgpack.Extension _ -> Types.Buf.of_msgpack msg
-    | Window, Msgpack.Extension _ -> Types.Window.of_msgpack msg
-    | Tabpage, Msgpack.Extension _ -> Types.Tabpage.of_msgpack msg
+    | Buffer, _ -> Buffer.of_msgpack msg
+    | Window, _ -> Window.of_msgpack msg
+    | Tabpage, _ -> Tabpage.of_msgpack msg
     | Object, _ -> Ok msg
-    | Custom { of_msgpack; _ }, obj -> of_msgpack obj
-    | _ -> Or_error.error_string err_msg
+    | Custom (module M), obj -> M.of_msgpack obj
+    | _ ->
+      Or_error.error_s [%message err_msg (witness : _ Types.Phantom.t) (msg : Msgpack.t)]
 ;;
 
 let string ?(err_msg = "called [extract_string] on non-string") =

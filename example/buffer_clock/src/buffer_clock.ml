@@ -5,7 +5,7 @@ open Vcaml
 module State = struct
   type t =
     { window : Window.t
-    ; buffer : Buf.t
+    ; buffer : Buffer.t
     }
 end
 
@@ -38,7 +38,7 @@ let wins_api_call =
 
 let update_buffer_with_current_time ~client ~buffer ~time_source () =
   let%bind res_or_err =
-    Buf.set_lines
+    Buffer.set_lines
       ~buffer
       ~start:0
       ~end_:1
@@ -87,7 +87,7 @@ module Make_buffer_clock (T : Time_source_arg) = Vcaml_plugin.Persistent.Make (s
     let startup (client, shutdown) =
       let open Deferred.Or_error.Let_syntax in
       let%bind buffer =
-        Buf.find_by_name_or_create ~name:"Vcaml_buffer_clock" |> run_join client
+        Buffer.find_by_name_or_create ~name:"Vcaml_buffer_clock" |> run_join client
       in
       let%bind win = start_plugin ~time_source:T.time_source ~client ~buffer ~shutdown in
       let%map () =

@@ -5,8 +5,8 @@ open Vcaml
 (* Simple Vcaml plugin to listen for and respond to rpc messages.
    Source greetings.vim to use it.*)
 
-let greet _state name = Ok (Printf.sprintf "Hello, %s!" name)
-let call_shutdown (_client, _state, shutdown) () = Ok (shutdown ())
+let greet _state name = Deferred.Or_error.return (Printf.sprintf "Hello, %s!" name)
+let call_shutdown (_client, _state, shutdown) () = Deferred.Or_error.return (shutdown ())
 
 module Greetings_plugin_arg = struct
   type state = unit

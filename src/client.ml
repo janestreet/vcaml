@@ -1,5 +1,7 @@
 open! Core
 
+type t = Types.Client.t
+
 let list_chans =
   let open Api_call.Let_syntax in
   let%map result = Nvim_internal.Wrappers.nvim_list_chans |> Api_call.of_api_result in
@@ -21,7 +23,7 @@ let list_bufs =
   let%map result = Nvim_internal.Wrappers.nvim_list_bufs |> Api_call.of_api_result in
   let open Or_error.Let_syntax in
   let%bind result = result in
-  List.map result ~f:Buf.of_msgpack |> Or_error.combine_errors
+  List.map result ~f:Types.Buffer.of_msgpack |> Or_error.combine_errors
 ;;
 
 let get_chan_info ~chan =

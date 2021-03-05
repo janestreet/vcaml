@@ -23,7 +23,7 @@ let setup_files_for_testing ~empty_files ~files_with_includes ~temp_dir =
 let print_current_file client =
   let open Deferred.Or_error.Let_syntax in
   let%bind buf = Vcaml.run_join client Client.get_current_buf in
-  let%bind name = Vcaml.run_join client (Buf.get_name ~buffer:buf) in
+  let%bind name = Vcaml.run_join client (Buffer.get_name ~buffer:buf) in
   let _dir, current_file = Core.Filename.split name in
   print_s [%message (current_file : string)];
   return ()

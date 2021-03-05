@@ -56,7 +56,7 @@ let scope_of_msgpack msg =
   | Integer 0 -> Ok `Global
   | _ ->
     let open Or_error.Let_syntax in
-    let%map buffer = Nvim_internal.Types.Buffer.of_msgpack msg in
+    let%map buffer = Extract.value Buffer msg in
     `Buffer_local buffer
 ;;
 
@@ -64,7 +64,7 @@ type t =
   { lhs : string
   ; rhs : string
   ; mode : Mode.t
-  ; scope : [ `Global | `Buffer_local of Types.Buf.t ]
+  ; scope : [ `Global | `Buffer_local of Types.Buffer.t ]
   ; expr : bool
   ; nowait : bool
   ; silent : bool
