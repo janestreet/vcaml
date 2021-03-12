@@ -9,8 +9,8 @@ val get_screen_contents
   -> Vcaml.Client.t
   -> string Async.Deferred.Or_error.t
 
-val wait_until_text_shows_up
+val wait_until_text
   :  ?timeout:Time_ns.Span.t
   -> Vcaml.Client.t
   -> f:(string -> bool)
-  -> unit Or_error.t Deferred.t
+  -> string Or_error.t Deferred.t

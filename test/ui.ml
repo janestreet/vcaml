@@ -307,31 +307,46 @@ let%expect_test "screen contents after typing hello world" =
   return ()
 ;;
 
-let wait_until_text_shows_up ?(timeout = Time_ns.Span.of_sec 2.0) client ~f =
+let wait_until_text ?(timeout = Time_ns.Span.of_int_sec 2) client ~f =
   let open Deferred.Or_error.Let_syntax in
-  let prev_screen_contents = ref "" in
-  let%map.Deferred result =
-    Clock_ns.with_timeout
-      timeout
-      (Deferred.Or_error.repeat_until_finished () (fun () ->
-         let%bind output = get_screen_contents client in
-         prev_screen_contents := output;
-         if f output
-         then return (`Finished ())
-         else (
-           let%map _ = Deferred.ok (Async.after (Time.Span.of_sec 0.1)) in
-           `Repeat ())))
+  let wait_until_text ~f =
+    let is_timed_out = ref false in
+    Clock_ns.run_after timeout (fun () -> is_timed_out := true) ();
+    let%bind result =
+      let repeating () =
+        let%bind output = get_screen_contents client in
+        match f output, !is_timed_out with
+        | true, _ -> return (`Finished (Ok ()))
+        | false, true -> return (`Finished (Error output))
+        | false, false ->
+          let%map _ = Deferred.ok (Clock_ns.after (Time_ns.Span.of_sec 0.1)) in
+          `Repeat ()
+      in
+      Deferred.Or_error.repeat_until_finished () repeating
+    in
+    match result with
+    | Ok () -> return ()
+    | Error screen_contents ->
+      (* print here instead of returning the string in the error in order to
+         keep the sexp-printing from ruining all the unicode chars *)
+      let error = Error.of_string "ERROR: timeout when looking for value on screen" in
+      printf !"%{Error.to_string_hum}\n%s\n" error screen_contents;
+      Deferred.Or_error.fail error
   in
-  match result with
-  | `Result x -> x
-  | `Timeout ->
-    (* print here instead of returning the string in the error in order to
-       keep the sexp-printing from ruining all the unicode chars *)
-    print_endline
-      ("ERROR: timeout when looking for value on screen\n"
-       ^ "previous screen contents:\n"
-       ^ !prev_screen_contents);
-    Error (Error.of_string "ERROR: timeout when looking for value on screen")
+  let wait_until_text_stabilizes () =
+    let prev_text = ref None in
+    let%bind () =
+      wait_until_text ~f:(fun text ->
+        match !prev_text with
+        | Some prev_text when String.equal text prev_text -> true
+        | Some _ | None ->
+          prev_text := Some text;
+          false)
+    in
+    return (Option.value_exn !prev_text)
+  in
+  let%bind () = wait_until_text ~f in
+  wait_until_text_stabilizes ()
 ;;
 
 let%expect_test "timeout occurs" =
@@ -341,13 +356,11 @@ let%expect_test "timeout occurs" =
       with_client (fun client ->
         let%bind () = Client.command ~command:"e term://sh" |> run_join client in
         let%bind () = Client.command ~command:"file my-terminal" |> run_join client in
-        let%bind () =
-          wait_until_text_shows_up
-            client
-            ~f:(String.is_substring ~substring:"sh-4.2$")
+        let%bind (_ : string) =
+          wait_until_text client ~f:(String.is_substring ~substring:"sh-4.2$")
         in
         let%bind _ =
-          wait_until_text_shows_up
+          wait_until_text
             client
             ~timeout:(Time_ns.Span.of_sec 0.01)
             ~f:(Fn.const false)
@@ -357,7 +370,6 @@ let%expect_test "timeout occurs" =
   [%expect
     {|
     ERROR: timeout when looking for value on screen
-    previous screen contents:
     ╭────────────────────────────────────────────────────────────────────────────────╮
     │sh-4.2$                                                                         │
     │                                                                                │
@@ -399,10 +411,9 @@ let%expect_test "open up sh" =
     with_client (fun client ->
       let%bind () = Client.command ~command:"e term://sh" |> run_join client in
       let%bind () = Client.command ~command:"file my-terminal" |> run_join client in
-      let%bind () =
-        wait_until_text_shows_up client ~f:(String.is_substring ~substring:"sh-4.2$")
+      let%bind screen =
+        wait_until_text client ~f:(String.is_substring ~substring:"sh-4.2$")
       in
-      let%bind screen = get_screen_contents client in
       print_endline screen;
       return ())
   in
