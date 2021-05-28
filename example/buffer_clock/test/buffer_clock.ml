@@ -3,16 +3,16 @@ open! Async
 open! Vcaml
 open! Vcaml_buffer_clock
 open Deferred.Or_error.Let_syntax
-module State = Vcaml_buffer_clock.Buffer_clock.State
+module Time_ns = Time_ns_unix
 
 let kill_buffer_in_window ~window =
-  let%map.Api_call set_win_or_err = Client.set_current_win ~window
-  and delete_buf_or_err = Client.command ~command:"bd!" in
+  let%map.Api_call set_win_or_err = Nvim.set_current_win ~window
+  and delete_buf_or_err = Nvim.command ~command:"bd!" in
   Or_error.all_unit [ set_win_or_err; delete_buf_or_err ]
 ;;
 
 let check_window_count ~client =
-  let%map win_list = Client.list_wins |> run_join client in
+  let%map win_list = Nvim.list_wins |> run_join client in
   List.length win_list
 ;;
 
@@ -28,7 +28,12 @@ let print_window_count client =
   print_s [%message (current_window_count : int)]
 ;;
 
-let during_plugin ~time_source ~client ~chan_id:_ ~state:{ State.window; buffer } =
+let during_plugin
+      ~time_source
+      ~client
+      ~chan_id:_
+      ~state:{ Buffer_clock.State.window; buffer }
+  =
   let%bind () = print_window_count client in
   let%bind () = print_buffer_contents ~client ~buffer in
   let%bind () =

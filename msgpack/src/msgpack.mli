@@ -1,5 +1,4 @@
 open Base
-module Message : module type of Message
 
 module Internal : sig
   module Parser : module type of Parser

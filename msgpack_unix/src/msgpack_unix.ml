@@ -23,6 +23,7 @@ end = struct
         ?reader_buffer_size
         ?writer_buffer_size
         ?timeout
+        ?time_source
         f
     =
     let addr = Tcp.Where_to_connect.of_file fname in
@@ -33,6 +34,7 @@ end = struct
       ?reader_buffer_size
       ?writer_buffer_size
       ?timeout
+      ?time_source
       (fun _ reader writer -> f { reader; writer })
   ;;
 

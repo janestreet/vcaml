@@ -1,13 +1,14 @@
 open Core
 
 module Version = struct
-  type t = Types.Client_info.version =
+  type t =
     { major : int option
     ; minor : int option
     ; patch : int option
     ; prerelease : string option
     ; commit : string option
     }
+  [@@deriving sexp_of]
 end
 
 module Client_type = struct
@@ -18,22 +19,23 @@ module Client_type = struct
     | `Host
     | `Plugin
     ]
+  [@@deriving sexp_of]
 end
 
 module Client_method = struct
-  type t = Types.Client_info.client_method =
+  type t =
     { async : bool
     ; nargs : [ `Fixed of int | `Range of int * int ] option
-    ; opts : Msgpack.t String.Map.t
     }
+  [@@deriving sexp_of]
 end
 
-type t = Types.Client_info.t =
-  { version : Types.Client_info.version option
-  ; methods : Types.Client_info.client_method String.Map.t
+type t =
+  { version : Version.t option
+  ; methods : Client_method.t String.Map.t
   ; attributes : string String.Map.t
   ; name : string option
-  ; type_ : Types.Client_info.client_type option
+  ; type_ : Client_type.t option
   }
 [@@deriving sexp_of]
 
@@ -45,7 +47,7 @@ let convert_version obj =
   let%bind patch = Extract.and_convert_optional m "patch" Extract.int in
   let%bind prerelease = Extract.and_convert_optional m "prerelease" Extract.string in
   let%bind commit = Extract.and_convert_optional m "commit" Extract.string in
-  return { Types.Client_info.major; minor; patch; prerelease; commit }
+  return { Version.major; minor; patch; prerelease; commit }
 ;;
 
 let convert_methods =
@@ -59,20 +61,7 @@ let convert_methods =
         | Array [ Integer lo; Integer hi ] -> Ok (`Range (lo, hi))
         | _ -> Or_error.error_string "malformed nargs")
     in
-    let%bind opts =
-      match Map.find m "attributes" with
-      | None -> Ok String.Map.empty
-      | Some (Map objs) ->
-        let%bind map =
-          List.map objs ~f:(function
-            | String a, b -> Ok (a, b)
-            | _ -> Or_error.error_string "malformed attributes")
-          |> Or_error.combine_errors
-        in
-        String.Map.of_alist_or_error map
-      | _ -> Or_error.error_string "malformed attributes"
-    in
-    return { Types.Client_info.async = Option.value ~default:false async; nargs; opts }
+    return { Client_method.async = Option.value ~default:false async; nargs }
   in
   function
   | Msgpack.Map kvs ->
@@ -126,5 +115,5 @@ let of_msgpack obj =
   in
   let%bind name = Extract.and_convert_optional m "name" Extract.string in
   let%bind type_ = Extract.and_convert_optional m "type" convert_type in
-  return { Types.Client_info.version; methods; attributes; name; type_ }
+  return { version; methods; attributes; name; type_ }
 ;;

@@ -7,8 +7,10 @@ open Vcaml
 
 module Echo_hello_world = Vcaml_plugin.Oneshot.Make (struct
     let execute client =
-      Client.command ~command:"echom 'Hello world!'" |> run_join client
+      Nvim.command ~command:"echom 'Hello world!'" |> run_join client
     ;;
+
+    let on_async_msgpack_error = Error.raise
   end)
 
 let main =

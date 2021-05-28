@@ -31,7 +31,7 @@ type t =
   { lhs : string
   ; rhs : string
   ; mode : Mode.t
-  ; scope : [ `Global | `Buffer_local of Types.Buffer.t ]
+  ; scope : [ `Global | `Buffer_local of Nvim_internal.Buffer.t ]
   ; expr : bool
   ; nowait : bool
   ; silent : bool
@@ -45,7 +45,7 @@ type t =
    in any of the constituent modes. Queries for [Language] mode return only language
    mappings. *)
 val get
-  :  scope:[ `Global | `Buffer_local of Types.Buffer.t ]
+  :  scope:[ `Global | `Buffer_local of Nvim_internal.Buffer.t ]
   -> mode:Mode.t
   -> t list Api_call.Or_error.t
 

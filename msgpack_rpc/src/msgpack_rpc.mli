@@ -29,7 +29,8 @@ module type S = sig
     -> parameters:Msgpack.t
     -> (Msgpack.t, Msgpack.t) Deferred.Result.t
 
-  val connect : conn -> t
+  val notify : t -> method_name:string -> parameters:Msgpack.t -> unit
+  val connect : conn -> on_error:(message:string -> Msgpack.t -> unit) -> t
 
   val register_method
     :  name:string

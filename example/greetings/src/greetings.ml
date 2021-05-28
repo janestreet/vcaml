@@ -26,6 +26,7 @@ module Greetings_plugin_arg = struct
   let startup = Fn.const (Deferred.Or_error.return ())
   let vimscript_notify_fn = Some "OnGreetingsPluginStart"
   let on_shutdown = Fn.const (Deferred.Or_error.return ())
+  let on_async_msgpack_error = Error.raise
 end
 
 module Greetings_plugin = Vcaml_plugin.Persistent.Make (Greetings_plugin_arg)

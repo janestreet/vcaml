@@ -1,5 +1,6 @@
 open Core
 open Async
+open Nvim_internal
 
 (* Api_call.t is an applicative which means that it can be defined either as
    the triple [map, both, return] or via [map, apply, return].  Because
@@ -10,7 +11,7 @@ open Async
    them. *)
 
 type _ t =
-  | Single : 'a Types.Api_result.t -> 'a Or_error.t t
+  | Single : 'a Api_result.t -> 'a Or_error.t t
   | Map : ('a -> 'b) * 'a t -> 'b t
   | Map_bind : ('a -> 'b Or_error.t) * 'a Or_error.t t -> 'b Or_error.t t
   | Pair : 'a t * 'b t -> ('a * 'b) t
@@ -18,9 +19,10 @@ type _ t =
 
 let of_api_result x = Single x
 
-let call_atomic client ~calls =
-  Nvim_internal.Wrappers.nvim_call_atomic ~calls
-  |> (Types.Client.Private.of_public client).call_nvim_api_fn
+let call_atomic (client : Client.t) ~calls =
+  let T = Client.Private.eq in
+  let api_call = Nvim_internal.nvim_call_atomic ~calls in
+  client.call_nvim_api_fn api_call Request
 ;;
 
 let rec collect_calls : type a. a t -> Msgpack.t list = function
@@ -31,33 +33,31 @@ let rec collect_calls : type a. a t -> Msgpack.t list = function
   | Const _ -> []
 ;;
 
-let rec extract_results
-  : type a. Msgpack.t list -> a t -> Types.Client.t -> a * Msgpack.t list
-  =
-  fun l shape client ->
+let rec extract_results : type a. Msgpack.t list -> a t -> a * Msgpack.t list =
+  fun l shape ->
   match l, shape with
   | l, Const x -> x, l
   | [], (Single _ | Map _ | Pair _) ->
     failwith "got bad response from vim: wrong number of responses"
   | obj :: rest, Single { witness; _ } -> Extract.value witness obj, rest
   | l, Map (f, c) ->
-    let obj, rest = extract_results l c client in
+    let obj, rest = extract_results l c in
     f obj, rest
   | l, Map_bind (f, c) ->
-    let obj, rest = extract_results l c client in
+    let obj, rest = extract_results l c in
     Or_error.bind ~f obj, rest
   | l, Pair (a, b) ->
-    let left, remaining = extract_results l a client in
-    let right, rest = extract_results remaining b client in
+    let left, remaining = extract_results l a in
+    let right, rest = extract_results remaining b in
     (left, right), rest
 ;;
 
-let rec run : type a. Types.Client.t -> a t -> a Deferred.Or_error.t =
+let rec run : type a. Client.t -> a t -> a Deferred.Or_error.t =
   fun client res ->
+  let T = Client.Private.eq in
   match res with
   | Const x -> return (Ok x)
-  | Single api ->
-    (Types.Client.Private.of_public client).call_nvim_api_fn api |> Deferred.ok
+  | Single api -> client.call_nvim_api_fn api Request |> Deferred.ok
   | Map (f, c) -> run client c |> Deferred.Or_error.map ~f
   | Map_bind (f, c) ->
     let%map result = run client c in
@@ -66,9 +66,18 @@ let rec run : type a. Types.Client.t -> a t -> a Deferred.Or_error.t =
     let calls = collect_calls res in
     (match%map call_atomic client ~calls with
      | Error _ as e -> e
-     | Ok [ Msgpack.Array results; _err ] ->
-       let r = Or_error.try_with (fun () -> extract_results results res client) in
+     | Ok [ Msgpack.Array results; Nil ] ->
+       let r = Or_error.try_with (fun () -> extract_results results res) in
        Or_error.map ~f:Tuple2.get1 r
+     | Ok [ Msgpack.Array _; Array [ Integer index; Integer error_type; String msg ] ] ->
+       (match Error_type.of_int error_type with
+        | Ok error_type ->
+          Or_error.error_s
+            [%message "Vim returned error" msg (error_type : Error_type.t) (index : int)]
+        | Error error ->
+          [ Error.create_s [%message "Vim returned error" msg (index : int)]; error ]
+          |> Error.of_list
+          |> Error)
      | _ -> Or_error.error_string "got bad response from vim: bad format")
 ;;
 

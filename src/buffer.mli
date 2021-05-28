@@ -1,8 +1,10 @@
-open Async
+module Unshadow_command := Command
 open Core
+module Command := Unshadow_command
+module Type := Nvim_internal.Phantom
 
 include module type of struct
-  include Types.Buffer
+  include Nvim_internal.Buffer
 end
 
 module Event : sig
@@ -42,9 +44,8 @@ val set_lines
 
 val find_by_name_or_create : name:string -> t Api_call.Or_error.t
 
-(** Attach to an existing buffer and receive a pipe of updates pretaining to this buffer.
 
-    The [opts] parameter is currently unused but may become used by neovim in the future.
+(** Attach to an existing buffer and receive a pipe of updates pretaining to this buffer.
 
     This function returns a regular [Deferred.t] instead of an [api_call] because it is
     impossible to execute atomically -- due to potential race conditions between multiple
@@ -68,37 +69,57 @@ val find_by_name_or_create : name:string -> t Api_call.Or_error.t
     [nvim_buf_detach] isn't directly exposed because it would detach all attached clients.
     Instead, simply close the returned pipe.
 *)
-val attach
-  :  ?opts:(Msgpack.t * Msgpack.t) list
-  -> Types.Client.t
-  -> buffer:[ `Current | `Numbered of t ]
-  -> send_buffer:bool
-  -> Event.t Pipe.Reader.t Deferred.Or_error.t
 
-val set_option : buffer:t -> name:string -> value:Msgpack.t -> unit Api_call.Or_error.t
+module Subscriber : sig
+  type buffer :=
+    [ `Current
+    | `Numbered of t
+    ]
+
+  type t
+
+  (** Only one [t] should be created for a given client. [on_error] is invoked when we
+      receive buffer event messages that we fail to parse (and therefore cannot be
+      attributed to a particular buffer). *)
+  val create : ?on_error:(Error.t -> unit) -> Client.t -> t
+
+  val subscribe
+    :  ?on_detach_failure:[ `Ignore (* default *) | `Raise | `Call of buffer -> unit ]
+    -> t
+    -> buffer:buffer
+    -> send_buffer:bool
+    -> Event.t Async.Pipe.Reader.t Async.Deferred.Or_error.t
+end
+
+val set_option
+  :  buffer:t
+  -> scope:[ `Local | `Global ]
+  -> name:string
+  -> type_:'a Type.t
+  -> value:'a
+  -> unit Api_call.Or_error.t
 
 module Untested : sig
   val line_count : buffer:t -> int Api_call.Or_error.t
-  val get_var : buffer:t -> name:string -> Msgpack.t Api_call.Or_error.t
+  val get_var : buffer:t -> name:string -> type_:'a Type.t -> 'a Api_call.Or_error.t
   val get_changedtick : buffer:t -> int Api_call.Or_error.t
 
-  (** Gets a map of buffer-local user-commands.
+  (** Gets a map of buffer-local user-commands. *)
+  val get_commands : buffer:t -> Command.t String.Map.t Api_call.Or_error.t
 
-      The [opts] parameter is not used by the current version of neovim, but may be used in
-      the future.
-  *)
-  val get_commands
-    :  ?opts:(Msgpack.t * Msgpack.t) list
-    -> buffer:t
-    -> Nvim_command.t String.Map.t Api_call.Or_error.t
+  val set_var
+    :  buffer:t
+    -> name:string
+    -> type_:'a Type.t
+    -> value:'a
+    -> unit Api_call.Or_error.t
 
-  val set_var : buffer:t -> name:string -> value:Msgpack.t -> unit Api_call.Or_error.t
   val del_var : buffer:t -> name:string -> unit Api_call.Or_error.t
-  val get_option : buffer:t -> name:string -> Msgpack.t Api_call.Or_error.t
+  val get_option : buffer:t -> name:string -> type_:'a Type.t -> 'a Api_call.Or_error.t
   val set_name : buffer:t -> name:string -> unit Api_call.Or_error.t
   val is_valid : buffer:t -> bool Api_call.Or_error.t
   val get_mark : buffer:t -> sym:char -> Mark.t Api_call.Or_error.t
-  val set_scratch : buffer:t -> unit Api_call.t
+  val set_scratch : buffer:t -> unit Api_call.Or_error.t
 
   val add_highlight
     :  buffer:t

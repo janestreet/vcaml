@@ -35,12 +35,12 @@ let create_simple_editor ~sequencer =
     type state = State.t
 
     let set_modifiable buffer value =
-      Buffer.set_option ~buffer ~name:"modifiable" ~value:(Boolean value)
+      Buffer.set_option ~buffer ~scope:`Local ~name:"modifiable" ~type_:Boolean ~value
     ;;
 
     let get_split_window =
-      let%map.Api_call.Or_error () = Client.command ~command:"split"
-      and new_win = Client.get_current_win in
+      let%map.Api_call.Or_error () = Nvim.command ~command:"split"
+      and new_win = Nvim.get_current_win in
       new_win
     ;;
 
@@ -51,15 +51,15 @@ let create_simple_editor ~sequencer =
           chan_id
       in
       Api_call.Or_error.all_unit
-        [ Client.set_current_win ~window:new_win
-        ; Client.set_current_buf ~buffer
-        ; Client.command ~command:"setlocal ve+=onemore"
-        ; Client.command ~command:shutdown_on_leave
+        [ Nvim.set_current_win ~window:new_win
+        ; Nvim.set_current_buf ~buffer
+        ; Nvim.command ~command:"setlocal ve+=onemore"
+        ; Nvim.command ~command:shutdown_on_leave
         ]
     ;;
 
     let add_vim_binding ~chan_id ~key_bind ~rpc_name =
-      Client.command
+      Nvim.command
         ~command:
           (Printf.sprintf
              "nnoremap <silent> <buffer> %s :call rpcnotify(%d, \"%s\", v:null)<cr>"
@@ -252,6 +252,8 @@ let create_simple_editor ~sequencer =
       alphabet_handlers
       @ [ space_handler; enter_handler; backspace_handler; shutdown_handler ]
     ;;
+
+    let on_async_msgpack_error = Error.raise
   end
   in
   (module Vcaml_plugin.Persistent.Make (Simple_editor) : Vcaml_plugin.Persistent.S
@@ -259,9 +261,9 @@ let create_simple_editor ~sequencer =
 ;;
 
 let main =
-  Command.async_or_error
+  Async.Command.async_or_error
     ~summary:"A simple editor plugin for neovim"
-    (let%map_open.Command () = return () in
+    (let%map_open.Core.Command () = return () in
      fun () ->
        let sequencer = Async.Sequencer.create () in
        let module Instance = (val create_simple_editor ~sequencer) in

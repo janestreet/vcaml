@@ -1,5 +1,4 @@
 open Base
-module Message = Message
 
 module Internal = struct
   module Parser = Parser

@@ -7,6 +7,8 @@ module Printing_oneshot_plugin = Vcaml_plugin.Oneshot.Make (struct
       print_endline "Oneshot.execute";
       Deferred.Or_error.return ()
     ;;
+
+    let on_async_msgpack_error = Error.raise
   end)
 
 let during_plugin ~chan_id:_ ~state:_ =
@@ -31,6 +33,8 @@ module Printing_persistent_plugin = Vcaml_plugin.Persistent.Make (struct
       print_s [%message "Persistent.on_shutdown" (state : string)];
       Deferred.Or_error.return ()
     ;;
+
+    let on_async_msgpack_error = Error.raise
   end)
 
 let%expect_test "oneshot plugin executes as expected" =

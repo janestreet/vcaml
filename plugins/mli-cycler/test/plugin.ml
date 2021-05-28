@@ -4,6 +4,8 @@ open! Vcaml_test
 open! Vcaml
 open! Mli_plugin.Plugin
 
+let () = Backtrace.elide := true
+
 let setup_files_for_testing ~empty_files ~files_with_includes ~temp_dir =
   let create_empty file = Writer.save file ~contents:"" in
   let create_with_include file intf = Writer.save file ~contents:("include " ^ intf) in
@@ -22,7 +24,7 @@ let setup_files_for_testing ~empty_files ~files_with_includes ~temp_dir =
 
 let print_current_file client =
   let open Deferred.Or_error.Let_syntax in
-  let%bind buf = Vcaml.run_join client Client.get_current_buf in
+  let%bind buf = Vcaml.run_join client Nvim.get_current_buf in
   let%bind name = Vcaml.run_join client (Buffer.get_name ~buffer:buf) in
   let _dir, current_file = Core.Filename.split name in
   print_s [%message (current_file : string)];
@@ -31,10 +33,10 @@ let print_current_file client =
 
 let setup_client ~empty_files ~files_with_includes ~entry_point ~client =
   let open Deferred.Or_error.Let_syntax in
-  let temp_dir = Core.Filename.temp_dir "mli_plugin" "test" in
+  let temp_dir = Filename_unix.temp_dir "mli_plugin" "test" in
   let%bind () = setup_files_for_testing ~empty_files ~files_with_includes ~temp_dir in
   let entry_file_full_path = Core.( ^/ ) temp_dir entry_point in
-  Vcaml.run_join client (Client.command ~command:(":e " ^ entry_file_full_path))
+  Vcaml.run_join client (Nvim.command ~command:(":e " ^ entry_file_full_path))
 ;;
 
 let rec repeat_n_times times ~f =
@@ -59,9 +61,7 @@ let cycle_forward client =
 
 let print_file_list client =
   let open Deferred.Or_error.Let_syntax in
-  let%bind file_list =
-    Vcaml.run_join client (Client.command_output ~command:"1 message")
-  in
+  let%bind file_list = Vcaml.run_join client (Nvim.command_output ~command:"1 message") in
   print_s [%message (file_list : string)];
   return ()
 ;;

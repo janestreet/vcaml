@@ -8,7 +8,7 @@ let%expect_test "get_height, set_height" =
   let%bind () =
     with_client (fun client ->
       let open Deferred.Or_error.Let_syntax in
-      let%bind win = Vcaml.Client.get_current_win |> run_join client in
+      let%bind win = Vcaml.Nvim.get_current_win |> run_join client in
       let%bind () = Window.set_height ~window:win ~height:10 |> run_join client in
       let%bind height = Window.get_height ~window:win |> run_join client in
       print_s [%message (height : int)];
@@ -22,9 +22,9 @@ let%expect_test "get_cursor, set_cursor" =
   let%bind () =
     with_client (fun client ->
       let open Deferred.Or_error.Let_syntax in
-      let%bind win = Vcaml.Client.get_current_win |> run_join client in
+      let%bind win = Vcaml.Nvim.get_current_win |> run_join client in
       let%bind () =
-        Vcaml.Client.feedkeys ~keys:"ithisisatest" ~mode:"n" ~escape_csi:false
+        Vcaml.Nvim.feedkeys ~keys:"ithisisatest" ~mode:"n" ~escape_csi:false
         |> run_join client
       in
       let%bind { row; col } = Vcaml.Window.get_cursor ~window:win |> run_join client in

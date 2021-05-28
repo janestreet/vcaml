@@ -1,4 +1,2 @@
-(alias (name DEFAULT) (deps wrappers.ml wrappers.mli types.ml types.mli))
-
 (library (name nvim_internal) (public_name vcaml.nvim_internal)
  (libraries core_kernel msgpack) (preprocess (pps ppx_jane)))

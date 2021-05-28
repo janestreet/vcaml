@@ -56,7 +56,7 @@ let convert_range range count =
   let range, count =
     match both with
     | [ range; count ] -> range, count
-    | _ -> failwith "impossible"
+    | _ -> assert false
   in
   (* These combinations were determined experimentally and may be subject to change with
      future versions of neovim.
@@ -66,8 +66,7 @@ let convert_range range count =
      -range   gives range = "." and count = Nil
      -range=% gives range = "%" and count = Nil
      -range=N gives range = "N" and count = Nil
-     -count=N gives range = "N" and count = "N"
-  *)
+     -count=N gives range = "N" and count = "N" *)
   match range, count with
   | Msgpack.Nil, Msgpack.Nil -> return None
   | String ".", Nil -> return (Some (Range `Defaults_to_current_line))

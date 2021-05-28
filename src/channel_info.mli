@@ -1,12 +1,12 @@
 open! Core
 
-type t = Types.Channel_info.t =
+type t =
   { id : int
   ; stream : [ `Stdio | `Stderr | `Socket | `Job ]
   ; mode : [ `Bytes | `Terminal | `Rpc ]
   ; pty : string option
-  ; buffer : Types.Buffer.t option
-  ; client : Types.Client_info.t option
+  ; buffer : Nvim_internal.Buffer.t option
+  ; client : Client_info.t option
   }
 [@@deriving sexp_of]
 

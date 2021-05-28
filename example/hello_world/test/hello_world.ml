@@ -5,7 +5,7 @@ open! Vcaml_hello_world
 
 let print_messages client =
   let%map.Deferred.Or_error message =
-    run_join client (Client.command_output ~command:"2 messages")
+    run_join client (Nvim.command_output ~command:"2 messages")
   in
   print_s [%message (message : string)]
 ;;

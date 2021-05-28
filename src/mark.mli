@@ -3,3 +3,4 @@ type t =
   ; row : int
   ; col : int
   }
+[@@deriving sexp_of]

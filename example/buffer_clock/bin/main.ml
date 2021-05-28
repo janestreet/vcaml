@@ -1,3 +1,3 @@
-open Core
+open! Core
 
-let () = Command.run Vcaml_buffer_clock.Buffer_clock.main
+let () = Command_unix.run Vcaml_buffer_clock.Buffer_clock.main

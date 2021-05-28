@@ -64,7 +64,7 @@ type t =
   { lhs : string
   ; rhs : string
   ; mode : Mode.t
-  ; scope : [ `Global | `Buffer_local of Types.Buffer.t ]
+  ; scope : [ `Global | `Buffer_local of Nvim_internal.Buffer.t ]
   ; expr : bool
   ; nowait : bool
   ; silent : bool
@@ -118,8 +118,8 @@ let of_msgpack msg ~queried_mode =
 let get ~scope ~mode =
   let query =
     match scope with
-    | `Global -> Nvim_internal.Wrappers.nvim_get_keymap
-    | `Buffer_local buffer -> Nvim_internal.Wrappers.nvim_buf_get_keymap ~buffer
+    | `Global -> Nvim_internal.nvim_get_keymap
+    | `Buffer_local buffer -> Nvim_internal.nvim_buf_get_keymap ~buffer
   in
   let modes =
     match (mode : Mode.t) with
@@ -189,5 +189,5 @@ let set
     |> List.filter_opt
     |> String.concat ~sep:" "
   in
-  Nvim_internal.Wrappers.nvim_command ~command |> Api_call.of_api_result
+  Nvim_internal.nvim_command ~command |> Api_call.of_api_result
 ;;

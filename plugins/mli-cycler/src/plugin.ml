@@ -10,12 +10,14 @@ module Buffer_data = struct
     }
 
   let fetch_from_vim client =
-    let%bind buffer = Client.get_current_buf |> Vcaml.run_join client in
+    let%bind buffer = Nvim.get_current_buf |> Vcaml.run_join client in
     let%bind filename = Buffer.get_name ~buffer |> Vcaml.run_join client in
     let%bind.Deferred file_patterns = File_pattern.list filename in
     return { file_patterns; current_file_pattern = File_pattern.of_filename filename }
   ;;
 end
+
+let on_async_msgpack_error = Error.raise
 
 let swap_vim_in_direction swap_in_direction client =
   let%bind { current_file_pattern; file_patterns } = Buffer_data.fetch_from_vim client in
@@ -26,21 +28,29 @@ let swap_vim_in_direction swap_in_direction client =
       Buffer.find_by_name_or_create ~name:(File_pattern.to_filename file_pattern)
       |> Vcaml.run_join client
     in
-    Client.set_current_buf ~buffer:new_buffer |> Vcaml.run_join client
+    Nvim.set_current_buf ~buffer:new_buffer |> Vcaml.run_join client
 ;;
 
 module Echo_file_patterns = Vcaml_plugin.Oneshot.Make (struct
+    let on_async_msgpack_error = on_async_msgpack_error
+
     let execute client =
       let%bind { file_patterns; _ } = Buffer_data.fetch_from_vim client in
       let stringified_file_list =
         List.map ~f:File_pattern.to_short_filename file_patterns |> String.concat ~sep:", "
       in
-      Client.command ~command:(Printf.sprintf "echom \"%s\"" stringified_file_list)
+      Nvim.command ~command:(Printf.sprintf "echom \"%s\"" stringified_file_list)
       |> Vcaml.run_join client
     ;;
   end)
 
 module List_file_patterns_in_fzf = Vcaml_plugin.Oneshot.Make (struct
+    let on_async_msgpack_error = on_async_msgpack_error
+
+    let run_fzf =
+      wrap_viml_function ~function_name:"fzf#run" ~type_:Defun.Vim.(unary Object Nil)
+    ;;
+
     let execute client =
       let%bind { file_patterns; _ } = Buffer_data.fetch_from_vim client in
       match file_patterns with
@@ -55,23 +65,23 @@ module List_file_patterns_in_fzf = Vcaml_plugin.Oneshot.Make (struct
             ; String "dir", String (File_pattern.dirname hd)
             ]
         in
-        let%bind (_ : Msgpack.t) =
-          Vcaml.run_join client (Client.call_function ~fn:"fzf#run" ~args:[ fzf_config ])
-        in
+        let%bind () = Vcaml.run_join client (run_fzf fzf_config) in
         return ()
     ;;
   end)
 
 module Next_file_pattern = Vcaml_plugin.Oneshot.Make (struct
+    let on_async_msgpack_error = on_async_msgpack_error
     let execute = swap_vim_in_direction File_pattern.next
   end)
 
 module Prev_file_pattern = Vcaml_plugin.Oneshot.Make (struct
+    let on_async_msgpack_error = on_async_msgpack_error
     let execute = swap_vim_in_direction File_pattern.prev
   end)
 
 let main =
-  Command.group
+  Core.Command.group
     ~summary:"plugin to cycle between ml, mli, and intf files"
     [ ( "list-fzf"
       , List_file_patterns_in_fzf.command

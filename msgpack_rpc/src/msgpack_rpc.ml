@@ -26,7 +26,8 @@ module type S = sig
     -> parameters:Msgpack.t
     -> (Msgpack.t, Msgpack.t) Deferred.Result.t
 
-  val connect : conn -> t
+  val notify : t -> method_name:string -> parameters:Msgpack.t -> unit
+  val connect : conn -> on_error:(message:string -> Msgpack.t -> unit) -> t
 
   val register_method
     :  name:string
@@ -36,15 +37,20 @@ end
 
 module Make (M : Connection) () = struct
   type conn = M.t
-  type t = M.t * (event -> unit) Bus.Read_only.t
 
-  module Id_factory = Unique_id.Int63 ()
+  type t =
+    { connection : M.t
+    ; notifications_bus : (event -> unit) Bus.Read_only.t
+    }
+  [@@deriving fields]
 
   let pending_requests : (Msgpack.t, Msgpack.t) Result.t Ivar.t Int.Table.t =
     Int.Table.create ()
   ;;
 
-  let subscribe ((_, notifications_bus) : t) = Async_bus.pipe1_exn notifications_bus
+  let subscribe { connection = _; notifications_bus } =
+    Async_bus.pipe1_exn notifications_bus
+  ;;
 
   let callbacks : (Msgpack.t list -> Msgpack.t Deferred.Or_error.t) String.Table.t =
     String.Table.create ()
@@ -53,18 +59,19 @@ module Make (M : Connection) () = struct
   let register_method ~name ~f =
     match Hashtbl.add callbacks ~key:name ~data:f with
     | `Ok -> Ok ()
-    | `Duplicate -> Or_error.errorf "duplicate method name %s" name
+    | `Duplicate -> Or_error.errorf "Duplicate method name %s" name
   ;;
 
-  let event_loop conn notifications_bus =
-    let handle_message = function
+  let event_loop conn notifications_bus ~on_error =
+    let handle_message msg =
+      match msg with
       | Msgpack.Array [ Integer 1; Integer msgid; Nil; result ] ->
         (match Hashtbl.find pending_requests msgid with
-         | None -> Log.Global.error "Unknown message ID: %d" msgid
+         | None -> on_error ~message:(sprintf "Unknown message ID: %d" msgid) msg
          | Some box -> Ivar.fill box (Ok result))
       | Array [ Integer 1; Integer msgid; err; Nil ] ->
         (match Hashtbl.find pending_requests msgid with
-         | None -> Log.Global.error "Unknown message ID: %d" msgid
+         | None -> on_error ~message:(sprintf "Unknown message ID: %d" msgid) msg
          | Some box -> Ivar.fill box (Error err))
       | Array [ Integer 2; String method_name; Array params ] ->
         Bus.write notifications_bus { method_name; params }
@@ -77,9 +84,7 @@ module Make (M : Connection) () = struct
            |> respond
          | Some f ->
            don't_wait_for
-             (let%map result =
-                Deferred.Or_error.try_with_join ~run:`Now ~rest:`Raise (fun () -> f params)
-              in
+             (let%map result = f params in
               let response : Msgpack.t =
                 match result with
                 | Ok r -> Array [ Integer 1; Integer msgid; Nil; r ]
@@ -92,9 +97,9 @@ module Make (M : Connection) () = struct
                     ]
               in
               respond response))
-      | msg -> Log.Global.error !"unexpected msgpack response: %{sexp:Msgpack.t}\n" msg
+      | _ -> on_error ~message:"Unexpected response" msg
     in
-    match%bind
+    match%map
       Angstrom_async.parse_many
         Msgpack.Internal.Parser.msg
         (fun msg ->
@@ -103,10 +108,12 @@ module Make (M : Connection) () = struct
            return ())
         (M.reader conn)
     with
-    | Ok () -> return ()
-    | Error s ->
-      Log.Global.error "Unable to parse messagepack-rpc response: %s" s;
-      return ()
+    | Ok () -> ()
+    | Error details ->
+      let message =
+        sprintf "Unable to parse MessagePack-RPC data: %s. Parser stopped." details
+      in
+      on_error ~message Nil
   ;;
 
   let register msg_id =
@@ -121,7 +128,7 @@ module Make (M : Connection) () = struct
     return result
   ;;
 
-  let connect conn =
+  let connect connection ~on_error =
     let notifications_bus =
       Bus.create
         [%here]
@@ -130,21 +137,39 @@ module Make (M : Connection) () = struct
         ~on_callback_raise:(* This should be impossible. *)
           Error.raise
     in
-    don't_wait_for (event_loop conn notifications_bus);
-    conn, Bus.read_only notifications_bus
+    don't_wait_for (event_loop connection notifications_bus ~on_error);
+    { connection; notifications_bus = Bus.read_only notifications_bus }
   ;;
 
-  let call (conn, _) ~method_name ~parameters =
-    let cross_plat_int_max = Int.pow 2 31 in
-    let open Msgpack in
-    let msg_id = Id_factory.create () |> Id_factory.to_int_exn in
-    let method_name = String method_name in
-    let query_msg =
-      Array [ Integer 0; Integer (msg_id % cross_plat_int_max); method_name; parameters ]
+  module Id_factory = Unique_id.Int63 ()
+
+  let to_native_uint32 =
+    let mask =
+      match Word_size.word_size with
+      | W32 -> Int63.of_int 0x3FFFFFFF
+      | W64 -> Int63.of_int64_trunc 0xFFFFFFFFL
+    in
+    fun x -> Int63.(x land mask |> to_int_exn)
+  ;;
+
+  let call t ~method_name ~parameters =
+    let msg_id = to_native_uint32 (Id_factory.create () :> Int63.t) in
+    let query =
+      Array [ Integer 0; Integer msg_id; String method_name; parameters ]
+      (* This should be safe b/c we aren't serializing an extension. *)
+      |> Msgpack.string_of_t_exn
     in
     let result_box = register msg_id in
-    let query = Msgpack.string_of_t_exn query_msg in
-    let () = Async.Writer.write (M.writer conn) query in
+    let () = Async.Writer.write (M.writer t.connection) query in
     wait_for_response result_box
+  ;;
+
+  let notify t ~method_name ~parameters =
+    let query =
+      Array [ Integer 2; String method_name; parameters ]
+      (* This should be safe b/c we aren't serializing an extension. *)
+      |> Msgpack.string_of_t_exn
+    in
+    Async.Writer.write (M.writer t.connection) query
   ;;
 end

@@ -1,3 +1,3 @@
-open Core
+open! Core
 
-let () = Command.run Vcaml_greetings.Greetings.main
+let () = Command_unix.run Vcaml_greetings.Greetings.main

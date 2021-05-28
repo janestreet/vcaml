@@ -1,3 +1,3 @@
-open Core
+open! Core
 
-let () = Command.run Mli_plugin.Plugin.main
+let () = Command_unix.run Mli_plugin.Plugin.main

@@ -18,17 +18,17 @@ let win_update_api_call ~new_win ~buffer =
   (* Executing multiple api calls separately is not atomic, so we should
      restore focus our new window before setting the buffer in case there's
      a race condition that arises. *)
-  and set_win_or_err = Client.set_current_win ~window:new_win
-  and set_buf_or_err = Client.set_current_buf ~buffer in
+  and set_win_or_err = Nvim.set_current_win ~window:new_win
+  and set_buf_or_err = Nvim.set_current_buf ~buffer in
   Or_error.all_unit [ set_height_or_err; set_win_or_err; set_buf_or_err ]
 ;;
 
 let wins_api_call =
   (* We want to preserve the original window so that we can restore focus
      after we create the clock window *)
-  let%map.Api_call orig_win_or_err = Client.get_current_win
-  and split_or_err = Client.command ~command:"split"
-  and new_win_or_err = Client.get_current_win in
+  let%map.Api_call orig_win_or_err = Nvim.get_current_win
+  and split_or_err = Nvim.command ~command:"split"
+  and new_win_or_err = Nvim.get_current_win in
   let open Or_error.Let_syntax in
   let%bind orig_win = orig_win_or_err in
   let%bind () = split_or_err in
@@ -67,13 +67,10 @@ let start_plugin ~time_source ~client ~buffer ~shutdown =
   let%bind orig_win, new_win = run_join client wins_api_call in
   let%bind () = win_update_api_call ~new_win ~buffer |> run_join client in
   (* Restore the user to their original window *)
-  let%bind () = Client.set_current_win ~window:orig_win |> run_join client in
+  let%bind () = Nvim.set_current_win ~window:orig_win |> run_join client in
   Async.don't_wait_for (start_buffer_updates ~time_source ~client ~buffer ~shutdown);
   return new_win
 ;;
-
-let ignore_buffer_event _state _client _event = Deferred.Or_error.return ()
-let on_buffer_close ~shutdown _state _client = Deferred.Or_error.return (shutdown ())
 
 module type Time_source_arg = sig
   val time_source : Time_source.t
@@ -86,23 +83,24 @@ module Make_buffer_clock (T : Time_source_arg) = Vcaml_plugin.Persistent.Make (s
 
     let startup (client, shutdown) =
       let open Deferred.Or_error.Let_syntax in
+      let subscriber = Buffer.Subscriber.create client in
       let%bind buffer =
         Buffer.find_by_name_or_create ~name:"Vcaml_buffer_clock" |> run_join client
       in
       let%bind win = start_plugin ~time_source:T.time_source ~client ~buffer ~shutdown in
-      let%map () =
-        Vcaml_plugin.setup_buffer_events
-          ~client
-          ~buffer
-          ~state:win
-          ~on_buffer_event:ignore_buffer_event
-          ~on_buffer_close:(on_buffer_close ~shutdown)
+      let%bind events =
+        Buffer.Subscriber.subscribe subscriber ~buffer:(`Numbered buffer) ~send_buffer:true
       in
-      { State.window = win; buffer }
+      don't_wait_for
+        (Pipe.iter_without_pushback events ~f:(function
+           | Lines _ | Changed_tick _ -> ()
+           | Detach _ -> shutdown ()));
+      return { State.window = win; buffer }
     ;;
 
     let vimscript_notify_fn = None
     let on_shutdown = Fn.const (Deferred.Or_error.return ())
+    let on_async_msgpack_error = Error.raise
   end)
 
 module Buffer_clock_plugin = Make_buffer_clock (struct

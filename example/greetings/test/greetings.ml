@@ -1,25 +1,28 @@
 open! Core
 open! Async
+open! Vcaml
 open! Vcaml_greetings
 
 let during_plugin client ~chan_id ~state:() =
   let open Deferred.Or_error.Let_syntax in
-  let%bind res =
-    Vcaml_plugin.For_testing.run_rpc_call
-      ~client
-      ~chan_id
-      ~name:"greeting"
-      ~args:[ Msgpack.String "Jane" ]
+  let greeting =
+    wrap_viml_function
+      ~function_name:"rpcrequest"
+      ~type_:Defun.Vim.(Integer @-> String @-> String @-> return String)
+      chan_id
+      "greeting"
   in
-  print_s ([%sexp_of: Msgpack.t] res);
-  let%bind _ =
-    Vcaml_plugin.For_testing.run_rpc_call
-      ~client
-      ~chan_id
-      ~name:"shutdown"
-      ~args:[ Msgpack.Nil ]
+  let shutdown =
+    wrap_viml_function
+      ~function_name:"rpcrequest"
+      ~type_:Defun.Vim.(Integer @-> String @-> Nil @-> return Nil)
+      chan_id
+      "shutdown"
   in
-  print_s (Sexp.Atom "Shutdown success");
+  let%bind res = run_join client (greeting "Jane") in
+  printf "%s\n" res;
+  let%bind () = run_join client (shutdown ()) in
+  printf "Shutdown success.\n";
   return ()
 ;;
 
@@ -29,6 +32,6 @@ let%expect_test "plugin responds to RPC requests and shuts down" =
       Greetings.For_testing.run client ~during_plugin:(during_plugin client))
   in
   [%expect {|
-  (String "Hello, Jane!")
-  "Shutdown success" |}]
+  Hello, Jane!
+  Shutdown success. |}]
 ;;

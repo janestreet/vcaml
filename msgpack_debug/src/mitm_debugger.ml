@@ -56,7 +56,7 @@ let start_server ~host_pipe ~client_pipe =
 ;;
 
 let run_prog_with_fresh_pipe ~prog ~pipe =
-  let tmp_dir = Filename.temp_dir ~perm:0o777 "mitm" "pipe" in
+  let tmp_dir = Filename_unix.temp_dir ~perm:0o777 "mitm" "pipe" in
   let tmp_pipe = Filename.concat tmp_dir "tmp.pipe" in
   let%bind connection = start_server ~host_pipe:tmp_pipe ~client_pipe:pipe in
   let%bind output =
@@ -77,7 +77,9 @@ let main =
      and original_pipe =
        flag
          "-socket"
-         (optional_with_default (Sys.getenv_exn "NVIM_LISTEN_ADDRESS") Filename.arg_type)
+         (optional_with_default
+            (Sys.getenv_exn "NVIM_LISTEN_ADDRESS")
+            Filename_unix.arg_type)
          ~doc:"the unix socket that we should intercept messages to"
      and prog =
        flag "-cmd" (required string) ~doc:"the command to run and intercept messages from"

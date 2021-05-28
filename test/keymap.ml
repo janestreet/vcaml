@@ -22,7 +22,7 @@ let%expect_test "Test keymaps" =
   let%bind () =
     with_client (fun client ->
       let open Deferred.Or_error.Let_syntax in
-      let%bind current_buffer = run_join client Client.get_current_buf in
+      let%bind current_buffer = run_join client Vcaml.Nvim.get_current_buf in
       Deferred.Or_error.List.iter Keymap.Mode.all ~f:(test ~client ~current_buffer))
   in
   [%expect

@@ -24,21 +24,32 @@ module Rpc_handler = struct
 end
 
 module type Oneshot_arg = sig
+  (** Default error handler for asynchronous Msgpack RPC errors. *)
+  val on_async_msgpack_error : Error.t -> unit
+
   val execute : Client.t -> unit Deferred.Or_error.t
 end
 
 module type Oneshot_s = sig
   val run : unit -> unit Deferred.Or_error.t
   val run_for_testing : Client.t -> unit Deferred.Or_error.t
-  val command : summary:string -> unit -> Command.t
+  val command : summary:string -> unit -> Core.Command.t
 end
 
 module type Persistent_arg = sig
   type state
 
+  (** Default error handler for asynchronous Msgpack RPC errors. *)
+  val on_async_msgpack_error : Error.t -> unit
+
   val rpc_handlers : state Rpc_handler.t list
   val startup : Client.t * shutdown_handler -> state Deferred.Or_error.t
+
+  (** This VimL function should take a single integer argument, which will be the channel
+      ID. It should return 0 on success and a non-zero value on failure (if [return] is
+      omitted 0 will be returned by default). *)
   val vimscript_notify_fn : string option
+
   val on_shutdown : Client.t * state -> unit Deferred.Or_error.t
 end
 
@@ -46,7 +57,7 @@ module type Persistent_s = sig
   type state
 
   val run : unit -> unit Deferred.Or_error.t
-  val command : summary:string -> unit -> Command.t
+  val command : summary:string -> unit -> Core.Command.t
 
   val run_for_testing
     :  ?during_plugin:(chan_id:int -> state:state -> unit Deferred.Or_error.t)
@@ -69,24 +80,12 @@ module type Intf = sig
     module Make (P : Arg) : S with type state = P.state
   end
 
-  val setup_buffer_events
-    :  client:Client.t
-    -> buffer:Buffer.t
-    -> state:'state
-    -> on_buffer_event:('state -> Client.t -> Buffer.Event.t -> unit Deferred.Or_error.t)
-    -> on_buffer_close:('state -> Client.t -> unit Deferred.Or_error.t)
-    -> unit Deferred.Or_error.t
-
   module Rpc_handler = Rpc_handler
 
   module For_testing : sig
-    val run_rpc_call
-      :  client:Client.t
-      -> chan_id:int
-      -> name:string
-      -> args:Msgpack.t list
-      -> Msgpack.t Deferred.Or_error.t
-
-    val with_client : (Client.t -> 'a Deferred.Or_error.t) -> 'a Deferred.t
+    val with_client
+      :  ?on_error:(Error.t -> unit)
+      -> (Client.t -> 'a Deferred.Or_error.t)
+      -> 'a Deferred.t
   end
 end

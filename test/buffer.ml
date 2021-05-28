@@ -5,10 +5,13 @@ open Vcaml
 open Test_client
 
 let with_event_printing ~f =
-  (* These tests may be fragile; the nvim docs don't specify exactly how [nvim_buf_lines_event] events
-     are grouped or reported. *)
+  (* These tests may be fragile; the nvim docs don't specify exactly how
+     [nvim_buf_lines_event] events are grouped or reported. *)
   with_client (fun client ->
-    let%bind events = Buffer.attach ~buffer:`Current ~send_buffer:true client in
+    let subscriber = Buffer.Subscriber.create client in
+    let%bind events =
+      Buffer.Subscriber.subscribe subscriber ~buffer:`Current ~send_buffer:true
+    in
     let events = Or_error.ok_exn events in
     Async.don't_wait_for
     @@ Async.Pipe.iter events ~f:(fun event ->
@@ -32,7 +35,7 @@ let%expect_test "events for some edits" =
     with_event_printing ~f:(fun client ->
       let open Async.Deferred.Or_error.Let_syntax in
       let feedkeys_call =
-        Client.feedkeys ~keys:"ohello, world!" ~mode:"nx" ~escape_csi:false
+        Vcaml.Nvim.feedkeys ~keys:"ohello, world!" ~mode:"nx" ~escape_csi:false
       in
       let%bind () = feedkeys_call |> run_join client in
       return ())
@@ -56,14 +59,16 @@ let%expect_test "feedkeys, get_lines, events for those edits" =
     with_event_printing ~f:(fun client ->
       let open Deferred.Or_error.Let_syntax in
       let%bind () =
-        Client.feedkeys ~keys:"ihello" ~mode:"nx" ~escape_csi:false |> run_join client
+        Vcaml.Nvim.feedkeys ~keys:"ihello" ~mode:"nx" ~escape_csi:false
+        |> run_join client
       in
       let%bind () =
-        Client.feedkeys ~keys:"oworld" ~mode:"nx" ~escape_csi:false |> run_join client
+        Vcaml.Nvim.feedkeys ~keys:"oworld" ~mode:"nx" ~escape_csi:false
+        |> run_join client
       in
-      let%bind cur_buf = run_join client Client.get_current_buf in
+      let%bind cur_buf = run_join client Vcaml.Nvim.get_current_buf in
       let%map lines =
-        Vcaml.Buffer.get_lines ~buffer:cur_buf ~start:0 ~end_:(-1) ~strict_indexing:true
+        Buffer.get_lines ~buffer:cur_buf ~start:0 ~end_:(-1) ~strict_indexing:true
         |> run_join client
       in
       print_s [%message (lines : string list)])
@@ -90,7 +95,7 @@ let%expect_test "set_lines, events for those edits" =
   let%bind () =
     with_event_printing ~f:(fun client ->
       let open Deferred.Or_error.Let_syntax in
-      let%bind cur_buf = Client.get_current_buf |> run_join client in
+      let%bind cur_buf = Vcaml.Nvim.get_current_buf |> run_join client in
       let command =
         let%map.Api_call _set_lines =
           Buffer.set_lines
@@ -100,11 +105,7 @@ let%expect_test "set_lines, events for those edits" =
             ~strict_indexing:true
             ~replacement:[ "this"; "is"; "an"; "edit" ]
         and get_lines =
-          Vcaml.Buffer.get_lines
-            ~buffer:cur_buf
-            ~start:0
-            ~end_:(-1)
-            ~strict_indexing:true
+          Buffer.get_lines ~buffer:cur_buf ~start:0 ~end_:(-1) ~strict_indexing:true
         in
         get_lines
       in
@@ -128,7 +129,7 @@ let%expect_test "find_by_name_or_create no name prefixes" =
   let%bind () =
     with_client (fun client ->
       let open Deferred.Or_error.Let_syntax in
-      let%bind original_buf = Client.get_current_buf |> run_join client in
+      let%bind original_buf = Vcaml.Nvim.get_current_buf |> run_join client in
       let%bind new_buf =
         Buffer.find_by_name_or_create ~name:"test_buffer_name" |> run_join client
       in
@@ -142,8 +143,7 @@ let%expect_test "find_by_name_or_create no name prefixes" =
         [%message (original_buf : Buffer.t) (new_buf : Buffer.t) (found_buf : Buffer.t)];
       return ())
   in
-  [%expect {|
-    ((original_buf 1) (new_buf 2) (found_buf 1))|}];
+  [%expect {| ((original_buf 1) (new_buf 2) (found_buf 1))|}];
   return ()
 ;;
 
@@ -193,7 +193,7 @@ let%expect_test "set_option" =
   let%bind () =
     with_client (fun client ->
       let open Deferred.Or_error.Let_syntax in
-      let%bind buffer = Client.get_current_buf |> run_join client in
+      let%bind buffer = Vcaml.Nvim.get_current_buf |> run_join client in
       let%bind.Deferred modify_success =
         Buffer.set_lines
           ~buffer
@@ -205,7 +205,12 @@ let%expect_test "set_option" =
       in
       print_s [%message (modify_success : unit Or_error.t)];
       let%bind () =
-        Buffer.set_option ~buffer ~name:"modifiable" ~value:(Boolean false)
+        Buffer.set_option
+          ~buffer
+          ~scope:`Local
+          ~name:"modifiable"
+          ~type_:Boolean
+          ~value:false
         |> run_join client
       in
       let%bind.Deferred modify_error =

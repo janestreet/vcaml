@@ -6,7 +6,7 @@ open Core
     For more details, run `:h nvim_set_client_info` *)
 
 module Version : sig
-  type t = Types.Client_info.version =
+  type t =
     { major : int option
     ; minor : int option
     ; patch : int option
@@ -26,19 +26,18 @@ module Client_type : sig
 end
 
 module Client_method : sig
-  type t = Types.Client_info.client_method =
+  type t =
     { async : bool
     ; nargs : [ `Fixed of int | `Range of int * int ] option
-    ; opts : Msgpack.t String.Map.t
     }
 end
 
-type t = Types.Client_info.t =
-  { version : Types.Client_info.version option
-  ; methods : Types.Client_info.client_method String.Map.t
+type t =
+  { version : Version.t option
+  ; methods : Client_method.t String.Map.t
   ; attributes : string String.Map.t
   ; name : string option
-  ; type_ : Types.Client_info.client_type option
+  ; type_ : Client_type.t option
   }
 [@@deriving sexp_of]
 

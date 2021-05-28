@@ -9,7 +9,7 @@ module State : sig
     }
 end
 
-val main : Command.t
+val main : Core.Command.t
 
 module For_testing : sig
   val run

@@ -1,12 +1,13 @@
 open! Core
+module Buffer = Nvim_internal.Buffer
 
-type t = Types.Channel_info.t =
+type t =
   { id : int
   ; stream : [ `Stdio | `Stderr | `Socket | `Job ]
   ; mode : [ `Bytes | `Terminal | `Rpc ]
   ; pty : string option
-  ; buffer : Types.Buffer.t option
-  ; client : Types.Client_info.t option
+  ; buffer : Buffer.t option
+  ; client : Client_info.t option
   }
 [@@deriving sexp_of]
 
@@ -34,7 +35,7 @@ let of_msgpack obj =
     | _ -> Or_error.error_string "malformed channel info"
   in
   let%bind pty = Extract.and_convert_optional m "pty" Extract.string in
-  let%bind buffer = Extract.and_convert_optional m "buffer" Types.Buffer.of_msgpack in
+  let%bind buffer = Extract.and_convert_optional m "buffer" Buffer.of_msgpack in
   let%bind client = Extract.and_convert_optional m "client" Client_info.of_msgpack in
-  return { Types.Channel_info.id; stream; mode; pty; buffer; client }
+  return { id; stream; mode; pty; buffer; client }
 ;;

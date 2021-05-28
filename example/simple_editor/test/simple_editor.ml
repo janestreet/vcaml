@@ -5,7 +5,7 @@ open Vcaml_simple_editor
 open Deferred.Or_error.Let_syntax
 
 let print_window_count ~client =
-  let%map wins = Client.list_wins |> run_join client in
+  let%map wins = Nvim.list_wins |> run_join client in
   let num_wins = List.length wins in
   print_s [%message (num_wins : int)]
 ;;
@@ -36,12 +36,12 @@ let wait_for_jobs ~sequencer ~num_jobs =
 
 let escape_and_feedkeys ~client ~keys ~sequencer =
   let%bind escaped_keys =
-    Client.replace_termcodes ~str:keys ~from_part:true ~do_lt:false ~special:true
+    Nvim.replace_termcodes ~str:keys ~from_part:true ~do_lt:false ~special:true
     |> run_join client
   in
   let wait_on_completion = wait_for_jobs ~sequencer ~num_jobs:(expected_num_jobs ~keys) in
   let%bind () =
-    Client.feedkeys ~keys:escaped_keys ~mode:"t" ~escape_csi:true |> run_join client
+    Nvim.feedkeys ~keys:escaped_keys ~mode:"t" ~escape_csi:true |> run_join client
   in
   let%bind () = Deferred.ok wait_on_completion in
   Deferred.ok (Async.Throttle.prior_jobs_done sequencer)
@@ -51,7 +51,7 @@ let get_contents ~client ~buffer =
   Buffer.get_lines ~buffer ~start:0 ~end_:(-1) ~strict_indexing:true |> run_join client
 ;;
 
-let kill_plugin ~client = Client.command ~command:"q!" |> run_join client
+let kill_plugin ~client = Nvim.command ~command:"q!" |> run_join client
 
 module Alphabet_test = struct
   let before_plugin ~client = print_window_count ~client

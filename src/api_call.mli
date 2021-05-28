@@ -7,9 +7,9 @@ open Async
 type 'a t
 
 val map_bind : 'a Or_error.t t -> f:('a -> 'b Or_error.t) -> 'b Or_error.t t
-val of_api_result : 'a Types.Api_result.t -> 'a Or_error.t t
-val run : Types.Client.t -> 'a t -> 'a Deferred.Or_error.t
-val run_join : Types.Client.t -> 'a Or_error.t t -> 'a Deferred.Or_error.t
+val of_api_result : 'a Nvim_internal.Api_result.t -> 'a Or_error.t t
+val run : Client.t -> 'a t -> 'a Deferred.Or_error.t
+val run_join : Client.t -> 'a Or_error.t t -> 'a Deferred.Or_error.t
 
 include Applicative.S with type 'a t := 'a t
 include Applicative.Let_syntax with type 'a t := 'a t
