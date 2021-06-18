@@ -1,4 +1,4 @@
-open Core_kernel
+open Core
 
 module type Nvim_id = sig
   type t = private int [@@deriving sexp_of]

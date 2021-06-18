@@ -1,4 +1,4 @@
-open! Core_kernel
+open! Core
 open Runtime
 
 module Version = struct

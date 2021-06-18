@@ -1,4 +1,4 @@
-open Core_kernel
+open Core
 open Async
 open Vcaml
 
@@ -43,7 +43,7 @@ let update_buffer_with_current_time ~client ~buffer ~time_source () =
       ~start:0
       ~end_:1
       ~strict_indexing:false
-      ~replacement:[ Time_ns.to_string (Time_source.now time_source) ]
+      ~replacement:[ Time_ns.to_string_utc (Time_source.now time_source) ]
     |> run_join client
   in
   let%map () = Time_source.after time_source (Time_ns.Span.of_int_ms 1000) in

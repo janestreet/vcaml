@@ -1,2 +1,2 @@
 (library (name nvim_internal) (public_name vcaml.nvim_internal)
- (libraries core_kernel msgpack) (preprocess (pps ppx_jane)))
+ (libraries core_kernel.core msgpack) (preprocess (pps ppx_jane)))

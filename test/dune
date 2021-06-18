@@ -1,3 +1,4 @@
 (library (name vcaml_test) (public_name vcaml.test)
- (libraries async core vcaml expect_test_helpers_async core.filename_unix)
+ (libraries async core_kernel.core vcaml expect_test_helpers_async
+  core.filename_unix)
  (preprocess (pps ppx_jane)))

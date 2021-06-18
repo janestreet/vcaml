@@ -1,2 +1,3 @@
 (library (name msgpack_unix) (public_name vcaml.msgpack_unix)
- (libraries core async msgpack msgpack_rpc) (preprocess (pps ppx_jane)))
+ (libraries core_kernel.core async msgpack msgpack_rpc)
+ (preprocess (pps ppx_jane)))
