@@ -87,8 +87,7 @@ let set_client_info
   let convert_method { Client_info.Client_method.async; nargs } =
     M.Map
       ((M.String "async", M.Boolean async)
-       ::
-       List.map (Option.to_list nargs) ~f:(function
+       :: List.map (Option.to_list nargs) ~f:(function
          | `Fixed i -> M.String "nargs", M.Integer i
          | `Range (lo, hi) -> M.String "nargs", M.Array [ Integer lo; Integer hi ]))
   in
