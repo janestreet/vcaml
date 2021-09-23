@@ -1,5 +1,6 @@
 open Core
 open Async
+open Import
 open Nvim_internal
 
 (* Api_call.t is an applicative which means that it can be defined either as
@@ -26,7 +27,7 @@ let call_atomic (client : Client.t) ~calls =
 ;;
 
 let rec collect_calls : type a. a t -> Msgpack.t list = function
-  | Single { name; params; _ } -> [ Msgpack.Array [ String name; params ] ]
+  | Single { name; params; _ } -> [ Msgpack.Array [ String name; Array params ] ]
   | Map (_, c) -> collect_calls c
   | Map_bind (_, c) -> collect_calls c
   | Pair (c1, c2) -> collect_calls c1 @ collect_calls c2
@@ -64,24 +65,23 @@ let rec run : type a. Client.t -> a t -> a Deferred.Or_error.t =
     Or_error.map ~f:(Or_error.bind ~f) result
   | Pair _ ->
     let calls = collect_calls res in
-    (match%map call_atomic client ~calls with
-     | Error _ as e -> e
+    (match%bind call_atomic client ~calls with
+     | Error _ as e -> return e
      | Ok [ Msgpack.Array results; Nil ] ->
        let r = Or_error.try_with (fun () -> extract_results results res) in
-       Or_error.map ~f:Tuple2.get1 r
+       return (Or_error.map ~f:Tuple2.get1 r)
      | Ok [ Msgpack.Array _; Array [ Integer index; Integer error_type; String msg ] ] ->
-       (match Error_type.of_int error_type with
-        | Ok error_type ->
-          Or_error.error_s
-            [%message "Vim returned error" msg (error_type : Error_type.t) (index : int)]
-        | Error error ->
-          [ Error.create_s [%message "Vim returned error" msg (index : int)]; error ]
-          |> Error.of_list
-          |> Error)
-     | _ -> Or_error.error_string "got bad response from vim: bad format")
+       Extract.convert_msgpack_error
+         (Error (Array [ Integer error_type; String msg ]))
+         ~on_keyboard_interrupt:(Bvar.broadcast client.keyboard_interrupts)
+       |> Result.map_error ~f:(fun error ->
+         Error.create_s [%message "" ~_:(error : Error.t) (index : int)])
+       |> return
+     | _ -> Deferred.Or_error.error_string "got bad response from vim: bad format")
 ;;
 
-let run_join client t = run client t >>| Or_error.join
+let run_join here client t = run client t >>| Or_error.join >>| tag_callsite here
+let run here client t = run client t >>| tag_callsite here
 let map_bind x ~f = Map_bind (f, x)
 let both x y = Pair (x, y)
 
@@ -137,4 +137,5 @@ module Or_error = struct
       ()
 
   let error_s sexp = Const (Or_error.error_s sexp)
+  let ignore_m t = map t ~f:ignore
 end

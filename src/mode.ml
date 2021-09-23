@@ -11,8 +11,14 @@ module T = struct
     | Insert_mode_x_completion
     | More_prompt
     | Normal
+    | Normal_using_i_ctrl_o_in_insert_mode
+    | Normal_using_i_ctrl_o_in_replace_mode
+    | Normal_using_i_ctrl_o_in_virtual_replace_mode
     | Normal_ex_mode
     | Operator_pending
+    | Operator_pending_forced_blockwise
+    | Operator_pending_forced_characterwise
+    | Operator_pending_forced_linewise
     | Replace
     | Replace_mode_completion
     | Replace_mode_x_completion
@@ -34,6 +40,12 @@ include Comparable.Make_plain (T)
 let of_mode_symbol = function
   | "n" -> Ok Normal
   | "no" -> Ok Operator_pending
+  | "nov" -> Ok Operator_pending_forced_characterwise
+  | "noV" -> Ok Operator_pending_forced_linewise
+  | "no\022" -> Ok Operator_pending_forced_blockwise
+  | "niI" -> Ok Normal_using_i_ctrl_o_in_insert_mode
+  | "niR" -> Ok Normal_using_i_ctrl_o_in_replace_mode
+  | "niV" -> Ok Normal_using_i_ctrl_o_in_virtual_replace_mode
   | "v" -> Ok Visual_by_character
   | "V" -> Ok Visual_by_line
   | "\022" -> Ok Visual_blockwise

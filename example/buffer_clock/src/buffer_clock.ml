@@ -44,7 +44,7 @@ let update_buffer_with_current_time ~client ~buffer ~time_source () =
       ~end_:1
       ~strict_indexing:false
       ~replacement:[ Time_ns.to_string_utc (Time_source.now time_source) ]
-    |> run_join client
+    |> run_join [%here] client
   in
   let%map () = Time_source.after time_source (Time_ns.Span.of_int_ms 1000) in
   match res_or_err with
@@ -64,10 +64,10 @@ let start_buffer_updates ~time_source ~client ~buffer ~shutdown =
 
 let start_plugin ~time_source ~client ~buffer ~shutdown =
   let open Deferred.Or_error.Let_syntax in
-  let%bind orig_win, new_win = run_join client wins_api_call in
-  let%bind () = win_update_api_call ~new_win ~buffer |> run_join client in
+  let%bind orig_win, new_win = run_join [%here] client wins_api_call in
+  let%bind () = win_update_api_call ~new_win ~buffer |> run_join [%here] client in
   (* Restore the user to their original window *)
-  let%bind () = Nvim.set_current_win ~window:orig_win |> run_join client in
+  let%bind () = Nvim.set_current_win ~window:orig_win |> run_join [%here] client in
   Async.don't_wait_for (start_buffer_updates ~time_source ~client ~buffer ~shutdown);
   return new_win
 ;;
@@ -77,19 +77,25 @@ module type Time_source_arg = sig
 end
 
 module Make_buffer_clock (T : Time_source_arg) = Vcaml_plugin.Persistent.Make (struct
+    include Vcaml_plugin.Raise_on_any_error
+
     type state = State.t
 
     let rpc_handlers = []
 
-    let startup (client, shutdown) =
+    let startup client ~shutdown =
       let open Deferred.Or_error.Let_syntax in
       let subscriber = Buffer.Subscriber.create client in
       let%bind buffer =
-        Buffer.find_by_name_or_create ~name:"Vcaml_buffer_clock" |> run_join client
+        Buffer.find_by_name_or_create ~name:"Vcaml_buffer_clock" |> run_join [%here] client
       in
       let%bind win = start_plugin ~time_source:T.time_source ~client ~buffer ~shutdown in
       let%bind events =
-        Buffer.Subscriber.subscribe subscriber ~buffer:(`Numbered buffer) ~send_buffer:true
+        Buffer.Subscriber.subscribe
+          subscriber
+          [%here]
+          ~buffer:(`Numbered buffer)
+          ~send_buffer:true
       in
       don't_wait_for
         (Pipe.iter_without_pushback events ~f:(function
@@ -99,8 +105,7 @@ module Make_buffer_clock (T : Time_source_arg) = Vcaml_plugin.Persistent.Make (s
     ;;
 
     let vimscript_notify_fn = None
-    let on_shutdown = Fn.const (Deferred.Or_error.return ())
-    let on_async_msgpack_error = Error.raise
+    let on_shutdown _ _ = Deferred.Or_error.return ()
   end)
 
 module Buffer_clock_plugin = Make_buffer_clock (struct

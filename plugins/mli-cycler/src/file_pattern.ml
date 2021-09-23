@@ -79,6 +79,13 @@ let is_include_line ~intf_name line =
   String.is_prefix line ~prefix:include_prefix
 ;;
 
+let rec is_mli t =
+  match t with
+  | Ml _ | Intf _ -> false
+  | Mli _ -> true
+  | Number (_, t') -> is_mli t'
+;;
+
 let is_redundant_line_in_mli ~intf_name line =
   let open_prefix = "open" in
   let comment_prefix = "(*" in
@@ -88,15 +95,21 @@ let is_redundant_line_in_mli ~intf_name line =
   || is_include_line ~intf_name line
 ;;
 
-let rec is_redundant_mli t =
+let are_all_lines_redundant t =
+  let intf_name = to_intf_name t in
+  let%map.Deferred lines = Reader.file_lines (to_filename t) in
+  List.for_all ~f:(is_redundant_line_in_mli ~intf_name) lines
+  && List.exists ~f:(is_include_line ~intf_name) lines
+;;
+
+let is_redundant_mli t =
   match t with
   | Ml _ | Intf _ -> return false
-  | Number (_, t') -> is_redundant_mli t'
-  | Mli _ as mli ->
-    let intf_name = to_intf_name mli in
-    let%map.Deferred lines = Reader.file_lines (to_filename mli) in
-    List.for_all ~f:(is_redundant_line_in_mli ~intf_name) lines
-    && List.exists ~f:(is_include_line ~intf_name) lines
+  | Number _ as number ->
+    (match is_mli number with
+     | false -> return false
+     | true -> are_all_lines_redundant number)
+  | Mli _ as mli -> are_all_lines_redundant mli
 ;;
 
 let list filename =

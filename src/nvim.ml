@@ -3,7 +3,45 @@ module Unshadow = struct
 end
 
 open Core
+open Import
 module Command = Unshadow.Command
+
+module Mouse = struct
+  module Button = struct
+    type t =
+      | Left
+      | Right
+      | Middle
+      | Wheel
+    [@@deriving sexp_of]
+  end
+
+  module Action = struct
+    type t =
+      | Press
+      | Drag
+      | Release
+      | Wheel_up
+      | Wheel_down
+      | Wheel_left
+      | Wheel_right
+    [@@deriving sexp_of]
+  end
+end
+
+module Key_modifier = struct
+  module T = struct
+    type t =
+      | Shift
+      | Ctrl
+      | Alt
+      | Super
+    [@@deriving compare, sexp_of]
+  end
+
+  include T
+  include Comparable.Make_plain (T)
+end
 
 let list_chans =
   let open Api_call.Let_syntax in
@@ -13,11 +51,11 @@ let list_chans =
     result
 ;;
 
-let command_output ~command =
-  Nvim_internal.nvim_command_output ~command |> Api_call.of_api_result
-;;
-
 let command ~command = Nvim_internal.nvim_command ~command |> Api_call.of_api_result
+
+let source ~code =
+  Nvim_internal.nvim_exec ~src:code ~output:true |> Api_call.of_api_result
+;;
 
 let list_bufs =
   let open Api_call.Let_syntax in
@@ -117,8 +155,14 @@ let list_wins =
     result
 ;;
 
-let replace_termcodes ~str ~from_part ~do_lt ~special =
-  Nvim_internal.nvim_replace_termcodes ~str ~from_part ~do_lt ~special
+let replace_termcodes ~str ~replace_keycodes =
+  (* [from_part] is a legacy Vim parameter that should be [true]. Always replace <lt> when
+     replacing keycodes (almost surely behavior we want, and simplifies the API). *)
+  Nvim_internal.nvim_replace_termcodes
+    ~str
+    ~from_part:true
+    ~do_lt:replace_keycodes
+    ~special:replace_keycodes
   |> Api_call.of_api_result
 ;;
 
@@ -202,6 +246,14 @@ let set_var ~name ~type_ ~value =
   Nvim_internal.nvim_set_var ~name ~value |> Api_call.of_api_result
 ;;
 
+let list_runtime_paths =
+  let open Api_call.Let_syntax in
+  let%map result = Nvim_internal.nvim_list_runtime_paths |> Api_call.of_api_result in
+  let open Or_error.Let_syntax in
+  let%bind result = result in
+  List.map result ~f:Extract.string |> Or_error.combine_errors
+;;
+
 module Fast = struct
   let get_mode =
     Nvim_internal.nvim_get_mode
@@ -219,18 +271,148 @@ module Fast = struct
   ;;
 
   let input ~keys = Nvim_internal.nvim_input ~keys |> Api_call.of_api_result
+
+  module Untested = struct
+    let input_mouse ~button ~action ~modifiers ~grid ~row ~col =
+      let button =
+        match (button : Mouse.Button.t) with
+        | Left -> "left"
+        | Right -> "right"
+        | Middle -> "middle"
+        | Wheel -> "wheel"
+      in
+      let action =
+        match (action : Mouse.Action.t) with
+        | Press -> "press"
+        | Drag -> "drag"
+        | Release -> "release"
+        | Wheel_up -> "up"
+        | Wheel_down -> "down"
+        | Wheel_left -> "left"
+        | Wheel_right -> "right"
+      in
+      let modifier =
+        modifiers
+        |> Set.to_list
+        |> List.map ~f:(fun modifier ->
+          match (modifier : Key_modifier.t) with
+          | Shift -> "S"
+          | Ctrl -> "C"
+          | Alt -> "A"
+          | Super -> "D")
+        |> String.concat
+      in
+      Nvim_internal.nvim_input_mouse ~button ~action ~modifier ~grid ~row ~col
+      |> Api_call.of_api_result
+    ;;
+  end
+
+  let paste data =
+    (* We set [crlf:false] here because VCaml already is UNIX-specific. If we change it in
+       the future to support Windows we can expose this option, but for now it just
+       clutters the API unnecessarily. *)
+    let data = String.concat data ~sep:"\n" in
+    Nvim_internal.nvim_paste ~data ~crlf:false ~phase:(-1)
+    |> Api_call.of_api_result
+    |> Api_call.Or_error.map ~f:(fun (true | false) -> ())
+  ;;
+
+  let paste_stream here (client : Client.t) =
+    let T = Client.Private.eq in
+    let open Async in
+    let flushed = Ivar.create () in
+    let writer =
+      Pipe.create_writer (fun reader ->
+        let phase = ref 1 in
+        let forced_stop = ref false in
+        let force_stop () =
+          Pipe.close_read reader;
+          forced_stop := true;
+          return ()
+        in
+        let%bind () =
+          Pipe.iter reader ~f:(fun data ->
+            match%bind
+              Nvim_internal.nvim_paste ~data ~crlf:false ~phase:!phase
+              |> Api_call.of_api_result
+              |> Api_call.run_join [%here] client
+              >>| tag_callsite here
+            with
+            | Ok true ->
+              phase := 2;
+              return ()
+            | Ok false ->
+              (* Documentation says we must stop pasting when we receive [false]. *)
+              force_stop ()
+            | Error error ->
+              client.on_error error;
+              force_stop ())
+        in
+        let%bind () =
+          match !forced_stop with
+          | true -> return ()
+          | false ->
+            Nvim_internal.nvim_paste ~data:"" ~crlf:false ~phase:3
+            |> Api_call.of_api_result
+            |> Api_call.run_join [%here] client
+            >>| Or_error.ignore_m
+            >>| tag_callsite here
+            >>| (function
+              | Ok () -> ()
+              | Error error -> client.on_error error)
+        in
+        Ivar.fill flushed ();
+        return ())
+    in
+    writer, Ivar.read flushed
+  ;;
 end
 
 module Untested = struct
-  let strwidth ~text = Nvim_internal.nvim_strwidth ~text |> Api_call.of_api_result
+  module Log_level = struct
+    type t =
+      | Trace
+      | Debug
+      | Info
+      | Warn
+      | Error
 
-  let list_runtime_paths =
-    let open Api_call.Let_syntax in
-    let%map result = Nvim_internal.nvim_list_runtime_paths |> Api_call.of_api_result in
-    let open Or_error.Let_syntax in
-    let%bind result = result in
-    List.map result ~f:Extract.string |> Or_error.combine_errors
+    let to_int = function
+      | Trace -> 0
+      | Debug -> 1
+      | Info -> 2
+      | Warn -> 3
+      | Error -> 4
+    ;;
+  end
+
+  let echo message ~add_to_history =
+    (* [opts] is not used by this version of Neovim, but may be used in the future. If
+       we expose it, we should do so in a typeful way rather than asking the user to
+       build [Msgpack.t] values. *)
+    Nvim_internal.nvim_echo
+      ~chunks:(Highlighted_text.to_msgpack message)
+      ~history:add_to_history
+      ~opts:[]
+    |> Api_call.of_api_result
   ;;
+
+  let notify log_level message =
+    (* [opts] is not used by this version of Neovim, but may be used in the future. If
+       we expose it, we should do so in a typeful way rather than asking the user to
+       build [Msgpack.t] values. *)
+    Nvim_internal.nvim_notify
+      ~msg:message
+      ~log_level:(Log_level.to_int log_level)
+      ~opts:[]
+    |> Api_call.of_api_result
+    |> Api_call.map_bind ~f:(function
+      (* I think they just screwed up the return type annotation for this function. *)
+      | Nil -> Ok ()
+      | _ -> Or_error.error_string "unexpected result from [nvim_notify]")
+  ;;
+
+  let strwidth ~text = Nvim_internal.nvim_strwidth ~text |> Api_call.of_api_result
 
   let set_current_dir ~dir =
     Nvim_internal.nvim_set_current_dir ~dir |> Api_call.of_api_result
@@ -249,6 +431,11 @@ module Untested = struct
     Nvim_internal.nvim_get_vvar ~name
     |> Api_call.of_api_result
     |> Api_call.map_bind ~f:(Extract.value type_)
+  ;;
+
+  let set_vvar ~name ~type_ ~value =
+    let value = Extract.inject type_ value in
+    Nvim_internal.nvim_set_vvar ~name ~value |> Api_call.of_api_result
   ;;
 
   let get_option ~name ~type_ =
@@ -306,12 +493,117 @@ module Untested = struct
     String.Map.of_alist_or_error commands_with_names
   ;;
 
+  let put lines ~how ~where ~place_cursor =
+    let lines = List.map lines ~f:(Extract.inject String) in
+    let type_ =
+      match how with
+      | `Blockwise -> "b"
+      | `Linewise -> "l"
+      | `Charwise -> "c"
+    in
+    let after =
+      match where with
+      | `Before_cursor -> false
+      | `After_cursor -> true
+    in
+    let follow =
+      match place_cursor with
+      | `At_start_of_text -> false
+      | `At_end_of_text -> true
+    in
+    Nvim_internal.nvim_put ~lines ~type_ ~after ~follow |> Api_call.of_api_result
+  ;;
+
+  let get_context ~opts =
+    let opts = Extract.map_to_msgpack_alist opts in
+    Nvim_internal.nvim_get_context ~opts
+    |> Api_call.of_api_result
+    |> Api_call.map_bind ~f:Extract.map_of_msgpack_alist
+  ;;
+
+  let load_context ~dict =
+    let dict = Extract.map_to_msgpack_alist dict in
+    Nvim_internal.nvim_load_context ~dict |> Api_call.of_api_result
+  ;;
+
+  let get_hl_id_by_name ~name =
+    Nvim_internal.nvim_get_hl_id_by_name ~name |> Api_call.of_api_result
+  ;;
+
+  let nvim_find_runtime_file_matching ~pattern =
+    Nvim_internal.nvim_get_runtime_file ~name:pattern ~all:false
+    |> Api_call.of_api_result
+    |> Api_call.map_bind ~f:(function
+      | [] -> Ok None
+      | [ String result ] -> Ok (Some result)
+      | _ -> Or_error.error_string "malformed result from [nvim_find_runtime_file]")
+  ;;
+
+  let nvim_all_runtime_files_matching ~pattern =
+    Nvim_internal.nvim_get_runtime_file ~name:pattern ~all:true
+    |> Api_call.of_api_result
+    |> Api_call.map_bind ~f:(fun results ->
+      results |> List.map ~f:Extract.string |> Or_error.combine_errors)
+  ;;
+
+  let get_option_info ~name =
+    Nvim_internal.nvim_get_option_info ~name
+    |> Api_call.of_api_result
+    |> Api_call.map_bind ~f:(fun map -> Option_info.of_msgpack (Map map))
+  ;;
+
+  let get_all_options_info =
+    Nvim_internal.nvim_get_all_options_info
+    |> Api_call.of_api_result
+    |> Api_call.map_bind ~f:(fun all_options_info ->
+      let open Or_error.Let_syntax in
+      all_options_info
+      |> Extract.map_of_msgpack_alist
+      >>| Map.to_alist
+      >>| List.map ~f:(fun (name, info) ->
+        let%map info = Option_info.of_msgpack info in
+        name, info)
+      >>= Or_error.combine_errors
+      >>| String.Map.of_alist_exn)
+  ;;
+
+  let chan_send ~channel_id data =
+    Nvim_internal.nvim_chan_send ~chan:channel_id ~data |> Api_call.of_api_result
+  ;;
+
   module Expert = struct
     let execute_lua ~code ~args =
-      Nvim_internal.nvim_execute_lua ~code ~args |> Api_call.of_api_result
+      Nvim_internal.nvim_exec_lua ~code ~args |> Api_call.of_api_result
+    ;;
+
+    let set_decoration_provider ~namespace ?on_start ?on_buf ?on_win ?on_line ?on_end () =
+      let opts =
+        [ "on_start", on_start
+        ; "on_buf", on_buf
+        ; "on_win", on_win
+        ; "on_line", on_line
+        ; "on_end", on_end
+        ]
+        |> List.filter_map ~f:(function
+          | _, None -> None
+          | label, Some callback ->
+            Some (Msgpack.String label, Nvim_internal.Luaref.to_msgpack callback))
+      in
+      Nvim_internal.nvim_set_decoration_provider ~ns_id:(Namespace.id namespace) ~opts
+      |> Api_call.of_api_result
     ;;
   end
 end
+
+(* The <CR> is buffered and then used to reply to the prompt. The side effect of this
+   dance is that the prompt is echoed to the screen. *)
+let echo_in_rpcrequest message =
+  let message = String.substr_replace_all message ~pattern:"'" ~with_:"'.\"'\".'" in
+  let open Api_call.Or_error.Let_syntax in
+  let%map (_ : int) = Fast.input ~keys:"<CR>"
+  and (_ : string) = eval ~expr:(sprintf "input('%s')" message) ~result_type:String in
+  ()
+;;
 
 (* These functions are part of the Neovim API but are not exposed in VCaml. *)
 module Unused = struct
@@ -334,5 +626,8 @@ module Unused = struct
   let (_ : _) = Nvim_internal.nvim_get_proc
   let (_ : _) = Nvim_internal.nvim_get_proc_children
 
-  let (_ : _) = Nvim_internal.nvim_ui_set_option
+  module How_do_these_work = struct
+    let _ = Nvim_internal.nvim_select_popupmenu_item
+    let _ = Nvim_internal.nvim_set_hl
+  end
 end

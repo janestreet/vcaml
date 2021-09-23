@@ -12,13 +12,14 @@ let kill_buffer_in_window ~window =
 ;;
 
 let check_window_count ~client =
-  let%map win_list = Nvim.list_wins |> run_join client in
+  let%map win_list = Nvim.list_wins |> run_join [%here] client in
   List.length win_list
 ;;
 
 let print_buffer_contents ~client ~buffer =
   let%map contents =
-    Buffer.get_lines ~buffer ~start:0 ~end_:(-1) ~strict_indexing:false |> run_join client
+    Buffer.get_lines ~buffer ~start:0 ~end_:(-1) ~strict_indexing:false
+    |> run_join [%here] client
   in
   print_s [%message (contents : string list)]
 ;;
@@ -41,7 +42,7 @@ let during_plugin
       (Time_source.advance_by_alarms_by time_source (Time_ns.Span.of_int_ms 1000))
   in
   let%bind () = print_buffer_contents ~client ~buffer in
-  kill_buffer_in_window ~window |> run_join client
+  kill_buffer_in_window ~window |> run_join [%here] client
 ;;
 
 let%expect_test "plugin opens a new buffer/window which updates until buffer deletion" =
@@ -49,7 +50,7 @@ let%expect_test "plugin opens a new buffer/window which updates until buffer del
   let mock_time_source = Time_source.create ~now:(Time_ns.of_string now_str) () in
   let mock_time_source_readonly = Time_source.read_only mock_time_source in
   let%map.Deferred _state =
-    Vcaml_plugin.For_testing.with_client (fun client ->
+    Vcaml_test.with_client (fun client ->
       let%bind () = print_window_count client in
       Buffer_clock.For_testing.run
         client

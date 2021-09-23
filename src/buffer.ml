@@ -4,6 +4,7 @@ end
 
 open Core
 open Async
+open Import
 module Command = Unshadow.Command
 include Nvim_internal.Buffer
 
@@ -15,7 +16,7 @@ include Nvim_internal.Buffer
 let current_buffer =
   let query : Msgpack.t Nvim_internal.Api_result.t =
     { name = "nvim_eval"
-    ; params = Array [ String "bufnr(\"%\")" ]
+    ; params = [ String "bufnr(\"%\")" ]
     ; witness = Nvim_internal.Phantom.Object
     }
   in
@@ -98,6 +99,10 @@ end
 
 let get_name ~buffer = Nvim_internal.nvim_buf_get_name ~buffer |> Api_call.of_api_result
 
+let set_name ~buffer ~name =
+  Nvim_internal.nvim_buf_set_name ~buffer ~name |> Api_call.of_api_result
+;;
+
 let get_lines ~buffer ~start ~end_ ~strict_indexing =
   let open Api_call.Let_syntax in
   let%map result =
@@ -118,53 +123,14 @@ let set_lines ~buffer ~start ~end_ ~strict_indexing ~replacement =
   |> Api_call.of_api_result
 ;;
 
-let interleave_slashes name =
-  name
-  |> String.to_list
-  |> List.map ~f:(fun c -> [ '\\'; c ])
-  |> List.join
-  |> String.of_char_list
+let create ~listed ~scratch =
+  Nvim_internal.nvim_create_buf ~listed ~scratch |> Api_call.of_api_result
 ;;
 
-let badd_api_call name =
-  (* For input to :badd, you can escape any keyboard character with a slash. For example,
-     \h\i is interpreted as hi. Notably, things like \n, \t, and \r get sent to n, t, and
-     r instead of their usual string meanings. As a result, it makes sense to escape all
-     characters, since certain characters (e.g. space) require being escaped, and
-     escaping characters behaves nicely even on characters which don't require it. *)
-  let escaped_name = interleave_slashes name in
-  Nvim_internal.nvim_command ~command:(sprintf "badd %s" escaped_name)
-  |> Api_call.of_api_result
-;;
-
-let bufnr_api_call name =
-  let escaped_name = String.escaped name in
-  Nvim_internal.nvim_eval ~expr:(sprintf "bufnr(\"%s\")" escaped_name)
-  |> Api_call.of_api_result
-;;
-
-let add_buffer_before_searching name =
-  let open Api_call.Let_syntax in
-  let%map badd_or_err = badd_api_call name
-  and bufnr_or_err = bufnr_api_call name in
-  Or_error.both badd_or_err bufnr_or_err
-  |> Or_error.bind ~f:(fun ((), buffer) -> of_msgpack buffer)
-;;
-
-let search_for_buffer name =
-  let open Api_call.Let_syntax in
-  let%map result = bufnr_api_call name in
-  result |> Or_error.bind ~f:of_msgpack
-;;
-
-(* If we call vim's bufnr command with a string x, it may resolve to a different buffer
-   y, if x is a prefix of y and x is not a prefix of any other open buffers in vim. As a
-   result, we need to perform a :badd prior to calling bufnr, with the caveat that :badd
-   cannot be used for the default buffer (whose name is the empty string). *)
 let find_by_name_or_create ~name =
-  match name with
-  | "" -> search_for_buffer name
-  | _ -> add_buffer_before_searching name
+  Nvim_internal.nvim_call_function ~fn:"bufadd" ~args:[ String name ]
+  |> Api_call.of_api_result
+  |> Api_call.map_bind ~f:(Extract.value Buffer)
 ;;
 
 module Subscriber = struct
@@ -179,11 +145,11 @@ module Subscriber = struct
     { client; on_error }
   ;;
 
-  let buf_events t =
+  let buf_events t here =
     let T = Client.Private.eq in
     let r, w = Pipe.create () in
     let s =
-      Bus.subscribe_exn t.client.events [%here] ~f:(fun e ->
+      Bus.subscribe_exn t.client.events here ~f:(fun e ->
         match Event.parse e with
         | Some evt -> Pipe.write_without_pushback_if_open w evt
         | None -> ()
@@ -201,18 +167,43 @@ module Subscriber = struct
     r
   ;;
 
-  let subscribe ?(on_detach_failure = `Ignore) t ~buffer ~send_buffer =
+  let subscribe
+        ?(on_detach_failure = `Ignore)
+        ?on_lines
+        ?on_bytes
+        ?on_changed_tick
+        ?on_detach
+        ?on_reload
+        ?utf_sizes
+        ?preview
+        t
+        here
+        ~buffer
+        ~send_buffer
+    =
     let buffer_query =
       match buffer with
       | `Current -> Unsafe.of_int 0
       | `Numbered b -> b
     in
     let attach =
-      Api_call.of_api_result
-        (* [opts] is not used by this version of Neovim, but may be used in the future. If
-           we expose it, we should do so in a typeful way rather than asking the user to
-           build [Msgpack.t] values. *)
-        (Nvim_internal.nvim_buf_attach ~buffer:buffer_query ~send_buffer ~opts:[])
+      let opts =
+        [ "on_lines", `Luaref on_lines
+        ; "on_bytes", `Luaref on_bytes
+        ; "on_changed_tick", `Luaref on_changed_tick
+        ; "on_detach", `Luaref on_detach
+        ; "on_reload", `Luaref on_reload
+        ; "utf_sizes", `Boolean utf_sizes
+        ; "preview", `Boolean preview
+        ]
+        |> List.filter_map ~f:(function
+          | _, (`Luaref None | `Boolean None) -> None
+          | label, `Luaref (Some callback) ->
+            Some (Msgpack.String label, Nvim_internal.Luaref.to_msgpack callback)
+          | label, `Boolean (Some flag) -> Some (Msgpack.String label, Boolean flag))
+      in
+      Nvim_internal.nvim_buf_attach ~buffer:buffer_query ~send_buffer ~opts
+      |> Api_call.of_api_result
     in
     let curr_bufnr =
       match buffer with
@@ -223,7 +214,9 @@ module Subscriber = struct
     let open Deferred.Or_error.Let_syntax in
     (* We always run the actual attach because it's possible that the user has deleted the
        buffer (and so we want to fail with an error). *)
-    let%bind success, bufnr = Api_call.run t.client call in
+    let%bind success, bufnr =
+      Api_call.run [%here] t.client call |> Deferred.map ~f:(tag_callsite here)
+    in
     let run_attach () =
       let open Deferred.Or_error.Let_syntax in
       if%bind Deferred.return success
@@ -233,7 +226,7 @@ module Subscriber = struct
         Hashtbl.change t.client.buffers_attached bufnr ~f:(function
           | Some x -> Some (x + 1)
           | None -> Some 1);
-        let incoming = Pipe.filter (buf_events t) ~f:(Event.for_buffer bufnr) in
+        let incoming = Pipe.filter (buf_events t here) ~f:(Event.for_buffer bufnr) in
         let r =
           Pipe.create_reader ~close_on_exception:false (fun w ->
             Pipe.iter incoming ~f:(function
@@ -250,6 +243,7 @@ module Subscriber = struct
         upon (Pipe.closed r) (fun () ->
           upon
             (Api_call.run_join
+               [%here]
                t.client
                (Nvim_internal.nvim_buf_detach ~buffer:bufnr |> Api_call.of_api_result))
             (function
@@ -287,6 +281,18 @@ let set_option ~buffer ~scope ~name ~type_ ~value =
       ]
   in
   api_results |> List.map ~f:Api_call.of_api_result |> Api_call.Or_error.all_unit
+;;
+
+let get_mark ~buffer ~sym =
+  let open Api_call.Let_syntax in
+  let%map pos =
+    Nvim_internal.nvim_buf_get_mark ~buffer ~name:(Char.to_string sym)
+    |> Api_call.of_api_result
+  in
+  let open Or_error.Let_syntax in
+  match%bind pos with
+  | [ Integer row; Integer col ] -> Ok { Mark.sym; pos = { row; col } }
+  | _ -> Or_error.error_string "malformed result from [nvim_buf_get_mark]"
 ;;
 
 module Untested = struct
@@ -340,28 +346,34 @@ module Untested = struct
     |> Api_call.map_bind ~f:(Extract.value type_)
   ;;
 
-  let set_name ~buffer ~name =
-    Nvim_internal.nvim_buf_set_name ~buffer ~name |> Api_call.of_api_result
+  let is_loaded ~buffer =
+    Nvim_internal.nvim_buf_is_loaded ~buffer |> Api_call.of_api_result
   ;;
 
   let is_valid ~buffer = Nvim_internal.nvim_buf_is_valid ~buffer |> Api_call.of_api_result
 
-  let get_mark ~buffer ~sym =
-    let open Api_call.Let_syntax in
-    let%map pos =
-      Nvim_internal.nvim_buf_get_mark ~buffer ~name:(Char.to_string sym)
-      |> Api_call.of_api_result
+  (* This function's name is a bit misleading because it actually only ever does :bwipeout
+     or :bunload depending on the passed options, but it never does :bdelete. *)
+  let nvim_buf_delete ~only_unload ~buffer ~even_if_modified =
+    let opts =
+      [ Msgpack.String "force", Msgpack.Boolean even_if_modified
+      ; Msgpack.String "unload", Msgpack.Boolean only_unload
+      ]
     in
-    let open Or_error.Let_syntax in
-    match%bind pos with
-    | [ Integer row; Integer col ] -> Ok { Mark.sym; row; col }
-    | _ -> Or_error.error_string "malformed result from [nvim_buf_get_mark]"
+    Nvim_internal.nvim_buf_delete ~buffer ~opts |> Api_call.of_api_result
   ;;
 
-  let add_highlight ~buffer ~ns_id ~hl_group ~line ~col_start ~col_end =
+  let unload = nvim_buf_delete ~only_unload:true
+  let wipeout = nvim_buf_delete ~only_unload:false
+
+  let get_byte_offset_of_line ~buffer ~line:index =
+    Nvim_internal.nvim_buf_get_offset ~buffer ~index |> Api_call.of_api_result
+  ;;
+
+  let add_highlight ~buffer ~namespace ~hl_group ~line ~col_start ~col_end =
     Nvim_internal.nvim_buf_add_highlight
       ~buffer
-      ~ns_id
+      ~ns_id:(Namespace.id namespace)
       ~hl_group
       ~line
       ~col_start
@@ -369,18 +381,253 @@ module Untested = struct
     |> Api_call.of_api_result
   ;;
 
-  let clear_highlight ~buffer ~ns_id ~line_start ~line_end =
-    Nvim_internal.nvim_buf_clear_highlight ~buffer ~ns_id ~line_start ~line_end
+  let clear_namespace ~buffer ~namespace ~line_start ~line_end =
+    Nvim_internal.nvim_buf_clear_namespace
+      ~buffer
+      ~ns_id:(Namespace.id namespace)
+      ~line_start
+      ~line_end
     |> Api_call.of_api_result
   ;;
 
-  let set_scratch ~buffer =
-    let open Api_call.Or_error.Let_syntax in
-    let setl_option = set_option ~scope:`Local in
-    let%map () = setl_option ~buffer ~name:"buftype" ~type_:String ~value:"nofile"
-    and () = setl_option ~buffer ~name:"bufhidden" ~type_:String ~value:"hide"
-    and () = setl_option ~buffer ~name:"swapfile" ~type_:Boolean ~value:false
-    and () = setl_option ~buffer ~name:"buflisted" ~type_:Boolean ~value:false in
-    ()
+  let set_text ~buffer ~start_row ~start_col ~end_row ~end_col ~replacement =
+    let replacement = List.map ~f:(fun v -> Msgpack.String v) replacement in
+    Nvim_internal.nvim_buf_set_text
+      ~buffer
+      ~start_row
+      ~start_col
+      ~end_row
+      ~end_col
+      ~replacement
+    |> Api_call.of_api_result
   ;;
+
+  let set_virtual_text ~buffer ~namespace ~line ~text =
+    (* [opts] is not used by this version of Neovim, but may be used in the future. If we
+       expose it, we should do so in a typeful way rather than asking the user to build
+       [Msgpack.t] values. *)
+    Nvim_internal.nvim_buf_set_virtual_text
+      ~buffer
+      ~src_id:(Namespace.id namespace)
+      ~line
+      ~chunks:(Highlighted_text.to_msgpack text)
+      ~opts:[]
+    |> Api_call.of_api_result
+    |> Api_call.Or_error.ignore_m
+  ;;
+
+  module Extmark = struct
+    module T = struct
+      type buffer = t [@@deriving compare, hash, sexp_of]
+
+      type t =
+        { id : int
+        ; namespace : Namespace.t
+        ; buffer : buffer
+        }
+      [@@deriving compare, fields, hash, sexp_of]
+    end
+
+    include T
+    include Comparable.Make_plain (T)
+    include Hashable.Make_plain (T)
+  end
+
+  let set_extmark_internal
+        ~k
+        ~buffer
+        ~namespace
+        ~start_inclusive
+        ?id
+        ?end_exclusive
+        ?hl_group
+        ?virtual_text
+        ?virtual_text_pos
+        ?hide_virtual_text_when_overlaying_selection
+        ?when_underlying_highlight_conflicts
+        ?extend_highlight_across_screen
+        ?ephemeral
+        ?start_gravity
+        ?end_gravity
+        ?priority
+        ()
+    =
+    let opts =
+      let module M = Msgpack in
+      (* [bind] is bind-like but passes from the option monad to the list monad. *)
+      let bind value ~f = Option.map value ~f |> Option.value ~default:[] in
+      [ bind id ~f:(fun id -> [ "id", M.Integer id ])
+      ; bind end_exclusive ~f:(fun { Position.row; col } ->
+          [ "end_line", M.Integer row; "end_col", Integer col ])
+      ; bind hl_group ~f:(fun hl_group -> [ "hl_group", M.String hl_group ])
+      ; bind virtual_text ~f:(fun virtual_text ->
+          [ "virt_text", M.Array (Highlighted_text.to_msgpack virtual_text) ])
+      ; bind virtual_text_pos ~f:(function
+          | `Eol -> [ "virt_text_pos", M.String "eol" ]
+          | `Overlay -> [ "virt_text_pos", String "overlay" ]
+          | `Right_align -> [ "virt_text_pos", String "right_align" ]
+          | `At_column col -> [ "virt_text_win_col", Integer col ])
+      ; bind hide_virtual_text_when_overlaying_selection ~f:(fun () ->
+          [ "virt_text_hide", M.Boolean true ])
+      ; bind when_underlying_highlight_conflicts ~f:(fun what_to_do ->
+          let hl_mode =
+            match what_to_do with
+            | `Override -> "replace"
+            | `Combine_with_bg -> "combine"
+            | `Blend -> "blend"
+          in
+          [ "hl_mode", M.String hl_mode ])
+      ; bind extend_highlight_across_screen ~f:(fun () -> [ "hl_eol", M.Boolean true ])
+      ; bind ephemeral ~f:(fun () -> [ "ephemeral", M.Boolean true ])
+      ; bind start_gravity ~f:(fun gravity ->
+          let right_gravity =
+            match gravity with
+            | `Right -> true
+            | `Left -> false
+          in
+          [ "right_gravity", M.Boolean right_gravity ])
+      ; bind end_gravity ~f:(fun end_gravity ->
+          let end_right_gravity =
+            match end_gravity with
+            | `Right -> true
+            | `Left -> false
+          in
+          [ "end_right_gravity", M.Boolean end_right_gravity ])
+      ; bind priority ~f:(fun priority -> [ "priority", M.Integer priority ])
+      ]
+      |> List.concat
+      |> List.map ~f:(Tuple2.map_fst ~f:(fun key -> M.String key))
+    in
+    let { Position.row; col } = start_inclusive in
+    Nvim_internal.nvim_buf_set_extmark
+      ~buffer
+      ~ns_id:(Namespace.id namespace)
+      ~line:row
+      ~col
+      ~opts
+    |> Api_call.of_api_result
+    |> Api_call.Or_error.map ~f:(fun id -> { Extmark.id; namespace; buffer })
+    |> k
+  ;;
+
+  let create_extmark = set_extmark_internal ~k:Fn.id ?id:None
+
+  let update_extmark ~extmark:{ Extmark.id; namespace; buffer } =
+    set_extmark_internal ~k:Api_call.Or_error.ignore_m ~id ~namespace ~buffer
+  ;;
+
+  let delete_extmark ~extmark:{ Extmark.id; namespace; buffer } =
+    Nvim_internal.nvim_buf_del_extmark ~buffer ~ns_id:(Namespace.id namespace) ~id
+    |> Api_call.of_api_result
+  ;;
+
+  let get_extmark ~extmark:{ Extmark.id; namespace; buffer } =
+    let opts = [ Msgpack.String "details", Msgpack.Boolean false ] in
+    Nvim_internal.nvim_buf_get_extmark_by_id
+      ~buffer
+      ~ns_id:(Namespace.id namespace)
+      ~id
+      ~opts
+    |> Api_call.of_api_result
+    |> Api_call.map_bind ~f:(function
+      | [] -> Ok None
+      | [ Integer row; Integer col ] -> Ok (Some { Position.row; col })
+      | _ ->
+        Or_error.error_string "malformed result from [nvim_buf_get_extmark_by_id]")
+  ;;
+
+  let get_extmark_with_details ~extmark:{ Extmark.id; namespace; buffer } =
+    let opts = [ Msgpack.String "details", Msgpack.Boolean true ] in
+    Nvim_internal.nvim_buf_get_extmark_by_id
+      ~buffer
+      ~ns_id:(Namespace.id namespace)
+      ~id
+      ~opts
+    |> Api_call.of_api_result
+    |> Api_call.map_bind ~f:(function
+      | [] -> Ok None
+      | [ Integer row; Integer col; details ] ->
+        let open Or_error.Let_syntax in
+        let%map details = Extract.map_of_msgpack_map details in
+        Some ({ Position.row; col }, details)
+      | _ ->
+        Or_error.error_string "malformed result from [nvim_buf_get_extmark_by_id]")
+  ;;
+
+  let all_extmarks ~buffer ~namespace ?start_inclusive ?end_inclusive () =
+    let opts = [ Msgpack.String "details", Msgpack.Boolean false ] in
+    let start =
+      match start_inclusive with
+      | None -> Msgpack.Integer 0
+      | Some { Position.row; col } -> Msgpack.Array [ Integer row; Integer col ]
+    in
+    let end_ =
+      match end_inclusive with
+      | None -> Msgpack.Integer (-1)
+      | Some { Position.row; col } -> Msgpack.Array [ Integer row; Integer col ]
+    in
+    Nvim_internal.nvim_buf_get_extmarks
+      ~buffer
+      ~ns_id:(Namespace.id namespace)
+      ~start
+      ~end_
+      ~opts
+    |> Api_call.of_api_result
+    |> Api_call.map_bind ~f:(fun extmarks ->
+      extmarks
+      |> List.map ~f:(function
+        | Array [ Integer id; Integer row; Integer col ] ->
+          let extmark = { Extmark.id; namespace; buffer } in
+          let pos = { Position.row; col } in
+          Ok (extmark, pos)
+        | _ ->
+          Or_error.error_string "malformed result from [nvim_buf_get_extmarks]")
+      |> Or_error.combine_errors)
+  ;;
+
+  let all_extmarks_with_details ~buffer ~namespace ?start_inclusive ?end_inclusive () =
+    let opts = [ Msgpack.String "details", Msgpack.Boolean true ] in
+    let start =
+      match start_inclusive with
+      | None -> Msgpack.Integer 0
+      | Some { Position.row; col } -> Msgpack.Array [ Integer row; Integer col ]
+    in
+    let end_ =
+      match end_inclusive with
+      | None -> Msgpack.Integer (-1)
+      | Some { Position.row; col } -> Msgpack.Array [ Integer row; Integer col ]
+    in
+    Nvim_internal.nvim_buf_get_extmarks
+      ~buffer
+      ~ns_id:(Namespace.id namespace)
+      ~start
+      ~end_
+      ~opts
+    |> Api_call.of_api_result
+    |> Api_call.map_bind ~f:(fun extmarks ->
+      extmarks
+      |> List.map ~f:(function
+        | Array [ Integer id; Integer row; Integer col; details ] ->
+          let open Or_error.Let_syntax in
+          let%map details = Extract.map_of_msgpack_map details in
+          let extmark = { Extmark.id; namespace; buffer } in
+          let pos = { Position.row; col } in
+          extmark, pos, details
+        | _ ->
+          Or_error.error_string "malformed result from [nvim_buf_get_extmarks]")
+      |> Or_error.combine_errors)
+  ;;
+
+  let open_term ~buffer =
+    (* [opts] is not used by this version of Neovim, but may be used in the future. If we
+       expose it, we should do so in a typeful way rather than asking the user to build
+       [Msgpack.t] values. *)
+    Nvim_internal.nvim_open_term ~buffer ~opts:[] |> Api_call.of_api_result
+  ;;
+
+  module Expert = struct
+    let buf_call ~buffer ~lua_callback =
+      Nvim_internal.nvim_buf_call ~buffer ~fun_:lua_callback |> Api_call.of_api_result
+    ;;
+  end
 end

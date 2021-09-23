@@ -24,8 +24,8 @@ let setup_files_for_testing ~empty_files ~files_with_includes ~temp_dir =
 
 let print_current_file client =
   let open Deferred.Or_error.Let_syntax in
-  let%bind buf = Vcaml.run_join client Nvim.get_current_buf in
-  let%bind name = Vcaml.run_join client (Buffer.get_name ~buffer:buf) in
+  let%bind buf = Vcaml.run_join [%here] client Nvim.get_current_buf in
+  let%bind name = Vcaml.run_join [%here] client (Buffer.get_name ~buffer:buf) in
   let _dir, current_file = Core.Filename.split name in
   print_s [%message (current_file : string)];
   return ()
@@ -36,7 +36,7 @@ let setup_client ~empty_files ~files_with_includes ~entry_point ~client =
   let temp_dir = Filename_unix.temp_dir "mli_plugin" "test" in
   let%bind () = setup_files_for_testing ~empty_files ~files_with_includes ~temp_dir in
   let entry_file_full_path = Core.( ^/ ) temp_dir entry_point in
-  Vcaml.run_join client (Nvim.command ~command:(":e " ^ entry_file_full_path))
+  Vcaml.run_join [%here] client (Nvim.command ~command:(":e " ^ entry_file_full_path))
 ;;
 
 let rec repeat_n_times times ~f =
@@ -61,7 +61,7 @@ let cycle_forward client =
 
 let print_file_list client =
   let open Deferred.Or_error.Let_syntax in
-  let%bind file_list = Vcaml.run_join client (Nvim.command_output ~command:"1 message") in
+  let%bind file_list = Vcaml.run_join [%here] client (Nvim.source ~code:"1 message") in
   print_s [%message (file_list : string)];
   return ()
 ;;
@@ -80,7 +80,7 @@ let%expect_test "lists the files and ignores ones which don't match" =
     ]
   in
   let%bind () =
-    Vcaml_plugin.For_testing.with_client (fun client ->
+    Vcaml_test.with_client (fun client ->
       let open Deferred.Or_error.Let_syntax in
       let%bind () =
         setup_client ~empty_files ~files_with_includes:[] ~entry_point:"foo.ml" ~client
@@ -110,7 +110,7 @@ let%expect_test "cycles forwards and backwards in the long list, wrapping around
     ]
   in
   let%bind () =
-    Vcaml_plugin.For_testing.with_client (fun client ->
+    Vcaml_test.with_client (fun client ->
       let open Deferred.Or_error.Let_syntax in
       let%bind () =
         setup_client ~empty_files ~files_with_includes:[] ~entry_point:"foo.ml" ~client
@@ -152,7 +152,7 @@ let%expect_test "cycles forwards and backwards in the long list, wrapping around
 let%expect_test "does nothing if interaction is attempted from a non-ml file" =
   let empty_files = [ "foo.ml"; "foo.mli"; "foo_intf.ml"; "bar.baz" ] in
   let%bind () =
-    Vcaml_plugin.For_testing.with_client (fun client ->
+    Vcaml_test.with_client (fun client ->
       let open Deferred.Or_error.Let_syntax in
       let%bind () =
         setup_client ~empty_files ~files_with_includes:[] ~entry_point:"bar.baz" ~client
@@ -179,7 +179,7 @@ let%expect_test "ignores redundant mlis in lists and cycling" =
   let empty_files = [ "foo.ml"; "foo_intf.ml" ] in
   let files_with_includes = [ "foo.mli", "Foo_intf.My_awesome_module" ] in
   let%bind () =
-    Vcaml_plugin.For_testing.with_client (fun client ->
+    Vcaml_test.with_client (fun client ->
       let open Deferred.Or_error.Let_syntax in
       let%bind () =
         setup_client ~empty_files ~files_with_includes ~entry_point:"foo.ml" ~client
@@ -213,7 +213,7 @@ let%expect_test "still lists files when on a redundant mli" =
   let empty_files = [ "foo.ml"; "foo_intf.ml" ] in
   let files_with_includes = [ "foo.mli", "Foo_intf.My_awesome_module" ] in
   let%bind () =
-    Vcaml_plugin.For_testing.with_client (fun client ->
+    Vcaml_test.with_client (fun client ->
       let open Deferred.Or_error.Let_syntax in
       let%bind () =
         setup_client ~empty_files ~files_with_includes ~entry_point:"foo.mli" ~client
@@ -229,7 +229,7 @@ let%expect_test "cycling forward from a redundant mli puts us at the start of th
   let empty_files = [ "foo.ml"; "foo_intf.ml" ] in
   let files_with_includes = [ "foo.mli", "Foo_intf.My_awesome_module" ] in
   let%bind () =
-    Vcaml_plugin.For_testing.with_client (fun client ->
+    Vcaml_test.with_client (fun client ->
       let open Deferred.Or_error.Let_syntax in
       let%bind () =
         setup_client ~empty_files ~files_with_includes ~entry_point:"foo.mli" ~client
@@ -249,7 +249,7 @@ let%expect_test "cycling backward from a redundant mli puts us at the start of t
   let empty_files = [ "foo.ml"; "foo_intf.ml" ] in
   let files_with_includes = [ "foo.mli", "Foo_intf.My_awesome_module" ] in
   let%bind () =
-    Vcaml_plugin.For_testing.with_client (fun client ->
+    Vcaml_test.with_client (fun client ->
       let open Deferred.Or_error.Let_syntax in
       let%bind () =
         setup_client ~empty_files ~files_with_includes ~entry_point:"foo.mli" ~client
@@ -265,6 +265,31 @@ let%expect_test "cycling backward from a redundant mli puts us at the start of t
   return ()
 ;;
 
+let%expect_test "cycling forward withing numbered files switches between them" =
+  let empty_files = [ "foo1.ml"; "foo1.mli"; "foo2.ml"; "foo2.mli" ] in
+  let%bind () =
+    Vcaml_test.with_client (fun client ->
+      let open Deferred.Or_error.Let_syntax in
+      let%bind () =
+        setup_client ~empty_files ~files_with_includes:[] ~entry_point:"foo1.ml" ~client
+      in
+      let%bind () = print_current_file client in
+      repeat_n_times 4 ~f:(fun () -> cycle_forward client))
+  in
+  [%expect
+    {|
+    (current_file foo1.ml)
+    "Cycling forward..."
+    (current_file foo1.mli)
+    "Cycling forward..."
+    (current_file foo2.ml)
+    "Cycling forward..."
+    (current_file foo2.mli)
+    "Cycling forward..."
+    (current_file foo1.ml) |}];
+  return ()
+;;
+
 let%expect_test "listing files in fzf attempts a call to fzf#run" =
   let%bind result =
     try_with
@@ -272,7 +297,7 @@ let%expect_test "listing files in fzf attempts a call to fzf#run" =
         `Schedule
       ~rest:`Log
       (fun () ->
-         Vcaml_plugin.For_testing.with_client (fun client ->
+         Vcaml_test.with_client (fun client ->
            let%bind.Deferred.Or_error () =
              setup_client
                ~empty_files:[ "foo.ml"; "foo.mli" ]
@@ -291,7 +316,9 @@ let%expect_test "listing files in fzf attempts a call to fzf#run" =
     {|
       (exn_
        (monitor.ml.Error
-        ("Vim returned error" "Vim:E117: Unknown function: fzf#run")
-        ("<backtrace elided in test>"))) |}];
+        (("Called from" app/vim/mli-cycler/src/plugin.ml:LINE:COL)
+         ("Vim returned error" "Vim:E117: Unknown function: fzf#run"
+          (error_type Exception)))
+        ("<backtrace elided in test>" "Caught by monitor Monitor.protect"))) |}];
   return ()
 ;;

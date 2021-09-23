@@ -1,11 +1,6 @@
 open Core
 module Error_type = Nvim_internal.Error_type
 
-type t =
-  { client : Client.t
-  ; on_error_event : Error_type.t -> message:string -> unit
-  }
-
 module Notification = struct
   type t = T : _ Nvim_internal.Api_result.t -> t [@@unboxed]
 
@@ -44,10 +39,10 @@ module Notification = struct
   ;;
 
   module Untested = struct
-    let nvim_buf_add_highlight ~buffer ~ns_id ~hl_group ~line ~col_start ~col_end =
+    let nvim_buf_add_highlight ~buffer ~namespace ~hl_group ~line ~col_start ~col_end =
       Nvim_internal.nvim_buf_add_highlight
         ~buffer
-        ~ns_id
+        ~ns_id:(Namespace.id namespace)
         ~hl_group
         ~line
         ~col_start
@@ -57,38 +52,15 @@ module Notification = struct
   end
 end
 
-let create (client : Client.t) ~on_error_event =
+let notify (client : Client.t) (Notification.T notification) =
   let T = Client.Private.eq in
-  Bus.iter_exn client.events [%here] ~f:(fun ({ method_name; params } as event) ->
-    match method_name with
-    | "nvim_error_event" ->
-      (match params with
-       | [ Integer error_type; String message ] ->
-         (match Error_type.of_int error_type with
-          | Ok error_type -> on_error_event error_type ~message
-          | Error error ->
-            client.on_error
-              (Error.create_s
-                 [%message
-                   "Unknown error event type"
-                     (event : Msgpack_rpc.event)
-                     (error : Error.t)]))
-       | _ ->
-         client.on_error
-           (Error.create_s [%message "Argument mismatch" (event : Msgpack_rpc.event)]))
-    | _ -> ());
-  { client; on_error_event }
-;;
-
-let notify (t : t) (Notification.T notification) =
-  let T = Client.Private.eq in
-  t.client.call_nvim_api_fn notification Notification
+  client.call_nvim_api_fn notification Notification
 ;;
 
 module For_testing = struct
-  let send_raw (t : t) ~function_name:name ~params =
+  let send_raw (client : Client.t) ~function_name:name ~params =
     let T = Client.Private.eq in
     let notification = { Nvim_internal.Api_result.name; params; witness = Nil } in
-    t.client.call_nvim_api_fn notification Notification
+    client.call_nvim_api_fn notification Notification
   ;;
 end

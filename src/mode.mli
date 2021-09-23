@@ -11,8 +11,14 @@ type t =
   | Insert_mode_x_completion
   | More_prompt
   | Normal
+  | Normal_using_i_ctrl_o_in_insert_mode
+  | Normal_using_i_ctrl_o_in_replace_mode
+  | Normal_using_i_ctrl_o_in_virtual_replace_mode
   | Normal_ex_mode
   | Operator_pending
+  | Operator_pending_forced_blockwise
+  | Operator_pending_forced_characterwise
+  | Operator_pending_forced_linewise
   | Replace
   | Replace_mode_completion
   | Replace_mode_x_completion

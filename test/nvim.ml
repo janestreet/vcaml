@@ -4,9 +4,12 @@ open! Import
 open Vcaml
 open Test_client
 
+let hundred_ms = Time_ns.Span.create ~ms:100 ()
+
 let%expect_test "open neovim and get channel list" =
   let%bind () =
-    simple Nvim.list_chans (fun channels -> channels |> List.length > 0 |> sexp_of_bool)
+    simple [%here] Nvim.list_chans (fun channels ->
+      channels |> List.length > 0 |> sexp_of_bool)
   in
   [%expect "true"];
   return ()
@@ -14,14 +17,14 @@ let%expect_test "open neovim and get channel list" =
 
 let%expect_test "get_chan_info" =
   let%bind () =
-    simple (Nvim.get_chan_info ~chan:1) ("call-succeeded" |> Sexp.Atom |> Fn.const)
+    simple [%here] (Nvim.get_chan_info ~chan:1) ("call-succeeded" |> Sexp.Atom |> Fn.const)
   in
   [%expect "call-succeeded"];
   return ()
 ;;
 
 let%expect_test "command output" =
-  let%bind () = simple (Nvim.command_output ~command:"echo 'hi'") sexp_of_string in
+  let%bind () = simple [%here] (Nvim.source ~code:"echo 'hi'") sexp_of_string in
   [%expect "hi"];
   return ()
 ;;
@@ -30,13 +33,14 @@ let%expect_test "command, list_bufs, Buffer.get_name" =
   let%bind () =
     with_client (fun client ->
       let open Deferred.Or_error.Let_syntax in
-      let%bind () = Nvim.command ~command:"e foo.txt" |> run_join client in
-      let%bind () = Nvim.command ~command:"e bar.txt" |> run_join client in
-      let%bind () = Nvim.command ~command:"e baz.txt" |> run_join client in
-      let%bind buffers = Nvim.list_bufs |> run_join client in
+      let%bind () = Nvim.command ~command:"e foo.txt" |> run_join [%here] client in
+      let%bind () = Nvim.command ~command:"e bar.txt" |> run_join [%here] client in
+      let%bind () = Nvim.command ~command:"e baz.txt" |> run_join [%here] client in
+      let%bind buffers = Nvim.list_bufs |> run_join [%here] client in
       let%map buffer_names =
         buffers
-        |> List.map ~f:(fun buffer -> Buffer.get_name ~buffer |> run_join client)
+        |> List.map ~f:(fun buffer ->
+          Buffer.get_name ~buffer |> run_join [%here] client)
         |> Deferred.Or_error.combine_errors
         |> Deferred.Or_error.map ~f:(fun filenames ->
           List.map filenames ~f:(fun file ->
@@ -50,26 +54,10 @@ let%expect_test "command, list_bufs, Buffer.get_name" =
 ;;
 
 let%expect_test "eval" =
-  let%bind () = simple (Nvim.eval ~expr:"1 + 2" ~result_type:Integer) [%sexp_of: int] in
-  [%expect {| 3 |}];
-  return ()
-;;
-
-let%expect_test "neovim environment" =
-  let sanitize string =
-    string
-    |> String.substr_replace_all ~pattern:"\\n" ~with_:""
-    |> String.substr_replace_all ~pattern:"\\r" ~with_:""
-    |> String.split_lines
-    |> List.map ~f:(String.split_on_chars ~on:[ '=' ])
-    |> List.filter_map ~f:List.hd
-    |> List.filter ~f:(String.exists ~f:Char.is_uppercase)
-    |> List.sort ~compare:compare_string
-    |> List.map ~f:(fun a -> Sexp.Atom a)
-    |> Sexp.List
+  let%bind () =
+    simple [%here] (Nvim.eval ~expr:"1 + 2" ~result_type:Integer) [%sexp_of: int]
   in
-  let%bind () = simple (Nvim.command_output ~command:"!env") sanitize in
-  [%expect {|(NVIM_LISTEN_ADDRESS NVIM_LOG_FILE PWD SHLVL VIMRUNTIME)|}];
+  [%expect {| 3 |}];
   return ()
 ;;
 
@@ -77,11 +65,13 @@ let%expect_test "set_current_buf" =
   let%bind () =
     with_client (fun client ->
       let open Deferred.Or_error.Let_syntax in
-      let%bind () = Nvim.command ~command:"e foo.txt" |> run_join client in
-      let%bind expected_buf = Nvim.get_current_buf |> run_join client in
-      let%bind () = Nvim.command ~command:"e bar.txt" |> run_join client in
-      let%bind () = Nvim.set_current_buf ~buffer:expected_buf |> run_join client in
-      let%bind actual_buf = Nvim.get_current_buf |> run_join client in
+      let%bind () = Nvim.command ~command:"e foo.txt" |> run_join [%here] client in
+      let%bind expected_buf = Nvim.get_current_buf |> run_join [%here] client in
+      let%bind () = Nvim.command ~command:"e bar.txt" |> run_join [%here] client in
+      let%bind () =
+        Nvim.set_current_buf ~buffer:expected_buf |> run_join [%here] client
+      in
+      let%bind actual_buf = Nvim.get_current_buf |> run_join [%here] client in
       print_s [%message (expected_buf : Buffer.t) (actual_buf : Vcaml.Buffer.t)];
       return ())
   in
@@ -90,7 +80,7 @@ let%expect_test "set_current_buf" =
 ;;
 
 let get_current_chan ~client =
-  let%map.Deferred.Or_error chan_list = Nvim.list_chans |> run_join client in
+  let%map.Deferred.Or_error chan_list = Nvim.list_chans |> run_join [%here] client in
   List.hd_exn chan_list
 ;;
 
@@ -101,6 +91,7 @@ let%expect_test "set_client_info" =
   let%bind () =
     with_client (fun client ->
       let open Deferred.Or_error.Let_syntax in
+      (* The initial setting happens when a VCaml client connects to Neovim. *)
       let%bind channel_info_before_setting_client_info = get_current_chan ~client in
       let%bind () =
         Nvim.set_client_info
@@ -116,7 +107,7 @@ let%expect_test "set_client_info" =
           ~name:"foo"
           ~type_:`Embedder
           ()
-        |> run_join client
+        |> run_join [%here] client
       in
       let%bind channel_info_after_setting_client_info = get_current_chan ~client in
       let client_before_setting_info = channel_info_before_setting_client_info.client in
@@ -130,7 +121,10 @@ let%expect_test "set_client_info" =
   [%expect
     {|
     ((client_before_setting_info
-      (((version ()) (methods ()) (attributes ()) (name ()) (type_ ()))))
+      (((version
+         (((major (0)) (minor ()) (patch ()) (prerelease ()) (commit ()))))
+        (methods ()) (attributes ()) (name (<uuid-omitted-in-test>))
+        (type_ (Remote)))))
      (client_after_setting_info
       (((version
          (((major (1)) (minor (2)) (patch (3)) (prerelease (test_prerelease))
@@ -144,11 +138,13 @@ let%expect_test "get_current_win, set_current_win" =
   let%bind () =
     with_client (fun client ->
       let open Deferred.Or_error.Let_syntax in
-      let%bind original_win = Nvim.get_current_win |> run_join client in
-      let%bind () = Nvim.command ~command:"split" |> run_join client in
-      let%bind win_after_split = Nvim.get_current_win |> run_join client in
-      let%bind () = Nvim.set_current_win ~window:original_win |> run_join client in
-      let%bind win_after_set = run_join client Nvim.get_current_win in
+      let%bind original_win = Nvim.get_current_win |> run_join [%here] client in
+      let%bind () = Nvim.command ~command:"split" |> run_join [%here] client in
+      let%bind win_after_split = Nvim.get_current_win |> run_join [%here] client in
+      let%bind () =
+        Nvim.set_current_win ~window:original_win |> run_join [%here] client
+      in
+      let%bind win_after_set = run_join [%here] client Nvim.get_current_win in
       print_s
         [%message
           (original_win : Window.t)
@@ -164,9 +160,9 @@ let%expect_test "list_wins" =
   let%bind () =
     with_client (fun client ->
       let open Deferred.Or_error.Let_syntax in
-      let%bind () = Nvim.command ~command:"split" |> run_join client in
-      let%bind () = Nvim.command ~command:"split" |> run_join client in
-      let%bind win_list = Nvim.list_wins |> run_join client in
+      let%bind () = Nvim.command ~command:"split" |> run_join [%here] client in
+      let%bind () = Nvim.command ~command:"split" |> run_join [%here] client in
+      let%bind win_list = Nvim.list_wins |> run_join [%here] client in
       print_s [%message (win_list : Window.t list)];
       return ())
   in
@@ -179,20 +175,17 @@ let%expect_test "replace_termcodes" =
     with_client (fun client ->
       let open Deferred.Or_error.Let_syntax in
       let%bind escaped_keys =
-        Nvim.replace_termcodes
-          ~str:"ifoobar<ESC><Left><Left>XXX"
-          ~from_part:true
-          ~do_lt:false
-          ~special:true
-        |> run_join client
+        Nvim.replace_termcodes ~str:"ifoobar<ESC><Left><Left>XXX" ~replace_keycodes:true
+        |> run_join [%here] client
       in
       let%bind () =
-        Nvim.feedkeys ~keys:escaped_keys ~mode:"n" ~escape_csi:true |> run_join client
+        Nvim.feedkeys ~keys:escaped_keys ~mode:"n" ~escape_csi:true
+        |> run_join [%here] client
       in
-      let%bind buffer = Nvim.get_current_buf |> run_join client in
+      let%bind buffer = Nvim.get_current_buf |> run_join [%here] client in
       let%bind lines =
         Buffer.get_lines ~buffer ~start:0 ~end_:(-1) ~strict_indexing:false
-        |> run_join client
+        |> run_join [%here] client
       in
       print_s [%message (lines : string list)];
       return ())
@@ -205,9 +198,13 @@ let%expect_test "get_color_by_name" =
   let%bind () =
     with_client (fun client ->
       let open Deferred.Or_error.Let_syntax in
-      let%bind color = Nvim.get_color_by_name ~name:"#f0f8ff" |> run_join client in
+      let%bind color =
+        Nvim.get_color_by_name ~name:"#f0f8ff" |> run_join [%here] client
+      in
       print_s [%sexp (color : Color.True_color.t)];
-      let%bind color = Nvim.get_color_by_name ~name:"AliceBlue" |> run_join client in
+      let%bind color =
+        Nvim.get_color_by_name ~name:"AliceBlue" |> run_join [%here] client
+      in
       print_s [%sexp (color : Color.True_color.t)];
       return ())
   in
@@ -221,7 +218,7 @@ let%expect_test "color_map" =
   let%bind () =
     with_client (fun client ->
       let open Deferred.Or_error.Let_syntax in
-      let%bind color_map = Nvim.get_color_map |> run_join client in
+      let%bind color_map = Nvim.get_color_map |> run_join [%here] client in
       print_s [%sexp (color_map : Color.True_color.t String.Map.t)];
       return ())
   in
@@ -429,10 +426,11 @@ let%expect_test "get_hl_by_name" =
     with_client (fun client ->
       let open Deferred.Or_error.Let_syntax in
       let%bind color256 =
-        Nvim.get_hl_by_name ~name:"ErrorMsg" ~color:Color256 |> run_join client
+        Nvim.get_hl_by_name ~name:"ErrorMsg" ~color:Color256 |> run_join [%here] client
       in
       let%bind true_color =
-        Nvim.get_hl_by_name ~name:"ErrorMsg" ~color:True_color |> run_join client
+        Nvim.get_hl_by_name ~name:"ErrorMsg" ~color:True_color
+        |> run_join [%here] client
       in
       let open Color in
       print_s
@@ -453,10 +451,12 @@ let%expect_test "get_hl_by_id" =
       let get_hl_id =
         wrap_viml_function ~type_:Defun.Vim.(unary String Integer) ~function_name:"hlID"
       in
-      let%bind hl_id = get_hl_id "ErrorMsg" |> run_join client in
-      let%bind color256 = Nvim.get_hl_by_id ~hl_id ~color:Color256 |> run_join client in
+      let%bind hl_id = get_hl_id "ErrorMsg" |> run_join [%here] client in
+      let%bind color256 =
+        Nvim.get_hl_by_id ~hl_id ~color:Color256 |> run_join [%here] client
+      in
       let%bind true_color =
-        Nvim.get_hl_by_id ~hl_id ~color:True_color |> run_join client
+        Nvim.get_hl_by_id ~hl_id ~color:True_color |> run_join [%here] client
       in
       let open Color in
       print_s
@@ -474,13 +474,13 @@ let%expect_test "Check that all modes documented in the help are covered by [Mod
   let%bind () =
     with_client (fun client ->
       let open Deferred.Or_error.Let_syntax in
-      let%bind () = Nvim.command ~command:"h mode()" |> run_join client in
+      let%bind () = Nvim.command ~command:"h mode()" |> run_join [%here] client in
       let feedkeys keys =
         let%bind keys =
-          Nvim.replace_termcodes ~str:keys ~from_part:true ~do_lt:true ~special:true
-          |> run_join client
+          Nvim.replace_termcodes ~str:keys ~replace_keycodes:true
+          |> run_join [%here] client
         in
-        Nvim.feedkeys ~keys ~mode:"n" ~escape_csi:true |> run_join client
+        Nvim.feedkeys ~keys ~mode:"n" ~escape_csi:true |> run_join [%here] client
       in
       let%bind () = feedkeys "}jy/This is useful/-1<CR><C-w>np<C-w>o" in
       let%bind lines =
@@ -489,22 +489,44 @@ let%expect_test "Check that all modes documented in the help are covered by [Mod
           ~start:1
           ~end_:(-1)
           ~strict_indexing:true
-        |> run_join client
+        |> run_join [%here] client
       in
       let modes_in_help, new_modes =
         List.partition_map lines ~f:(fun line ->
-          let symbol, description =
-            line |> String.strip |> String.lsplit2_exn ~on:'\t'
+          let lsplit2_whitespace_exn str =
+            let is_space_or_tab = function
+              | ' ' | '\t' -> true
+              | _ -> false
+            in
+            let end_of_first_word =
+              String.lfindi str ~f:(fun _ -> is_space_or_tab) |> Option.value_exn
+            in
+            let start_of_second_word =
+              String.lfindi str ~pos:end_of_first_word ~f:(fun _ ->
+                Fn.non is_space_or_tab)
+              |> Option.value_exn
+            in
+            let word1 = String.subo str ~len:end_of_first_word in
+            let word2 = String.subo str ~pos:start_of_second_word in
+            word1, word2
           in
+          let symbol, description = line |> String.strip |> lsplit2_whitespace_exn in
           let symbol =
-            match String.is_prefix symbol ~prefix:"CTRL-" with
-            | false -> symbol
-            | true ->
-              symbol.[String.length symbol - 1]
-              |> Char.to_int
-              |> (fun c -> c - Char.to_int '@')
-              |> Char.of_int_exn
-              |> String.of_char
+            match String.substr_index symbol ~pattern:"CTRL-" with
+            | None -> symbol
+            | Some idx ->
+              let ctrl_char =
+                symbol.[idx + 5]
+                |> Char.to_int
+                |> (fun c -> c - Char.to_int '@')
+                |> Char.of_int_exn
+                |> String.of_char
+              in
+              [ String.subo symbol ~len:idx
+              ; ctrl_char
+              ; String.subo symbol ~pos:(idx + 6)
+              ]
+              |> String.concat ~sep:""
           in
           match Mode.of_mode_symbol symbol with
           | Ok mode -> First mode
@@ -530,6 +552,7 @@ let%expect_test "Get and set variables" =
       let open Deferred.Or_error.Let_syntax in
       let%map result =
         run_join
+          [%here]
           client
           (let open Api_call.Or_error.Let_syntax in
            let%map () = Nvim.set_var ~name:"foo" ~type_:String ~value:"Hello"
@@ -550,9 +573,9 @@ module Fast = struct
       with_client (fun client ->
         let open Deferred.Or_error.Let_syntax in
         let input keys =
-          let%bind bytes_written = Nvim.input ~keys |> run_join client in
+          let%bind bytes_written = Nvim.input ~keys |> run_join [%here] client in
           assert (bytes_written = String.length keys);
-          let%map mode = Nvim.get_mode |> run_join client in
+          let%map mode = Nvim.get_mode |> run_join [%here] client in
           print_s [%message keys ~_:(mode : Mode.With_blocking_info.t)]
         in
         let%bind () = input "g" in
@@ -572,13 +595,116 @@ module Fast = struct
       (g ((mode Normal) (blocking true)))
       (<Esc> ((mode Normal) (blocking false)))
       (itest ((mode Insert) (blocking false)))
-      (<C-o> ((mode Normal) (blocking false)))
+      (<C-o> ((mode Normal_using_i_ctrl_o_in_insert_mode) (blocking false)))
       (<Esc> ((mode Insert) (blocking false)))
       (<Esc>r ((mode Replace) (blocking true)))
       (<Esc>V ((mode Visual_by_line) (blocking false)))
       (<Esc><C-v> ((mode Visual_blockwise) (blocking false)))
       (<Esc>gR ((mode Virtual_replace) (blocking false)))
       (<Esc>: ((mode Command_line_editing) (blocking false))) |}];
+    return ()
+  ;;
+
+  let%expect_test "[paste]" =
+    let%bind () =
+      with_client (fun client ->
+        let open Deferred.Or_error.Let_syntax in
+        let%bind () = Nvim.paste [ "hello"; "world!" ] |> run_join [%here] client in
+        let%bind lines =
+          Buffer.get_lines
+            ~buffer:(Buffer.Unsafe.of_int 0)
+            ~start:0
+            ~end_:(-1)
+            ~strict_indexing:false
+          |> run_join [%here] client
+        in
+        let%bind cursor_pos =
+          Window.get_cursor ~window:(Window.Unsafe.of_int 0) |> run_join [%here] client
+        in
+        print_s [%message (lines : string list)];
+        print_s [%message (cursor_pos : Position.One_indexed_row.t)];
+        return ())
+    in
+    [%expect {|
+      (lines (hello world!))
+      (cursor_pos ((row 2) (col 5))) |}];
+    return ()
+  ;;
+
+  let%expect_test "[paste_stream]" =
+    let%bind () =
+      with_client (fun client ->
+        let open Deferred.Or_error.Let_syntax in
+        let writer, flushed = Nvim.paste_stream [%here] client in
+        let%bind () = Pipe.write writer "hello\n" |> Deferred.ok in
+        let%bind () = Pipe.write writer "world!" |> Deferred.ok in
+        Pipe.close writer;
+        let%bind () = flushed |> Deferred.ok in
+        let%bind lines =
+          Buffer.get_lines
+            ~buffer:(Buffer.Unsafe.of_int 0)
+            ~start:0
+            ~end_:(-1)
+            ~strict_indexing:false
+          |> run_join [%here] client
+        in
+        let%bind cursor_pos =
+          Window.get_cursor ~window:(Window.Unsafe.of_int 0) |> run_join [%here] client
+        in
+        print_s [%message (lines : string list)];
+        print_s [%message (cursor_pos : Position.One_indexed_row.t)];
+        return ())
+    in
+    [%expect {|
+      (lines (hello world!))
+      (cursor_pos ((row 2) (col 5))) |}];
+    return ()
+  ;;
+
+  (* This behavior is perhaps surprising. *)
+  let%expect_test "API calls work while a [paste_stream] is open" =
+    let%bind () =
+      with_client (fun client ->
+        let open Deferred.Or_error.Let_syntax in
+        let%bind () =
+          Vcaml.Nvim.Untested.set_option ~name:"hidden" ~type_:Boolean ~value:true
+          |> run_join [%here] client
+        in
+        let get_lines () =
+          Buffer.get_lines
+            ~buffer:(Buffer.Unsafe.of_int 0)
+            ~start:0
+            ~end_:(-1)
+            ~strict_indexing:false
+          |> run_join [%here] client
+        in
+        let switch_buffers ~buffer =
+          let%map.Deferred result =
+            Vcaml.Nvim.set_current_buf ~buffer |> run_join [%here] client
+          in
+          match result with
+          | Ok () -> print_s [%message "Switched buffers!" (buffer : Buffer.t)]
+          | Error error -> print_s [%sexp (error : Error.t)]
+        in
+        let writer, flushed = Nvim.paste_stream [%here] client in
+        let%bind () = Pipe.write writer "hello\n" |> Deferred.ok in
+        let%bind lines = get_lines () in
+        print_s [%sexp (lines : string list)];
+        let%bind alt_buf =
+          Buffer.create ~listed:true ~scratch:false |> run_join [%here] client
+        in
+        let%bind () = switch_buffers ~buffer:alt_buf |> Deferred.ok in
+        let%bind () = Pipe.write writer "world!" |> Deferred.ok in
+        Pipe.close writer;
+        let%bind () = flushed |> Deferred.ok in
+        let%bind lines = get_lines () in
+        print_s [%sexp (lines : string list)];
+        return ())
+    in
+    [%expect {|
+      (hello "")
+      ("Switched buffers!" (buffer 2))
+      (world!) |}];
     return ()
   ;;
 end
@@ -600,6 +726,7 @@ let%expect_test "Failure to parse async request" =
           "async_func"
       in
       register_request_async
+        [%here]
         client
         ~on_error:(fun error ->
           print_s [%sexp (error : Error.t)];
@@ -609,7 +736,7 @@ let%expect_test "Failure to parse async request" =
         ~f:(fun () ->
           print_s [%message "Parsing unexpectedly succeeded."];
           Deferred.return ());
-      call_async_func "bad argument" |> run_join client)
+      call_async_func "bad argument" |> run_join [%here] client)
   in
   assert (rpcnotify_return_value = 1);
   let%bind result = with_timeout (Time.Span.of_int_sec 3) (Ivar.read failed_to_parse) in
@@ -625,6 +752,7 @@ let%expect_test "Failure to parse async request" =
 ;;
 
 let%expect_test "Error in the middle of an atomic call is returned correctly" =
+  Backtrace.elide := true;
   let%bind () =
     Expect_test_helpers_async.require_does_raise_async [%here] (fun () ->
       with_client (fun client ->
@@ -633,6 +761,7 @@ let%expect_test "Error in the middle of an atomic call is returned correctly" =
         let set name value = Nvim.set_var ~name ~type_:Boolean ~value in
         let%map foo, bar, baz =
           run_join
+            [%here]
             client
             (let open Api_call.Or_error.Let_syntax in
              let%map () = set "foo" true
@@ -646,9 +775,10 @@ let%expect_test "Error in the middle of an atomic call is returned correctly" =
   in
   [%expect
     {|
-    ("Vim returned error" "Key not found: bar"
-      (error_type Validation)
-      (index      3)) |}];
+    (("Called from" lib/vcaml/test/nvim.ml:LINE:COL)
+     (("Vim returned error" "Key not found: bar" (error_type Validation))
+      (index 3))) |}];
+  Backtrace.elide := false;
   return ()
 ;;
 
@@ -671,13 +801,14 @@ let%expect_test "Reentrant client" =
         client
         ~name:"factorial"
         ~type_:Defun.Ocaml.Sync.(Type.Integer @-> return Integer)
-        ~f:(function
+        ~f:(fun ~keyboard_interrupted:_ n ->
+          match n with
           | 0 -> return 1
-          | n ->
-            let%map result = run_join client (factorial (n - 1)) in
+          | _ ->
+            let%map result = run_join [%here] client (factorial (n - 1)) in
             n * result)
       |> ok_exn;
-      run_join client (factorial 5))
+      run_join [%here] client (factorial 5))
   in
   let%bind result = with_timeout (Time.Span.of_int_sec 3) result in
   print_s [%sexp (result : [ `Result of int | `Timeout ])];
@@ -707,7 +838,7 @@ let%expect_test "Varargs" =
         let test_dispatcher_file = tmp_dir ^/ "test_dispatcher.vim" in
         let%bind () =
           Nvim.command ~command:(sprintf "edit %s" test_dispatcher_file)
-          |> run_join client
+          |> run_join [%here] client
         in
         let%bind () =
           Buffer.set_lines
@@ -716,17 +847,17 @@ let%expect_test "Varargs" =
             ~end_:(-1)
             ~strict_indexing:true
             ~replacement:vimscript
-          |> run_join client
+          |> run_join [%here] client
         in
-        let%bind () = Nvim.command ~command:"write" |> run_join client in
-        let%bind () = Nvim.command ~command:"source %" |> run_join client in
-        let nvim_call_function func args =
+        let%bind () = Nvim.command ~command:"write" |> run_join [%here] client in
+        let%bind () = Nvim.command ~command:"source %" |> run_join [%here] client in
+        let nvim_call_function ~keyboard_interrupted:_ func args =
           wrap_viml_function
             ~type_:Defun.Vim.(String @-> Array Object @-> return Object)
             ~function_name:"nvim_call_function"
             func
             args
-          |> run_join client
+          |> run_join [%here] client
         in
         register_request_blocking
           client
@@ -741,7 +872,7 @@ let%expect_test "Varargs" =
             !"TestDispatcher(function(\"rpcrequest\", [ %d, \"call\" ]))"
             channel
         in
-        Nvim.eval ~expr ~result_type:(Array Integer) |> run_join client))
+        Nvim.eval ~expr ~result_type:(Array Integer) |> run_join [%here] client))
   in
   let%bind result = with_timeout (Time.Span.of_int_sec 3) result in
   print_s [%sexp (result : [ `Result of int list | `Timeout ])];
@@ -771,7 +902,7 @@ let%expect_test "Varargs (async)" =
         let test_printer_file = tmp_dir ^/ "test_printer.vim" in
         let%bind () =
           Nvim.command ~command:(sprintf "edit %s" test_printer_file)
-          |> run_join client
+          |> run_join [%here] client
         in
         let%bind () =
           Buffer.set_lines
@@ -780,11 +911,12 @@ let%expect_test "Varargs (async)" =
             ~end_:(-1)
             ~strict_indexing:true
             ~replacement:vimscript
-          |> run_join client
+          |> run_join [%here] client
         in
-        let%bind () = Nvim.command ~command:"write" |> run_join client in
-        let%bind () = Nvim.command ~command:"source %" |> run_join client in
+        let%bind () = Nvim.command ~command:"write" |> run_join [%here] client in
+        let%bind () = Nvim.command ~command:"source %" |> run_join [%here] client in
         register_request_async
+          [%here]
           client
           ~name:"print"
           ~type_:Defun.Ocaml.Async.(String @-> Expert.varargs Object)
@@ -794,7 +926,7 @@ let%expect_test "Varargs (async)" =
         let expr =
           sprintf !"TestPrinter(function(\"rpcnotify\", [ %d, \"print\" ]))" channel
         in
-        Nvim.eval ~expr ~result_type:String |> run_join client))
+        Nvim.eval ~expr ~result_type:String |> run_join [%here] client))
   in
   let%bind result =
     with_timeout
@@ -812,3 +944,591 @@ let%expect_test "Varargs (async)" =
   return ()
 ;;
 
+let rec omit_unstable_writer_info : Sexp.t -> Sexp.t = function
+  | Atom _ as atom -> atom
+  | List (Atom "info" :: _) -> List [ Atom "info"; Atom "<omitted>" ]
+  | List [ Atom "String"; Atom msgpack_error ] ->
+    let msgpack_error =
+      try Sexp.of_string msgpack_error with
+      | _ -> Atom msgpack_error
+    in
+    List [ Atom "String"; omit_unstable_writer_info msgpack_error ]
+  | List sexps -> List (List.map sexps ~f:omit_unstable_writer_info)
+;;
+
+let%expect_test "Asynchronous write failure is returned to outstanding requests" =
+  Backtrace.elide := true;
+  let test ~close_reader_and_writer_on_disconnect =
+    Expect_test_helpers_async.within_temp_dir (fun () ->
+      let%bind working_dir = Sys.getcwd () in
+      let%bind client, nvim =
+        Vcaml.Client.attach
+          (Embed
+             { prog = neovim_path
+             ; args = [ "--headless"; "-n"; "--embed"; "--clean" ]
+             ; working_dir
+             ; env = `Extend []
+             })
+          ~close_reader_and_writer_on_disconnect
+          ~on_error:Default.on_error
+          ~on_error_event:Default.on_error_event
+          ~time_source:Default.time_source
+        >>| ok_exn
+      in
+      Process.send_signal nvim Signal.term;
+      let%bind exit_or_signal = Process.wait nvim in
+      print_s [%message "nvim exited" (exit_or_signal : Unix.Exit_or_signal.t)];
+      (* Wait for Msgpack RPC to close the writer after disconnect if
+         [close_reader_and_writer_on_disconnect] is set. *)
+      let%bind () = Scheduler.yield_until_no_jobs_remain () in
+      let write_after_termination =
+        run_join [%here] client (Nvim.command ~command:"echo 'hi'")
+      in
+      let%bind result = write_after_termination in
+      print_s (omit_unstable_writer_info [%sexp (result : unit Or_error.t)]);
+      Vcaml.Client.close client)
+  in
+  let%bind () = test ~close_reader_and_writer_on_disconnect:true in
+  [%expect
+    {|
+    ("nvim exited" (exit_or_signal (Error (Exit_non_zero 1))))
+    (Error
+     (("Called from" lib/vcaml/test/nvim.ml:LINE:COL)
+      ("Msgpack error response"
+       (String
+        ("Failed to send Msgpack RPC request: writer is closed"
+         (method_name nvim_command) (parameters ((String "echo 'hi'")))))))) |}];
+  let%bind () = test ~close_reader_and_writer_on_disconnect:false in
+  [%expect
+    {|
+    ("nvim exited" (exit_or_signal (Error (Exit_non_zero 1))))
+    (Error
+     (("Called from" lib/vcaml/test/nvim.ml:LINE:COL)
+      ("Msgpack error response"
+       (String
+        ("Writer error from inner_monitor"
+         (Unix.Unix_error "Broken pipe" writev_assume_fd_is_nonblocking "")
+         (writer ((file_descr _) (info <omitted>) (kind Fifo)))))))) |}];
+  Backtrace.elide := false;
+  return ()
+;;
+
+let with_process_cleanup ~name pid ~f =
+  let reap = ref (`Need_to_reap `Impatient) in
+  let print_and_return exit_or_signal =
+    print_s [%message (sprintf "%s exited" name) (exit_or_signal : Unix.Exit_or_signal.t)];
+    return ()
+  in
+  Monitor.protect
+    (fun () -> Deferred.map (f ()) ~f:(Ref.( := ) reap))
+    ~finally:(fun () ->
+      match !reap with
+      | `Already_reaped exit_or_signal -> print_and_return exit_or_signal
+      | `Need_to_reap patience ->
+        let waitpid = Unix.waitpid pid in
+        let timeout =
+          match patience with
+          | `Impatient -> Time.Span.zero
+          | `Patient -> Time.Span.of_int_sec 20
+        in
+        (match%bind with_timeout timeout waitpid with
+         | `Result exit_or_signal -> print_and_return exit_or_signal
+         | `Timeout ->
+           Signal_unix.send_i Signal.term (`Pid pid);
+           waitpid >>= print_and_return))
+;;
+
+let spin_until_nvim_creates_socket_file pid ~socket =
+  Deferred.repeat_until_finished 1 (fun attempt ->
+    match attempt with
+    | 10000 -> return (`Finished `Socket_missing)
+    | _ ->
+      (match Core_unix.wait_nohang (`Pid pid) with
+       | Some (_, exit_or_signal) -> return (`Finished (`Nvim_crashed exit_or_signal))
+       | None ->
+         (match%bind Sys.file_exists_exn socket with
+          | true -> return (`Finished `Socket_created)
+          | false ->
+            let%bind () = Clock_ns.after Time_ns.Span.millisecond in
+            return (`Repeat (attempt + 1)))))
+;;
+
+(* We use [writefile] to enable Neovim to communicate from an atomic context that it is
+   about to enter a state after which it will not be able to communicate (e.g., because
+   it is exiting or because it will be uninterruptible for some reason). This function
+   lets our tests wait for Neovim to reach this point before proceeding. *)
+let writefile file ~contents =
+  Nvim.eval
+    ~expr:(sprintf "writefile(['%s'], '%s', 's')" contents file)
+    ~result_type:Integer
+  |> Api_call.map ~f:(function
+    | Ok 0 -> Ok ()
+    | Ok -1 ->
+      Or_error.error_s
+        [%message "[writefile]: write failed" (file : string) (contents : string)]
+    | Ok error_code ->
+      Or_error.error_s
+        [%message
+          "[writefile]: unknown error code"
+            (error_code : int)
+            (file : string)
+            (contents : string)]
+    | Error _ as error -> error)
+;;
+
+(* This function lets us attempt to exit Neovim cleanly. It uses [writefile] to confirm
+   that we have reached the [quit] command. By trying to exit Neovim cleanly instead of
+   just sending it SIGTERM we can distinguish between cases where Neovim is able to handle
+   incoming commands successfully and cases where Neovim is unresponsive. *)
+let attempt_to_quit ~tmp_dir ~client =
+  let fifo = tmp_dir ^/ "quit" in
+  let%bind () = Unix.mkfifo fifo in
+  don't_wait_for
+    (run_join
+       [%here]
+       client
+       ([ writefile fifo ~contents:":q"; Nvim.command ~command:"quit" ]
+        |> Api_call.Or_error.all_unit)
+     |> Deferred.Or_error.ignore_m
+     |> Deferred.Or_error.ok_exn);
+  Deferred.any
+    [ Clock_ns.after Time_ns.Span.second
+    ; (let%bind reader = Reader.open_file fifo in
+       let%bind (_ : string Reader.Read_result.t) = Reader.read_line reader in
+       Reader.close reader)
+    ]
+;;
+
+let%expect_test "[rpcrequest] blocks other channels" =
+  Expect_test_helpers_async.with_temp_dir (fun tmp_dir ->
+    let socket = tmp_dir ^/ "socket" in
+    let%bind nvim =
+      (* There is some undocumented internal limit for the socket length (it doesn't
+         appear in `:h limits`) so to ensure we create a socket we set the working dir
+         to [tmp_dir] and create the socket with a relative path. *)
+      Process.create_exn
+        ()
+        ~working_dir:tmp_dir
+        ~prog:Test_client.neovim_path
+        ~args:[ "--headless"; "-n"; "--clean"; "--listen"; "./socket" ]
+    in
+    let%bind () =
+      with_process_cleanup ~name:"nvim" (Process.pid nvim) ~f:(fun () ->
+        match%bind spin_until_nvim_creates_socket_file (Process.pid nvim) ~socket with
+        | `Nvim_crashed exit_or_signal -> return (`Already_reaped exit_or_signal)
+        | `Socket_missing -> raise_s [%message "Socket was not created"]
+        | `Socket_created ->
+          let block_nvim ~client =
+            let blocking = Ivar.create () in
+            let result = Ivar.create () in
+            let function_name = "rpc" in
+            let call_rpc =
+              (wrap_viml_function
+                 ~type_:Defun.Vim.(Integer @-> String @-> Nil @-> return Nil)
+                 ~function_name:"rpcrequest")
+                (Client.rpc_channel_id client)
+                function_name
+                ()
+            in
+            register_request_blocking
+              client
+              ~name:function_name
+              ~type_:Defun.Ocaml.Sync.(Nil @-> return Nil)
+              ~f:(fun ~keyboard_interrupted:_ () ->
+                Ivar.fill blocking ();
+                Ivar.read result |> Deferred.ok)
+            |> ok_exn;
+            let result_deferred = run_join [%here] client call_rpc in
+            let%map () = Ivar.read blocking in
+            fun response ->
+              Ivar.fill result response;
+              result_deferred
+          in
+          let%bind client1 = socket_client socket >>| ok_exn in
+          let%bind client2 = socket_client socket >>| ok_exn in
+          let print_when_client2_is_unblocked () =
+            don't_wait_for
+              (let%map result =
+                 run_join
+                   [%here]
+                   client2
+                   (Nvim.eval ~expr:"'Client 2 is unblocked'" ~result_type:String)
+               in
+               print_s [%sexp (result : string Or_error.t)])
+          in
+          print_when_client2_is_unblocked ();
+          let%bind () = Clock_ns.after hundred_ms in
+          let%bind () = Scheduler.yield_until_no_jobs_remain () in
+          print_s [%message "Blocking nvim (client1)"];
+          let%bind respond_to_rpc = block_nvim ~client:client1 in
+          print_when_client2_is_unblocked ();
+          let%bind () = Clock_ns.after hundred_ms in
+          let%bind () = Scheduler.yield_until_no_jobs_remain () in
+          print_s [%message "Unblocking nvim (client1)"];
+          let%bind () = respond_to_rpc () >>| ok_exn in
+          let%bind () = Clock_ns.after hundred_ms in
+          let%bind () = Scheduler.yield_until_no_jobs_remain () in
+          let%bind () = attempt_to_quit ~tmp_dir ~client:client2 in
+          let%bind () = Client.close client1 in
+          let%bind () = Client.close client2 in
+          return (`Need_to_reap `Patient))
+    in
+    [%expect
+      {|
+      (Ok "Client 2 is unblocked")
+      "Blocking nvim (client1)"
+      "Unblocking nvim (client1)"
+      (Ok "Client 2 is unblocked")
+      ("nvim exited" (exit_or_signal (Ok ()))) |}];
+    return ())
+;;
+
+let%expect_test "Plugin dying during [rpcrequest] does not bring down Neovim" =
+  Expect_test_helpers_async.with_temp_dir (fun tmp_dir ->
+    let socket = tmp_dir ^/ "socket" in
+    let%bind nvim =
+      (* There is some undocumented internal limit for the socket length (it doesn't
+         appear in `:h limits`) so to ensure we create a socket we set the working dir
+         to [tmp_dir] and create the socket with a relative path. *)
+      Process.create_exn
+        ()
+        ~working_dir:tmp_dir
+        ~prog:Test_client.neovim_path
+        ~args:[ "--headless"; "-n"; "--clean"; "--listen"; "./socket" ]
+    in
+    let%bind () =
+      with_process_cleanup ~name:"nvim" (Process.pid nvim) ~f:(fun () ->
+        match%bind spin_until_nvim_creates_socket_file (Process.pid nvim) ~socket with
+        | `Nvim_crashed exit_or_signal -> return (`Already_reaped exit_or_signal)
+        | `Socket_missing -> raise_s [%message "Socket was not created"]
+        | `Socket_created ->
+          let block_nvim ~client =
+            let blocking = Ivar.create () in
+            let function_name = "rpc" in
+            let call_rpc =
+              (wrap_viml_function
+                 ~type_:Defun.Vim.(Integer @-> String @-> Nil @-> return Nil)
+                 ~function_name:"rpcrequest")
+                (Client.rpc_channel_id client)
+                function_name
+                ()
+            in
+            register_request_blocking
+              client
+              ~name:function_name
+              ~type_:Defun.Ocaml.Sync.(Nil @-> return Nil)
+              ~f:(fun ~keyboard_interrupted:_ () ->
+                Ivar.fill blocking ();
+                Deferred.never ())
+            |> ok_exn;
+            don't_wait_for (run_join [%here] client call_rpc >>| ok_exn);
+            Ivar.read blocking
+          in
+          (match Core_unix.fork () with
+           | `In_the_child ->
+             Scheduler.reset_in_forked_process ();
+             don't_wait_for
+               (let%bind client = socket_client socket >>| ok_exn in
+                let%bind () = block_nvim ~client in
+                (* We don't want to allow the [at_exit] handler that expect test collector
+                   registers to run for this child process. *)
+                Core_unix.exit_immediately 0);
+             never_returns (Scheduler.go ())
+           | `In_the_parent child ->
+             let%bind exit_or_signal = Unix.waitpid child in
+             print_s [%message "child exited" (exit_or_signal : Unix.Exit_or_signal.t)];
+             let%bind client = socket_client socket >>| ok_exn in
+             let%bind result =
+               run_join
+                 [%here]
+                 client
+                 (Nvim.eval ~expr:"'nvim is still running'" ~result_type:String)
+             in
+             print_s [%sexp (result : string Or_error.t)];
+             let%bind () = attempt_to_quit ~tmp_dir ~client in
+             let%bind () = Client.close client in
+             return (`Need_to_reap `Patient)))
+    in
+    [%expect
+      {|
+      ("child exited" (exit_or_signal (Ok ())))
+      (Ok "nvim is still running")
+      ("nvim exited" (exit_or_signal (Ok ()))) |}];
+    return ())
+;;
+
+let%expect_test "Simple test of [Child] client" =
+  Expect_test_helpers_async.with_temp_dir (fun tmp_dir ->
+    let socket = tmp_dir ^/ "socket" in
+    let%bind nvim =
+      (* There is some undocumented internal limit for the socket length (it doesn't
+         appear in `:h limits`) so to ensure we create a socket we set the working dir
+         to [tmp_dir] and create the socket with a relative path. *)
+      Process.create_exn
+        ()
+        ~working_dir:tmp_dir
+        ~prog:Test_client.neovim_path
+        ~args:[ "--headless"; "-n"; "--clean"; "--listen"; "./socket" ]
+    in
+    let%bind () =
+      with_process_cleanup ~name:"nvim" (Process.pid nvim) ~f:(fun () ->
+        match%bind spin_until_nvim_creates_socket_file (Process.pid nvim) ~socket with
+        | `Nvim_crashed exit_or_signal -> return (`Already_reaped exit_or_signal)
+        | `Socket_missing -> raise_s [%message "Socket was not created"]
+        | `Socket_created ->
+          let saved_stdin = Core_unix.dup Core_unix.stdin in
+          let saved_stdout = Core_unix.dup Core_unix.stdout in
+          let socketfd =
+            Core_unix.socket ~domain:PF_UNIX ~kind:SOCK_STREAM ~protocol:0 ()
+          in
+          Core_unix.connect socketfd ~addr:(ADDR_UNIX socket);
+          Core_unix.dup2 ~src:socketfd ~dst:Core_unix.stdin ();
+          Core_unix.dup2 ~src:socketfd ~dst:Core_unix.stdout ();
+          let test () =
+            let open Deferred.Or_error.Let_syntax in
+            let%bind client =
+              (* We don't close the reader and writer on disconnect because we want
+                 [Reader.stdin] and [Writer.stdout] to continue to work after restoring
+                 the original stdin and stdout. *)
+              Client.attach
+                ~close_reader_and_writer_on_disconnect:false
+                ~on_error:Default.on_error
+                ~on_error_event:Default.on_error_event
+                ~time_source:Default.time_source
+                Child
+            in
+            let%bind result =
+              run_join
+                [%here]
+                client
+                (Nvim.eval ~expr:"'Hello, world!'" ~result_type:String)
+            in
+            let%map () = attempt_to_quit ~tmp_dir ~client |> Deferred.ok in
+            result
+          in
+          let%bind result = Deferred.Or_error.try_with test >>| Or_error.join in
+          Core_unix.dup2 ~src:saved_stdin ~dst:Core_unix.stdin ();
+          Core_unix.dup2 ~src:saved_stdout ~dst:Core_unix.stdout ();
+          Core_unix.close saved_stdin;
+          Core_unix.close saved_stdout;
+          Core_unix.close socketfd;
+          print_s [%sexp (result : string Or_error.t)];
+          return (`Need_to_reap `Patient))
+    in
+    [%expect
+      {|
+      (Ok "Hello, world!")
+      ("nvim exited" (exit_or_signal (Ok ()))) |}];
+    return ())
+;;
+
+[%%import "config_ext.h"]
+[%%if defined JSC_LINUX_EXT && defined JSC_UNIX_PTY]
+
+let posix_openpt = ok_exn Unix_pseudo_terminal.posix_openpt
+let grantpt = ok_exn Unix_pseudo_terminal.grantpt
+let unlockpt = ok_exn Unix_pseudo_terminal.unlockpt
+let ptsname = ok_exn Unix_pseudo_terminal.ptsname
+
+let run_neovim_with_pty ~time_source ~f =
+  let pty_master = posix_openpt [ O_RDWR; O_NOCTTY ] in
+  grantpt pty_master;
+  unlockpt pty_master;
+  Expect_test_helpers_async.with_temp_dir (fun tmp_dir ->
+    let socket = tmp_dir ^/ "socket" in
+    match Core_unix.fork () with
+    | `In_the_child ->
+      let (_ : int) = Core_unix.Terminal_io.setsid () in
+      let pty_slave = Core_unix.openfile ~mode:[ O_RDWR ] (ptsname pty_master) in
+      Core_unix.dup2 ~src:pty_slave ~dst:Core_unix.stdin ();
+      Core_unix.dup2 ~src:pty_slave ~dst:Core_unix.stdout ();
+      Core_unix.dup2 ~src:pty_slave ~dst:Core_unix.stderr ();
+      Core_unix.close pty_slave;
+      (* There is some undocumented internal limit for the socket length (it doesn't
+         appear in `:h limits`) so to ensure we create a socket we set the working dir
+         to [tmp_dir] and create the socket with a relative path. *)
+      Core_unix.chdir tmp_dir;
+      let prog = Test_client.neovim_path in
+      (* We do *not* want to run with --headless here. *)
+      Core_unix.exec () ~prog ~argv:[ prog; "-n"; "--clean"; "--listen"; "./socket" ]
+      |> never_returns
+    | `In_the_parent nvim ->
+      with_process_cleanup ~name:"nvim" nvim ~f:(fun () ->
+        match%bind spin_until_nvim_creates_socket_file nvim ~socket with
+        | `Nvim_crashed exit_or_signal -> return (`Already_reaped exit_or_signal)
+        | `Socket_missing -> raise_s [%message "Socket was not created"]
+        | `Socket_created ->
+          let%bind client = socket_client socket ?time_source >>| ok_exn in
+          let send_keys bytes =
+            let buf = Bytes.of_string bytes in
+            let bytes_written = Core_unix.single_write pty_master ~buf in
+            assert (String.length bytes = bytes_written)
+          in
+          let%bind result = f ~tmp_dir ~client ~send_keys in
+          let%map () = Client.close client in
+          (match result with
+           | `Closed -> `Need_to_reap `Patient
+           | `Still_running -> `Need_to_reap `Impatient)))
+;;
+
+let%expect_test "Keyboard interrupt aborts simple RPC request" =
+  Backtrace.elide := true;
+  let%bind () =
+    run_neovim_with_pty ~time_source:None ~f:(fun ~tmp_dir ~client ~send_keys ->
+      let fifo = tmp_dir ^/ "fifo" in
+      let%bind () = Unix.mkfifo fifo in
+      let sleep =
+        run_join
+          [%here]
+          client
+          ([ writefile fifo ~contents:"Sleeping"; Nvim.command ~command:"sleep 100" ]
+           |> Api_call.Or_error.all_unit)
+      in
+      let%bind reader = Reader.open_file fifo in
+      let%bind message = Reader.read_line reader in
+      print_s [%sexp (message : string Reader.Read_result.t)];
+      send_keys "\003";
+      let%bind sleep = sleep in
+      print_s [%message (sleep : unit Or_error.t)];
+      let%bind () = attempt_to_quit ~tmp_dir ~client in
+      return `Closed)
+  in
+  [%expect
+    {|
+    (Ok Sleeping)
+    (sleep
+     (Error
+      (("Called from" lib/vcaml/test/nvim.ml:LINE:COL)
+       (("Vim returned error" "Keyboard interrupt" (error_type Exception))
+        (index 1)))))
+    ("nvim exited" (exit_or_signal (Ok ()))) |}];
+  Backtrace.elide := false;
+  return ()
+;;
+
+let on_keyboard_interrupt_abort_rpcrequest_and_notify_callback ~timeout ~time_source ~f =
+  run_neovim_with_pty ~time_source ~f:(fun ~tmp_dir ~client ~send_keys ->
+    let fifo = tmp_dir ^/ "fifo" in
+    let%bind () = Unix.mkfifo fifo in
+    let sent_keys = Ivar.create () in
+    let block_nvim ~client =
+      let blocking = Ivar.create () in
+      let function_name = "rpc" in
+      let call_rpc =
+        (wrap_viml_function
+           ~type_:Defun.Vim.(Integer @-> String @-> Nil @-> return Nil)
+           ~function_name:"rpcrequest")
+          (Client.rpc_channel_id client)
+          function_name
+          ()
+      in
+      register_request_blocking
+        client
+        ~name:function_name
+        ~type_:Defun.Ocaml.Sync.(Nil @-> return Nil)
+        ~f:(fun ~keyboard_interrupted () ->
+          Ivar.fill blocking ();
+          upon keyboard_interrupted (fun () -> print_endline "Keyboard interrupt!");
+          let%bind () = Ivar.read sent_keys in
+          f client)
+      |> ok_exn;
+      let%bind result =
+        run_join
+          [%here]
+          client
+          ([ writefile fifo ~contents:"Calling RPC"; call_rpc ]
+           |> Api_call.Or_error.all_unit)
+      in
+      let%map () = Ivar.read blocking in
+      result
+    in
+    let rpc_result = block_nvim ~client in
+    let%bind reader = Reader.open_file fifo in
+    let%bind message = Reader.read_line reader in
+    print_s [%sexp (message : string Reader.Read_result.t)];
+    send_keys "\003";
+    Ivar.fill sent_keys ();
+    let rpc_result =
+      let%bind rpc_result = rpc_result in
+      let%bind () = attempt_to_quit ~tmp_dir ~client in
+      return rpc_result
+    in
+    match timeout with
+    | None ->
+      let%map rpc_result = rpc_result in
+      print_s [%message (rpc_result : unit Or_error.t)];
+      `Closed
+    | Some timeout ->
+      let%map rpc_result = with_timeout timeout rpc_result in
+      print_s [%message (rpc_result : unit Or_error.t Clock_ns.Or_timeout.t)];
+      (match rpc_result with
+       | `Timeout -> `Still_running
+       | `Result _ -> `Closed))
+;;
+
+let%expect_test "Keyboard interrupt learned by RPC response aborts [rpcrequest] and \
+                 notifies callback"
+  =
+  Backtrace.elide := true;
+  let%bind () =
+    on_keyboard_interrupt_abort_rpcrequest_and_notify_callback
+      ~timeout:None
+      ~f:(fun client ->
+        let%map result = run_join [%here] client (Nvim.command ~command:"sleep 100") in
+        print_s [%message "Result after interrupt" ~_:(result : unit Or_error.t)];
+        result)
+      ~time_source:None
+  in
+  (* Observe that even though the request in the body of the RPC fails due to the keyboard
+     interrupt, the RPC returns an (Ok ()) result to ensure that control is returned
+     immediately to the user without displaying an error message. *)
+  [%expect
+    {|
+    (Ok "Calling RPC")
+    Keyboard interrupt!
+    ("Result after interrupt"
+     (Error
+      (("Called from" lib/vcaml/test/nvim.ml:LINE:COL)
+       ("Vim returned error" "Keyboard interrupt" (error_type Exception)))))
+    (rpc_result (Ok ()))
+    ("nvim exited" (exit_or_signal (Ok ()))) |}];
+  Backtrace.elide := false;
+  return ()
+;;
+
+let%expect_test "Keyboard interrupt learned by heartbeating aborts [rpcrequest] and \
+                 notifies callback"
+  =
+  let%bind () =
+    on_keyboard_interrupt_abort_rpcrequest_and_notify_callback
+      ~timeout:None
+      ~time_source:(Some (Time_source.wall_clock ()))
+      ~f:(fun _ -> Deferred.never () |> Deferred.ok)
+  in
+  [%expect
+    {|
+    (Ok "Calling RPC")
+    Keyboard interrupt!
+    (rpc_result (Ok ()))
+    ("nvim exited" (exit_or_signal (Ok ()))) |}];
+  return ()
+;;
+
+let%expect_test "Keyboard interrupt learned by ??? - Neovim's semantics have changed!" =
+  let%bind () =
+    on_keyboard_interrupt_abort_rpcrequest_and_notify_callback
+      ~timeout:(Some Time.Span.second)
+      ~time_source:None
+      ~f:(fun _ -> Deferred.never () |> Deferred.ok)
+  in
+  (* If this test succeeds then Neovim's semantics around when it alerts have changed. We
+     should investigate - heartbeating may no longer be required. *)
+  [%expect
+    {|
+    (Ok "Calling RPC")
+    (rpc_result Timeout)
+    ("nvim exited" (exit_or_signal (Error (Exit_non_zero 1)))) |}];
+  return ()
+;;
+
+[%%endif]

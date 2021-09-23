@@ -6,11 +6,11 @@ open Vcaml
    Source hello_world.vim to use it. *)
 
 module Echo_hello_world = Vcaml_plugin.Oneshot.Make (struct
-    let execute client =
-      Nvim.command ~command:"echom 'Hello world!'" |> run_join client
-    ;;
+    include Vcaml_plugin.Raise_on_any_error
 
-    let on_async_msgpack_error = Error.raise
+    let execute client =
+      Nvim.command ~command:"echom 'Hello world!'" |> run_join [%here] client
+    ;;
   end)
 
 let main =

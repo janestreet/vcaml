@@ -11,10 +11,14 @@ module Channel_info = Channel_info
 module Client_info = Client_info
 module Color = Color
 module Command = Unshadow.Command
+module Error_type = Nvim_internal.Error_type
+module Highlighted_text = Highlighted_text
 module Keymap = Keymap
 module Mark = Mark
 module Mode = Mode
+module Namespace = Namespace
 module Nvim = Nvim
+module Position = Position
 module Tabpage = Tabpage
 module Type = Nvim_internal.Phantom
 module Ui = Ui
@@ -33,116 +37,72 @@ module Client = struct
           { prog : string
           ; args : string list
           ; working_dir : string
-          ; env : (string * string) list
+          ; env : Core_unix.env
           }
           -> (Client.t * Async.Process.t) t
       | Child : Client.t t
+    [@@deriving sexp_of]
   end
 
-  open Connection_type
-
-  module Make_child () = struct
-    module T = struct
-      type t =
-        { reader : Reader.t
-        ; writer : Writer.t
-        }
-      [@@deriving fields]
-    end
-
-    include Msgpack_rpc.Make (T) ()
-
-    let self =
-      connect { T.reader = Lazy.force Reader.stdin; writer = Lazy.force Writer.stdout }
-    ;;
-  end
-
-  module Make_embedded () = struct
-    open Async
-
-    module T = struct
-      type t =
-        { reader : Reader.t
-        ; writer : Writer.t
-        }
-      [@@deriving fields]
-    end
-
-    include Msgpack_rpc.Make (T) ()
-
-    let spawn ~prog ~args ~working_dir ~env ~on_error =
-      let open Deferred.Or_error.Let_syntax in
-      let%bind underlying =
-        Process.create ~prog ~args ~working_dir ~env:(`Replace env) ()
-      in
-      let conn =
-        { T.reader = Process.stdout underlying; writer = Process.stdin underlying }
-      in
-      return (connect conn ~on_error, underlying)
-    ;;
-  end
-
-  let attach (type a) (connection_type : a Connection_type.t) ~on_error
+  let attach
+        (type a)
+        ?(close_reader_and_writer_on_disconnect = true)
+        (connection_type : a Connection_type.t)
+        ~on_error
+        ~on_error_event
+        ~time_source
     : a Deferred.Or_error.t
     =
-    let on_msgpack_error ~message msgpack =
-      on_error (Error.create_s [%message message ~_:(msgpack : Msgpack.t)])
+    let open Deferred.Or_error.Let_syntax in
+    let make_client connect =
+      let%bind.Deferred connection =
+        connect ~on_error:(fun ~message msgpack ->
+          on_error (Error.create_s [%message message ~_:(msgpack : Msgpack.t)]))
+      in
+      Transport.attach connection ~on_error ~on_error_event ~time_source
     in
     match connection_type with
     | Unix sock_name ->
-      let module T = Transport.Make (Msgpack_unix) in
-      let%bind connection = Msgpack_unix.Unix_socket.open_from_filename sock_name in
-      let unix = Msgpack_unix.connect connection ~on_error:on_msgpack_error in
-      let%bind client = T.attach unix ~on_error in
-      Deferred.Or_error.return client
+      make_client
+        (Msgpack_unix.open_from_filename sock_name ~close_reader_and_writer_on_disconnect)
     | Embed { prog; args; working_dir; env } ->
-      let module Embedded = Make_embedded () in
-      let module T = Transport.Make (Embedded) in
-      let%bind.Deferred.Or_error embedded, process =
-        Embedded.spawn ~prog ~args ~working_dir ~env ~on_error:on_msgpack_error
-      in
-      let%bind client = T.attach embedded ~on_error in
-      Deferred.Or_error.return (client, process)
+      (match List.exists args ~f:(String.equal "--embed") with
+       | false ->
+         Deferred.Or_error.error_s
+           [%message
+             "Tried to create a VCaml client for an embedded Neovim process, but --embed \
+              flag was not passed"
+               ~_:(connection_type : _ Connection_type.t)]
+       | true ->
+         let%bind nvim_process = Process.create ~prog ~args ~working_dir ~env () in
+         let%bind client =
+           make_client (fun ~on_error ->
+             Msgpack_rpc.connect
+               (Process.stdout nvim_process)
+               (Process.stdin nvim_process)
+               ~on_error
+               ~close_reader_and_writer_on_disconnect
+             |> Deferred.return)
+         in
+         return (client, nvim_process))
     | Child ->
-      let module Child = Make_child () in
-      let module T = Transport.Make (Child) in
-      let%bind client = T.attach (Child.self ~on_error:on_msgpack_error) ~on_error in
-      Deferred.Or_error.return client
+      make_client (fun ~on_error ->
+        Msgpack_rpc.connect
+          (force Reader.stdin)
+          (force Writer.stdout)
+          ~on_error
+          ~close_reader_and_writer_on_disconnect
+        |> Deferred.return)
   ;;
 
-  let is_channel_with_name ~channel_info ~name =
-    let open Option.Let_syntax in
-    let channel_has_same_name =
-      let%bind { name = name_opt; _ } = channel_info.Channel_info.client in
-      let%map chan_name = name_opt in
-      String.equal chan_name name
-    in
-    Option.value channel_has_same_name ~default:false
+  let close (client : Client.t) =
+    let T = Client.Private.eq in
+    client.close ()
   ;;
 
-  let find_rpc_channel_with_name ~client ~name =
-    let open Deferred.Or_error.Let_syntax in
-    let%bind channel_list = Api_call.run_join client Nvim.list_chans in
-    let matching_channel_opt =
-      List.find channel_list ~f:(fun channel_info ->
-        is_channel_with_name ~channel_info ~name)
-    in
-    match matching_channel_opt with
-    | Some { id; _ } -> return id
-    | None ->
-      Deferred.Or_error.error_string "Cannot find rpc with the correct name for plugin"
-  ;;
-
-  (* Returns neovim's id for the channel over which neovim and the client communicate.
-     This can be useful when you want to register an RPC event to fire upon a certain
-     event happening in vim (e.g. keypress or autocmd), since registering events require
-     the channel id. *)
-  let get_rpc_channel_id client =
-    let name = Uuid.to_string (Uuid_unix.create ()) in
-    let%bind.Deferred.Or_error () =
-      Api_call.run_join client (Nvim.set_client_info ~name ~type_:`Plugin ())
-    in
-    find_rpc_channel_with_name ~client ~name
+  let rpc_channel_id (client : Client.t) =
+    let T = Client.Private.eq in
+    client.rpc_channel_id
   ;;
 end
 
@@ -179,10 +139,8 @@ module Defun = struct
         in
         let open Or_error.Let_syntax in
         let%bind result = result in
-        Extract.value
-          ~err_msg:"return type given to [wrap_viml_function] is incorrect"
-          return_type
-          result
+        Extract.value return_type result
+        |> Or_error.tag ~tag:"return type given to [wrap_viml_function] is incorrect"
       | Cons (t, rest) ->
         fun i ->
           let to_msgpack = Extract.inject t in
@@ -205,10 +163,9 @@ module Defun = struct
         | Cons : 'a Type.t * ('b, _) t -> ('a -> 'b, 'a) t
 
       let rec make_fn
-        : type fn i.
-          Client.t -> (fn, i) t -> fn -> Msgpack.t list -> Msgpack.t Deferred.Or_error.t
+        : type fn i. (fn, i) t -> fn -> Msgpack.t list -> Msgpack.t Deferred.Or_error.t
         =
-        fun client arity f l ->
+        fun arity f l ->
         let open Deferred.Or_error.Let_syntax in
         match arity, l with
         | Nullary (return_type, T), ([] | [ Nil ]) ->
@@ -227,7 +184,7 @@ module Defun = struct
              Extract.inject output v)
         | Cons (leftmost, rest), x :: xs ->
           let%bind v = Extract.value leftmost x |> Deferred.return in
-          make_fn client rest (f v) xs
+          make_fn rest (f v) xs
         | _, _ -> Deferred.Or_error.error_s [%message "Wrong number of arguments"]
       ;;
 
@@ -281,17 +238,30 @@ let wrap_viml_function ~type_ ~function_name = Defun.Vim.make_fn function_name t
 
 let register_request_blocking (client : Client.t) ~name ~type_ ~f =
   let T = Client.Private.eq in
-  client.register_request
-    ~name
-    ~f:
-      (let T = Client.Private.eq in
-       Defun.Ocaml.Sync.make_fn client type_ f)
+  client.register_request ~name ~f:(fun request ->
+    let T = Client.Private.eq in
+    let keyboard_interrupted = Bvar.wait client.keyboard_interrupts in
+    let response = Defun.Ocaml.Sync.make_fn type_ (f ~keyboard_interrupted) request in
+    (* In the case of a keyboard interrupt we want to return an [Ok] result instead of an
+       [Error] because we don't want to display an error message to the user. We also send
+       ":<BS>" command because Neovim doesn't recognize that it's in a blocked context so
+       it displays a message about how to exit, and we want to hide this message. We use
+       [nvim_feedkeys] instead of [nvim_input] because the latter doesn't reliably clear
+       the command line. *)
+    choose
+      [ choice response Fn.id
+      ; choice keyboard_interrupted (fun () ->
+          client.call_nvim_api_fn
+            (Nvim_internal.nvim_feedkeys ~keys:":\x08" ~mode:"n" ~escape_csi:true)
+            Notification;
+          Ok Msgpack.Nil)
+      ])
 ;;
 
-let register_request_async ?on_error (client : Client.t) ~name ~type_ ~f =
+let register_request_async ?on_error here (client : Client.t) ~name ~type_ ~f =
   let T = Client.Private.eq in
   let on_error = Option.value on_error ~default:client.on_error in
-  Bus.iter_exn client.events [%here] ~f:(fun ({ method_name; params } as event) ->
+  Bus.iter_exn client.events here ~f:(fun ({ method_name; params } as event) ->
     let T = Client.Private.eq in
     match String.equal method_name name with
     | false -> ()

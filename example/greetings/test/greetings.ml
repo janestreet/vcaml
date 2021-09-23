@@ -19,16 +19,16 @@ let during_plugin client ~chan_id ~state:() =
       chan_id
       "shutdown"
   in
-  let%bind res = run_join client (greeting "Jane") in
+  let%bind res = run_join [%here] client (greeting "Jane") in
   printf "%s\n" res;
-  let%bind () = run_join client (shutdown ()) in
+  let%bind () = run_join [%here] client (shutdown ()) in
   printf "Shutdown success.\n";
   return ()
 ;;
 
 let%expect_test "plugin responds to RPC requests and shuts down" =
   let%map () =
-    Vcaml_plugin.For_testing.with_client (fun client ->
+    Vcaml_test.with_client (fun client ->
       Greetings.For_testing.run client ~during_plugin:(during_plugin client))
   in
   [%expect {|

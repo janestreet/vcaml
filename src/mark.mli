@@ -1,6 +1,5 @@
 type t =
   { sym : char
-  ; row : int
-  ; col : int
+  ; pos : Position.One_indexed_row.t
   }
 [@@deriving sexp_of]

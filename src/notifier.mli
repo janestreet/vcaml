@@ -13,7 +13,7 @@ module Notification : sig
         (synchronously) requesting a source id. *)
     val nvim_buf_add_highlight
       :  buffer:Nvim_internal.Buffer.t
-      -> ns_id:int
+      -> namespace:Namespace.t
       -> hl_group:string
       -> line:int
       -> col_start:int
@@ -40,15 +40,10 @@ module Notification : sig
   val custom : type_:('fn, _) Defun.Vim.t -> function_name:string -> 'fn
 end
 
-type t
-
 module Error_type = Nvim_internal.Error_type
 
-(** Only one [t] should be created for a given client. *)
-val create : Client.t -> on_error_event:(Error_type.t -> message:string -> unit) -> t
-
-val notify : t -> Notification.t -> unit
+val notify : Client.t -> Notification.t -> unit
 
 module For_testing : sig
-  val send_raw : t -> function_name:string -> params:Msgpack.t -> unit
+  val send_raw : Client.t -> function_name:string -> params:Msgpack.t list -> unit
 end

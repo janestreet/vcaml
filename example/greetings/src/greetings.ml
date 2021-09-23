@@ -5,10 +5,17 @@ open Vcaml
 (* Simple Vcaml plugin to listen for and respond to rpc messages.
    Source greetings.vim to use it.*)
 
-let greet _state name = Deferred.Or_error.return (Printf.sprintf "Hello, %s!" name)
-let call_shutdown (_client, _state, shutdown) () = Deferred.Or_error.return (shutdown ())
+let greet _client _state ~shutdown:_ ~keyboard_interrupted:_ name =
+  Deferred.Or_error.return (Printf.sprintf "Hello, %s!" name)
+;;
+
+let call_shutdown _client _state ~shutdown ~keyboard_interrupted:_ () =
+  Deferred.Or_error.return (shutdown ())
+;;
 
 module Greetings_plugin_arg = struct
+  include Vcaml_plugin.Raise_on_any_error
+
   type state = unit
 
   let rpc_handlers =
@@ -23,10 +30,9 @@ module Greetings_plugin_arg = struct
     ]
   ;;
 
-  let startup = Fn.const (Deferred.Or_error.return ())
+  let startup _client ~shutdown:_ = Deferred.Or_error.return ()
   let vimscript_notify_fn = Some "OnGreetingsPluginStart"
-  let on_shutdown = Fn.const (Deferred.Or_error.return ())
-  let on_async_msgpack_error = Error.raise
+  let on_shutdown _ _ = Deferred.Or_error.return ()
 end
 
 module Greetings_plugin = Vcaml_plugin.Persistent.Make (Greetings_plugin_arg)

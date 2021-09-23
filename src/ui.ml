@@ -1,6 +1,12 @@
 open Core
+open Import
 module Event = Nvim_internal.Ui_event
-module Options = Nvim_internal.Ui_options
+
+module Options = struct
+  include Nvim_internal.Ui_options
+
+  let default = { empty with ext_linegrid = true }
+end
 
 type t = Client.t
 
@@ -14,11 +20,11 @@ module Description = struct
   [@@deriving sexp_of]
 end
 
-let attach ?on_error (client : Client.t) ~width ~height ~options ~on_event =
+let attach ?on_error here (client : Client.t) ~width ~height ~options ~on_event =
   let T = Client.Private.eq in
   let on_error = Option.value on_error ~default:client.on_error in
   let cleared_screen = Set_once.create () in
-  Bus.iter_exn client.events [%here] ~f:(fun ({ method_name; params } as event) ->
+  Bus.iter_exn client.events here ~f:(fun ({ method_name; params } as event) ->
     let T = Client.Private.eq in
     match method_name with
     | "redraw" ->
@@ -27,7 +33,10 @@ let attach ?on_error (client : Client.t) ~width ~height ~options ~on_event =
         | Ok events ->
           List.iter events ~f:(fun event ->
             (match event with
-             | Clear | Resize _ -> Set_once.set_if_none cleared_screen [%here] ()
+             | Clear | Resize _
+             | Grid_resize { grid = 1; _ }
+             | Grid_clear { grid = 1 } ->
+               Set_once.set_if_none cleared_screen [%here] ()
              | _ -> ());
             if Set_once.is_some cleared_screen then on_event event)
         | Error error ->
@@ -43,19 +52,26 @@ let attach ?on_error (client : Client.t) ~width ~height ~options ~on_event =
       ~ext_cmdline:use
       ~ext_hlstate:use
       ~ext_linegrid:use
+      ~ext_messages:use
+      ~ext_multigrid:use
       ~ext_popupmenu:use
       ~ext_tabline:use
+      ~ext_termcolors:use
       ~ext_wildmenu:use
       ~rgb:use
   in
   Nvim_internal.nvim_ui_attach ~width ~height ~options
   |> Api_call.of_api_result
-  |> Api_call.run_join client
+  |> Api_call.run_join [%here] client
+  |> Async.Deferred.map ~f:(tag_callsite here)
   |> Async.Deferred.Or_error.map ~f:(fun () -> client)
 ;;
 
-let detach t =
-  Nvim_internal.nvim_ui_detach |> Api_call.of_api_result |> Api_call.run_join t
+let detach t here =
+  Nvim_internal.nvim_ui_detach
+  |> Api_call.of_api_result
+  |> Api_call.run_join [%here] t
+  |> Async.Deferred.map ~f:(tag_callsite here)
 ;;
 
 let describe_attached_uis =
@@ -66,8 +82,11 @@ let describe_attached_uis =
       ~ext_cmdline:find_exn
       ~ext_hlstate:find_exn
       ~ext_linegrid:find_exn
+      ~ext_messages:find_exn
+      ~ext_multigrid:find_exn
       ~ext_popupmenu:find_exn
       ~ext_tabline:find_exn
+      ~ext_termcolors:find_exn
       ~ext_wildmenu:find_exn
       ~rgb:find_exn
   in
@@ -86,9 +105,9 @@ let describe_attached_uis =
           let channel_id, width, height =
             let ints = String.Map.of_alist_exn ints in
             let channel_id =
-              match Map.find_exn ints "chan" with
-              | 0 -> `Tui
-              | i -> `Id i
+              match Map.find ints "chan" with
+              | None | Some 0 -> `Tui
+              | Some i -> `Id i
             in
             let width = Map.find_exn ints "width" in
             let height = Map.find_exn ints "height" in
@@ -103,3 +122,24 @@ let describe_attached_uis =
       Or_error.error_s
         [%message "Unable to parse [list_uis] response" (uis : Msgpack.t list)])
 ;;
+
+module Untested = struct
+  let try_resizing_grid ~grid ~width ~height =
+    Nvim_internal.nvim_ui_try_resize_grid ~grid ~width ~height |> Api_call.of_api_result
+  ;;
+
+  let popup_menu_set_height ~height =
+    Nvim_internal.nvim_ui_pum_set_height ~height |> Api_call.of_api_result
+  ;;
+
+  let popup_menu_set_bounds ~width ~height ~row ~col =
+    Nvim_internal.nvim_ui_pum_set_bounds ~width ~height ~row ~col
+    |> Api_call.of_api_result
+  ;;
+end
+
+(* These functions are part of the Neovim API but are not exposed in VCaml. *)
+module Unused = struct
+  let (_ : _) = Nvim_internal.nvim_ui_set_option
+  let (_ : _) = Nvim_internal.nvim_ui_try_resize
+end

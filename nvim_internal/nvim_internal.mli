@@ -21,8 +21,11 @@ module Ui_options : sig
     { ext_cmdline : bool
     ; ext_hlstate : bool
     ; ext_linegrid : bool
+    ; ext_messages : bool
+    ; ext_multigrid : bool
     ; ext_popupmenu : bool
     ; ext_tabline : bool
+    ; ext_termcolors : bool
     ; ext_wildmenu : bool
     ; rgb : bool
     }
@@ -31,6 +34,7 @@ module Ui_options : sig
   val empty : t
 end
 
+module Luaref : Msgpack.Msgpackable
 module Buffer : Nvim_id
 module Window : Nvim_id
 module Tabpage : Nvim_id
@@ -43,6 +47,7 @@ module Phantom : sig
     | Nil : unit t
     | Integer : int t
     | Boolean : bool t
+    | Float : float t
     | Array : 'a t -> 'a list t
     | Tuple : 'a t * int -> 'a list t
     | Dict : (Msgpack.t * Msgpack.t) list t
@@ -50,6 +55,7 @@ module Phantom : sig
     | Buffer : Buffer.t t
     | Window : Window.t t
     | Tabpage : Tabpage.t t
+    | Luaref : Luaref.t t
     | Object : Msgpack.t t
     | Custom : (module Msgpack.Msgpackable with type t = 'a) -> 'a t
   [@@deriving sexp_of]
@@ -58,7 +64,7 @@ end
 module Api_result : sig
   type 'result t =
     { name : string
-    ; params : Msgpack.t
+    ; params : Msgpack.t list
     ; witness : 'result Phantom.t
     }
   [@@deriving sexp_of]
@@ -94,6 +100,7 @@ module Ui_event : sig
     | Suspend
     | Set_title of { title : string }
     | Set_icon of { icon : string }
+    | Screenshot of { path : string }
     | Option_set of
         { name : string
         ; value : Msgpack.t
@@ -133,6 +140,10 @@ module Ui_event : sig
         ; cterm_attrs : (Msgpack.t * Msgpack.t) list
         ; info : Msgpack.t list
         }
+    | Hl_group_set of
+        { name : string
+        ; id : int
+        }
     | Grid_resize of
         { grid : int
         ; width : int
@@ -159,17 +170,59 @@ module Ui_event : sig
         ; rows : int
         ; cols : int
         }
+    | Grid_destroy of { grid : int }
+    | Win_pos of
+        { grid : int
+        ; win : Window.t
+        ; startrow : int
+        ; startcol : int
+        ; width : int
+        ; height : int
+        }
+    | Win_float_pos of
+        { grid : int
+        ; win : Window.t
+        ; anchor : string
+        ; anchor_grid : int
+        ; anchor_row : float
+        ; anchor_col : float
+        ; focusable : bool
+        ; zindex : int
+        }
+    | Win_external_pos of
+        { grid : int
+        ; win : Window.t
+        }
+    | Win_hide of { grid : int }
+    | Win_close of { grid : int }
+    | Msg_set_pos of
+        { grid : int
+        ; row : int
+        ; scrolled : bool
+        ; sep_char : string
+        }
+    | Win_viewport of
+        { grid : int
+        ; win : Window.t
+        ; topline : int
+        ; botline : int
+        ; curline : int
+        ; curcol : int
+        }
     | Popupmenu_show of
         { items : Msgpack.t list
         ; selected : int
         ; row : int
         ; col : int
+        ; grid : int
         }
     | Popupmenu_hide
     | Popupmenu_select of { selected : int }
     | Tabline_update of
         { current : Tabpage.t
         ; tabs : Msgpack.t list
+        ; current_buffer : Buffer.t
+        ; buffers : Msgpack.t list
         }
     | Cmdline_show of
         { content : Msgpack.t list
@@ -195,15 +248,22 @@ module Ui_event : sig
     | Wildmenu_show of { items : Msgpack.t list }
     | Wildmenu_select of { selected : int }
     | Wildmenu_hide
+    | Msg_show of
+        { kind : string
+        ; content : Msgpack.t list
+        ; replace_last : bool
+        }
+    | Msg_clear
+    | Msg_showcmd of { content : Msgpack.t list }
+    | Msg_showmode of { content : Msgpack.t list }
+    | Msg_ruler of { content : Msgpack.t list }
+    | Msg_history_show of { entries : Msgpack.t list }
   [@@deriving sexp_of]
 
   val of_msgpack : Msgpack.t -> t list Or_error.t
 end
 
 val nvim_buf_line_count : buffer:Buffer.t -> int Api_result.t
-
-val buffer_get_line : buffer:Buffer.t -> index:int -> string Api_result.t
-[@@deprecated "[since 1111-11] neovim_version: 1 "]
 
 val nvim_buf_attach
   :  buffer:Buffer.t
@@ -213,37 +273,12 @@ val nvim_buf_attach
 
 val nvim_buf_detach : buffer:Buffer.t -> bool Api_result.t
 
-val buffer_set_line : buffer:Buffer.t -> index:int -> line:string -> unit Api_result.t
-[@@deprecated "[since 1111-11] neovim_version: 1 "]
-
-val buffer_del_line : buffer:Buffer.t -> index:int -> unit Api_result.t
-[@@deprecated "[since 1111-11] neovim_version: 1 "]
-
-val buffer_get_line_slice
-  :  buffer:Buffer.t
-  -> start:int
-  -> end_:int
-  -> include_start:bool
-  -> include_end:bool
-  -> Msgpack.t list Api_result.t
-[@@deprecated "[since 1111-11] neovim_version: 1 "]
-
 val nvim_buf_get_lines
   :  buffer:Buffer.t
   -> start:int
   -> end_:int
   -> strict_indexing:bool
   -> Msgpack.t list Api_result.t
-
-val buffer_set_line_slice
-  :  buffer:Buffer.t
-  -> start:int
-  -> end_:int
-  -> include_start:bool
-  -> include_end:bool
-  -> replacement:Msgpack.t list
-  -> unit Api_result.t
-[@@deprecated "[since 1111-11] neovim_version: 1 "]
 
 val nvim_buf_set_lines
   :  buffer:Buffer.t
@@ -253,10 +288,33 @@ val nvim_buf_set_lines
   -> replacement:Msgpack.t list
   -> unit Api_result.t
 
+val nvim_buf_set_text
+  :  buffer:Buffer.t
+  -> start_row:int
+  -> start_col:int
+  -> end_row:int
+  -> end_col:int
+  -> replacement:Msgpack.t list
+  -> unit Api_result.t
+
 val nvim_buf_get_offset : buffer:Buffer.t -> index:int -> int Api_result.t
 val nvim_buf_get_var : buffer:Buffer.t -> name:string -> Msgpack.t Api_result.t
 val nvim_buf_get_changedtick : buffer:Buffer.t -> int Api_result.t
 val nvim_buf_get_keymap : buffer:Buffer.t -> mode:string -> Msgpack.t list Api_result.t
+
+val nvim_buf_set_keymap
+  :  buffer:Buffer.t
+  -> mode:string
+  -> lhs:string
+  -> rhs:string
+  -> opts:(Msgpack.t * Msgpack.t) list
+  -> unit Api_result.t
+
+val nvim_buf_del_keymap
+  :  buffer:Buffer.t
+  -> mode:string
+  -> lhs:string
+  -> unit Api_result.t
 
 val nvim_buf_get_commands
   :  buffer:Buffer.t
@@ -270,17 +328,6 @@ val nvim_buf_set_var
   -> unit Api_result.t
 
 val nvim_buf_del_var : buffer:Buffer.t -> name:string -> unit Api_result.t
-
-val buffer_set_var
-  :  buffer:Buffer.t
-  -> name:string
-  -> value:Msgpack.t
-  -> Msgpack.t Api_result.t
-[@@deprecated "[since 1111-11] neovim_version: 1 "]
-
-val buffer_del_var : buffer:Buffer.t -> name:string -> Msgpack.t Api_result.t
-[@@deprecated "[since 1111-11] neovim_version: 1 "]
-
 val nvim_buf_get_option : buffer:Buffer.t -> name:string -> Msgpack.t Api_result.t
 
 val nvim_buf_set_option
@@ -289,22 +336,42 @@ val nvim_buf_set_option
   -> value:Msgpack.t
   -> unit Api_result.t
 
-val nvim_buf_get_number : buffer:Buffer.t -> int Api_result.t
-[@@deprecated "[since 1111-11] neovim_version: 2 "]
-
 val nvim_buf_get_name : buffer:Buffer.t -> string Api_result.t
 val nvim_buf_set_name : buffer:Buffer.t -> name:string -> unit Api_result.t
 val nvim_buf_is_loaded : buffer:Buffer.t -> bool Api_result.t
-val nvim_buf_is_valid : buffer:Buffer.t -> bool Api_result.t
 
-val buffer_insert
+val nvim_buf_delete
   :  buffer:Buffer.t
-  -> lnum:int
-  -> lines:Msgpack.t list
+  -> opts:(Msgpack.t * Msgpack.t) list
   -> unit Api_result.t
-[@@deprecated "[since 1111-11] neovim_version: 1 "]
 
+val nvim_buf_is_valid : buffer:Buffer.t -> bool Api_result.t
 val nvim_buf_get_mark : buffer:Buffer.t -> name:string -> Msgpack.t list Api_result.t
+
+val nvim_buf_get_extmark_by_id
+  :  buffer:Buffer.t
+  -> ns_id:int
+  -> id:int
+  -> opts:(Msgpack.t * Msgpack.t) list
+  -> Msgpack.t list Api_result.t
+
+val nvim_buf_get_extmarks
+  :  buffer:Buffer.t
+  -> ns_id:int
+  -> start:Msgpack.t
+  -> end_:Msgpack.t
+  -> opts:(Msgpack.t * Msgpack.t) list
+  -> Msgpack.t list Api_result.t
+
+val nvim_buf_set_extmark
+  :  buffer:Buffer.t
+  -> ns_id:int
+  -> line:int
+  -> col:int
+  -> opts:(Msgpack.t * Msgpack.t) list
+  -> int Api_result.t
+
+val nvim_buf_del_extmark : buffer:Buffer.t -> ns_id:int -> id:int -> bool Api_result.t
 
 val nvim_buf_add_highlight
   :  buffer:Buffer.t
@@ -322,31 +389,87 @@ val nvim_buf_clear_namespace
   -> line_end:int
   -> unit Api_result.t
 
+val nvim_buf_set_virtual_text
+  :  buffer:Buffer.t
+  -> src_id:int
+  -> line:int
+  -> chunks:Msgpack.t list
+  -> opts:(Msgpack.t * Msgpack.t) list
+  -> int Api_result.t
+
+val nvim_buf_call : buffer:Buffer.t -> fun_:Luaref.t -> Msgpack.t Api_result.t
+
+val nvim_command_output : command:string -> string Api_result.t
+[@@deprecated "[since 1111-11] neovim_version: 7 "]
+
+val nvim_execute_lua : code:string -> args:Msgpack.t list -> Msgpack.t Api_result.t
+[@@deprecated "[since 1111-11] neovim_version: 7 "]
+
+val nvim_buf_get_number : buffer:Buffer.t -> int Api_result.t
+[@@deprecated "[since 1111-11] neovim_version: 2 "]
+
 val nvim_buf_clear_highlight
   :  buffer:Buffer.t
   -> ns_id:int
   -> line_start:int
   -> line_end:int
   -> unit Api_result.t
+[@@deprecated "[since 1111-11] neovim_version: 7 "]
 
-val nvim_buf_set_virtual_text
+val buffer_insert
   :  buffer:Buffer.t
-  -> ns_id:int
-  -> line:int
-  -> chunks:Msgpack.t list
-  -> opts:(Msgpack.t * Msgpack.t) list
-  -> int Api_result.t
+  -> lnum:int
+  -> lines:Msgpack.t list
+  -> unit Api_result.t
+[@@deprecated "[since 1111-11] neovim_version: 1 "]
 
-val nvim_tabpage_list_wins : tabpage:Tabpage.t -> Msgpack.t list Api_result.t
-val nvim_tabpage_get_var : tabpage:Tabpage.t -> name:string -> Msgpack.t Api_result.t
+val buffer_get_line : buffer:Buffer.t -> index:int -> string Api_result.t
+[@@deprecated "[since 1111-11] neovim_version: 1 "]
 
-val nvim_tabpage_set_var
-  :  tabpage:Tabpage.t
+val buffer_set_line : buffer:Buffer.t -> index:int -> line:string -> unit Api_result.t
+[@@deprecated "[since 1111-11] neovim_version: 1 "]
+
+val buffer_del_line : buffer:Buffer.t -> index:int -> unit Api_result.t
+[@@deprecated "[since 1111-11] neovim_version: 1 "]
+
+val buffer_get_line_slice
+  :  buffer:Buffer.t
+  -> start:int
+  -> end_:int
+  -> include_start:bool
+  -> include_end:bool
+  -> Msgpack.t list Api_result.t
+[@@deprecated "[since 1111-11] neovim_version: 1 "]
+
+val buffer_set_line_slice
+  :  buffer:Buffer.t
+  -> start:int
+  -> end_:int
+  -> include_start:bool
+  -> include_end:bool
+  -> replacement:Msgpack.t list
+  -> unit Api_result.t
+[@@deprecated "[since 1111-11] neovim_version: 1 "]
+
+val buffer_set_var
+  :  buffer:Buffer.t
   -> name:string
   -> value:Msgpack.t
-  -> unit Api_result.t
+  -> Msgpack.t Api_result.t
+[@@deprecated "[since 1111-11] neovim_version: 1 "]
 
-val nvim_tabpage_del_var : tabpage:Tabpage.t -> name:string -> unit Api_result.t
+val buffer_del_var : buffer:Buffer.t -> name:string -> Msgpack.t Api_result.t
+[@@deprecated "[since 1111-11] neovim_version: 1 "]
+
+val window_set_var
+  :  window:Window.t
+  -> name:string
+  -> value:Msgpack.t
+  -> Msgpack.t Api_result.t
+[@@deprecated "[since 1111-11] neovim_version: 1 "]
+
+val window_del_var : window:Window.t -> name:string -> Msgpack.t Api_result.t
+[@@deprecated "[since 1111-11] neovim_version: 1 "]
 
 val tabpage_set_var
   :  tabpage:Tabpage.t
@@ -358,6 +481,22 @@ val tabpage_set_var
 val tabpage_del_var : tabpage:Tabpage.t -> name:string -> Msgpack.t Api_result.t
 [@@deprecated "[since 1111-11] neovim_version: 1 "]
 
+val vim_set_var : name:string -> value:Msgpack.t -> Msgpack.t Api_result.t
+[@@deprecated "[since 1111-11] neovim_version: 1 "]
+
+val vim_del_var : name:string -> Msgpack.t Api_result.t
+[@@deprecated "[since 1111-11] neovim_version: 1 "]
+
+val nvim_tabpage_list_wins : tabpage:Tabpage.t -> Msgpack.t list Api_result.t
+val nvim_tabpage_get_var : tabpage:Tabpage.t -> name:string -> Msgpack.t Api_result.t
+
+val nvim_tabpage_set_var
+  :  tabpage:Tabpage.t
+  -> name:string
+  -> value:Msgpack.t
+  -> unit Api_result.t
+
+val nvim_tabpage_del_var : tabpage:Tabpage.t -> name:string -> unit Api_result.t
 val nvim_tabpage_get_win : tabpage:Tabpage.t -> Window.t Api_result.t
 val nvim_tabpage_get_number : tabpage:Tabpage.t -> int Api_result.t
 val nvim_tabpage_is_valid : tabpage:Tabpage.t -> bool Api_result.t
@@ -374,6 +513,17 @@ val ui_attach : width:int -> height:int -> enable_rgb:bool -> unit Api_result.t
 val nvim_ui_detach : unit Api_result.t
 val nvim_ui_try_resize : width:int -> height:int -> unit Api_result.t
 val nvim_ui_set_option : name:string -> value:Msgpack.t -> unit Api_result.t
+val nvim_ui_try_resize_grid : grid:int -> width:int -> height:int -> unit Api_result.t
+val nvim_ui_pum_set_height : height:int -> unit Api_result.t
+
+val nvim_ui_pum_set_bounds
+  :  width:float
+  -> height:float
+  -> row:float
+  -> col:float
+  -> unit Api_result.t
+
+val nvim_exec : src:string -> output:bool -> string Api_result.t
 val nvim_command : command:string -> unit Api_result.t
 
 val nvim_get_hl_by_name
@@ -382,8 +532,25 @@ val nvim_get_hl_by_name
   -> (Msgpack.t * Msgpack.t) list Api_result.t
 
 val nvim_get_hl_by_id : hl_id:int -> rgb:bool -> (Msgpack.t * Msgpack.t) list Api_result.t
+val nvim_get_hl_id_by_name : name:string -> int Api_result.t
+
+val nvim_set_hl
+  :  ns_id:int
+  -> name:string
+  -> val_:(Msgpack.t * Msgpack.t) list
+  -> unit Api_result.t
+
 val nvim_feedkeys : keys:string -> mode:string -> escape_csi:bool -> unit Api_result.t
 val nvim_input : keys:string -> int Api_result.t
+
+val nvim_input_mouse
+  :  button:string
+  -> action:string
+  -> modifier:string
+  -> grid:int
+  -> row:int
+  -> col:int
+  -> unit Api_result.t
 
 val nvim_replace_termcodes
   :  str:string
@@ -392,9 +559,15 @@ val nvim_replace_termcodes
   -> special:bool
   -> string Api_result.t
 
-val nvim_command_output : command:string -> string Api_result.t
 val nvim_eval : expr:string -> Msgpack.t Api_result.t
-val nvim_execute_lua : code:string -> args:Msgpack.t list -> Msgpack.t Api_result.t
+val nvim_exec_lua : code:string -> args:Msgpack.t list -> Msgpack.t Api_result.t
+
+val nvim_notify
+  :  msg:string
+  -> log_level:int
+  -> opts:(Msgpack.t * Msgpack.t) list
+  -> Msgpack.t Api_result.t
+
 val nvim_call_function : fn:string -> args:Msgpack.t list -> Msgpack.t Api_result.t
 
 val nvim_call_dict_function
@@ -405,6 +578,7 @@ val nvim_call_dict_function
 
 val nvim_strwidth : text:string -> int Api_result.t
 val nvim_list_runtime_paths : Msgpack.t list Api_result.t
+val nvim_get_runtime_file : name:string -> all:bool -> Msgpack.t list Api_result.t
 val nvim_set_current_dir : dir:string -> unit Api_result.t
 val nvim_get_current_line : string Api_result.t
 val nvim_set_current_line : line:string -> unit Api_result.t
@@ -412,16 +586,19 @@ val nvim_del_current_line : unit Api_result.t
 val nvim_get_var : name:string -> Msgpack.t Api_result.t
 val nvim_set_var : name:string -> value:Msgpack.t -> unit Api_result.t
 val nvim_del_var : name:string -> unit Api_result.t
-
-val vim_set_var : name:string -> value:Msgpack.t -> Msgpack.t Api_result.t
-[@@deprecated "[since 1111-11] neovim_version: 1 "]
-
-val vim_del_var : name:string -> Msgpack.t Api_result.t
-[@@deprecated "[since 1111-11] neovim_version: 1 "]
-
 val nvim_get_vvar : name:string -> Msgpack.t Api_result.t
+val nvim_set_vvar : name:string -> value:Msgpack.t -> unit Api_result.t
 val nvim_get_option : name:string -> Msgpack.t Api_result.t
+val nvim_get_all_options_info : (Msgpack.t * Msgpack.t) list Api_result.t
+val nvim_get_option_info : name:string -> (Msgpack.t * Msgpack.t) list Api_result.t
 val nvim_set_option : name:string -> value:Msgpack.t -> unit Api_result.t
+
+val nvim_echo
+  :  chunks:Msgpack.t list
+  -> history:bool
+  -> opts:(Msgpack.t * Msgpack.t) list
+  -> unit Api_result.t
+
 val nvim_out_write : str:string -> unit Api_result.t
 val nvim_err_write : str:string -> unit Api_result.t
 val nvim_err_writeln : str:string -> unit Api_result.t
@@ -431,17 +608,56 @@ val nvim_set_current_buf : buffer:Buffer.t -> unit Api_result.t
 val nvim_list_wins : Msgpack.t list Api_result.t
 val nvim_get_current_win : Window.t Api_result.t
 val nvim_set_current_win : window:Window.t -> unit Api_result.t
+val nvim_create_buf : listed:bool -> scratch:bool -> Buffer.t Api_result.t
+
+val nvim_open_term
+  :  buffer:Buffer.t
+  -> opts:(Msgpack.t * Msgpack.t) list
+  -> int Api_result.t
+
+val nvim_chan_send : chan:int -> data:string -> unit Api_result.t
+
+val nvim_open_win
+  :  buffer:Buffer.t
+  -> enter:bool
+  -> config:(Msgpack.t * Msgpack.t) list
+  -> Window.t Api_result.t
+
 val nvim_list_tabpages : Msgpack.t list Api_result.t
 val nvim_get_current_tabpage : Tabpage.t Api_result.t
 val nvim_set_current_tabpage : tabpage:Tabpage.t -> unit Api_result.t
 val nvim_create_namespace : name:string -> int Api_result.t
 val nvim_get_namespaces : (Msgpack.t * Msgpack.t) list Api_result.t
+val nvim_paste : data:string -> crlf:bool -> phase:int -> bool Api_result.t
+
+val nvim_put
+  :  lines:Msgpack.t list
+  -> type_:string
+  -> after:bool
+  -> follow:bool
+  -> unit Api_result.t
+
 val nvim_subscribe : event:string -> unit Api_result.t
 val nvim_unsubscribe : event:string -> unit Api_result.t
 val nvim_get_color_by_name : name:string -> int Api_result.t
 val nvim_get_color_map : (Msgpack.t * Msgpack.t) list Api_result.t
+
+val nvim_get_context
+  :  opts:(Msgpack.t * Msgpack.t) list
+  -> (Msgpack.t * Msgpack.t) list Api_result.t
+
+val nvim_load_context : dict:(Msgpack.t * Msgpack.t) list -> Msgpack.t Api_result.t
 val nvim_get_mode : (Msgpack.t * Msgpack.t) list Api_result.t
 val nvim_get_keymap : mode:string -> Msgpack.t list Api_result.t
+
+val nvim_set_keymap
+  :  mode:string
+  -> lhs:string
+  -> rhs:string
+  -> opts:(Msgpack.t * Msgpack.t) list
+  -> unit Api_result.t
+
+val nvim_del_keymap : mode:string -> lhs:string -> unit Api_result.t
 
 val nvim_get_commands
   :  opts:(Msgpack.t * Msgpack.t) list
@@ -470,6 +686,19 @@ val nvim_parse_expression
 val nvim_list_uis : Msgpack.t list Api_result.t
 val nvim_get_proc_children : pid:int -> Msgpack.t list Api_result.t
 val nvim_get_proc : pid:int -> Msgpack.t Api_result.t
+
+val nvim_select_popupmenu_item
+  :  item:int
+  -> insert:bool
+  -> finish:bool
+  -> opts:(Msgpack.t * Msgpack.t) list
+  -> unit Api_result.t
+
+val nvim_set_decoration_provider
+  :  ns_id:int
+  -> opts:(Msgpack.t * Msgpack.t) list
+  -> unit Api_result.t
+
 val nvim_win_get_buf : window:Window.t -> Buffer.t Api_result.t
 val nvim_win_set_buf : window:Window.t -> buffer:Buffer.t -> unit Api_result.t
 val nvim_win_get_cursor : window:Window.t -> Msgpack.t list Api_result.t
@@ -487,17 +716,6 @@ val nvim_win_set_var
   -> unit Api_result.t
 
 val nvim_win_del_var : window:Window.t -> name:string -> unit Api_result.t
-
-val window_set_var
-  :  window:Window.t
-  -> name:string
-  -> value:Msgpack.t
-  -> Msgpack.t Api_result.t
-[@@deprecated "[since 1111-11] neovim_version: 1 "]
-
-val window_del_var : window:Window.t -> name:string -> Msgpack.t Api_result.t
-[@@deprecated "[since 1111-11] neovim_version: 1 "]
-
 val nvim_win_get_option : window:Window.t -> name:string -> Msgpack.t Api_result.t
 
 val nvim_win_set_option
@@ -510,6 +728,16 @@ val nvim_win_get_position : window:Window.t -> Msgpack.t list Api_result.t
 val nvim_win_get_tabpage : window:Window.t -> Tabpage.t Api_result.t
 val nvim_win_get_number : window:Window.t -> int Api_result.t
 val nvim_win_is_valid : window:Window.t -> bool Api_result.t
+
+val nvim_win_set_config
+  :  window:Window.t
+  -> config:(Msgpack.t * Msgpack.t) list
+  -> unit Api_result.t
+
+val nvim_win_get_config : window:Window.t -> (Msgpack.t * Msgpack.t) list Api_result.t
+val nvim_win_hide : window:Window.t -> unit Api_result.t
+val nvim_win_close : window:Window.t -> force:bool -> unit Api_result.t
+val nvim_win_call : window:Window.t -> fun_:Luaref.t -> Msgpack.t Api_result.t
 
 val buffer_line_count : buffer:Buffer.t -> int Api_result.t
 [@@deprecated "[since 1111-11] neovim_version: 1 "]
@@ -544,9 +772,6 @@ val buffer_set_option
   -> unit Api_result.t
 [@@deprecated "[since 1111-11] neovim_version: 1 "]
 
-val buffer_get_number : buffer:Buffer.t -> int Api_result.t
-[@@deprecated "[since 1111-11] neovim_version: 1 "]
-
 val buffer_get_name : buffer:Buffer.t -> string Api_result.t
 [@@deprecated "[since 1111-11] neovim_version: 1 "]
 
@@ -567,6 +792,12 @@ val buffer_add_highlight
   -> col_start:int
   -> col_end:int
   -> int Api_result.t
+[@@deprecated "[since 1111-11] neovim_version: 1 "]
+
+val vim_command_output : command:string -> string Api_result.t
+[@@deprecated "[since 1111-11] neovim_version: 1 "]
+
+val buffer_get_number : buffer:Buffer.t -> int Api_result.t
 [@@deprecated "[since 1111-11] neovim_version: 1 "]
 
 val buffer_clear_highlight
@@ -609,9 +840,6 @@ val vim_replace_termcodes
   -> do_lt:bool
   -> special:bool
   -> string Api_result.t
-[@@deprecated "[since 1111-11] neovim_version: 1 "]
-
-val vim_command_output : command:string -> string Api_result.t
 [@@deprecated "[since 1111-11] neovim_version: 1 "]
 
 val vim_eval : expr:string -> Msgpack.t Api_result.t

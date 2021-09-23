@@ -32,6 +32,8 @@ end
 
 let create_simple_editor ~sequencer =
   let module Simple_editor = struct
+    include Vcaml_plugin.Raise_on_any_error
+
     type state = State.t
 
     let set_modifiable buffer value =
@@ -86,26 +88,27 @@ let create_simple_editor ~sequencer =
       typable_api_call @ special_api_call |> Api_call.Or_error.all_unit
     ;;
 
-    let startup (client, _shutdown) =
-      let%bind chan_id = Client.get_rpc_channel_id client in
+    let startup client ~shutdown:_ =
+      let chan_id = Client.rpc_channel_id client in
       let%bind buffer =
-        Buffer.find_by_name_or_create ~name:"simple-editor" |> run_join client
+        Buffer.find_by_name_or_create ~name:"simple-editor" |> run_join [%here] client
       in
-      let%bind new_win = run_join client get_split_window in
+      let%bind new_win = run_join [%here] client get_split_window in
       let%bind () =
-        shutdown_plugin_when_buffer_is_closed ~new_win ~buffer ~chan_id |> run_join client
+        shutdown_plugin_when_buffer_is_closed ~new_win ~buffer ~chan_id
+        |> run_join [%here] client
       in
-      let%bind () = add_key_listeners_api_call chan_id |> run_join client in
-      let%bind () = set_modifiable buffer false |> run_join client in
+      let%bind () = add_key_listeners_api_call chan_id |> run_join [%here] client in
+      let%bind () = set_modifiable buffer false |> run_join [%here] client in
       return { State.buffer; window = new_win }
     ;;
 
     let vimscript_notify_fn = None
-    let on_shutdown (_client, _state) = return ()
+    let on_shutdown _client _state = return ()
 
     let get_nth_line ~client ~buffer n =
       Buffer.get_lines ~buffer ~start:(n - 1) ~end_:n ~strict_indexing:true
-      |> run_join client
+      |> run_join [%here] client
     ;;
 
     let with_modifiable ~buffer ~api_call =
@@ -126,7 +129,7 @@ let create_simple_editor ~sequencer =
              ~end_:(start_at + num_lines)
              ~replacement:content
              ~strict_indexing:false)
-      |> run_join client
+      |> run_join [%here] client
     ;;
 
     let set_line ~client ~buffer ~content ~row =
@@ -134,7 +137,7 @@ let create_simple_editor ~sequencer =
     ;;
 
     let set_cursor ~client ~window ~row ~col =
-      Window.set_cursor ~window ~row ~col |> run_join client
+      Window.set_cursor ~window { row; col } |> run_join [%here] client
     ;;
 
     let split_string_at st i =
@@ -143,7 +146,7 @@ let create_simple_editor ~sequencer =
       | i -> String.slice st 0 i, String.slice st i 0
     ;;
 
-    let add_newline_at_mark client buffer window { Window.row; col } =
+    let add_newline_at_mark client buffer window { Position.One_indexed_row.row; col } =
       let%bind line = get_nth_line ~client ~buffer row in
       let first_line, second_line = split_string_at (List.nth_exn line 0) col in
       let%bind () = set_line ~client ~buffer ~content:[ first_line; second_line ] ~row in
@@ -155,7 +158,13 @@ let create_simple_editor ~sequencer =
       String.concat [ before; character; after ]
     ;;
 
-    let set_character_at_mark character client buffer window { Window.row; col } =
+    let set_character_at_mark
+          character
+          client
+          buffer
+          window
+          { Position.One_indexed_row.row; col }
+      =
       let%bind line = get_nth_line ~client ~buffer row in
       let new_line = line |> List.map ~f:(insert_character_in_line col character) in
       let%bind () = set_line ~client ~buffer ~content:new_line ~row in
@@ -188,17 +197,22 @@ let create_simple_editor ~sequencer =
       set_cursor ~client ~window ~row ~col:(col - 1)
     ;;
 
-    let delete_character_at_mark client buffer window { Window.row; col } =
+    let delete_character_at_mark
+          client
+          buffer
+          window
+          { Position.One_indexed_row.row; col }
+      =
       match row, col with
       | 1, 0 -> Deferred.Or_error.return ()
       | r, 0 -> delete_from_beginning_of_line client buffer window r
       | r, c -> delete_in_line client buffer window r c
     ;;
 
-    let handle_edit_request ~f (client, { State.buffer; window }, _shutdown) () =
+    let handle_edit_request ~f client { State.buffer; window } ~shutdown:_ () =
       Deferred.map
         ~f:Or_error.ok_exn
-        (let%bind mark = Window.get_cursor ~window |> run_join client in
+        (let%bind mark = Window.get_cursor ~window |> run_join [%here] client in
          f client buffer window mark)
     ;;
 
@@ -208,17 +222,19 @@ let create_simple_editor ~sequencer =
 
     let create_rpc_handler ~rpc_name ~handling_fn =
       Vcaml_plugin.Rpc_handler.create_async
+        [%here]
         ~name:rpc_name
         ~type_:Defun.Ocaml.Async.(Type.Nil @-> unit)
-        ~f:(fun args () ->
-          Async.Throttle.enqueue sequencer (fun () -> handling_fn args ()))
+        ~f:(fun client state ~shutdown () ->
+          Async.Throttle.enqueue sequencer (fun () ->
+            handling_fn client state ~shutdown ()))
     ;;
 
     let create_key_rpc_handler ~key ~str_to_insert =
       create_rpc_handler ~rpc_name:key ~handling_fn:(handle_key_rpc_request str_to_insert)
     ;;
 
-    let call_shutdown (_client, _state, shutdown) () =
+    let call_shutdown _client _state ~shutdown () =
       shutdown ();
       Deferred.return ()
     ;;
@@ -252,8 +268,6 @@ let create_simple_editor ~sequencer =
       alphabet_handlers
       @ [ space_handler; enter_handler; backspace_handler; shutdown_handler ]
     ;;
-
-    let on_async_msgpack_error = Error.raise
   end
   in
   (module Vcaml_plugin.Persistent.Make (Simple_editor) : Vcaml_plugin.Persistent.S

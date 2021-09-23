@@ -57,9 +57,16 @@ val set
   -> ?expr:bool (** default: [false] *)
   -> ?nowait:bool (** default: [false] *)
   -> ?silent:bool (** default: [false] *)
-  -> ?scope:[ `Global | `Current_buffer ] (** default: [`Global] *)
+  -> scope:[ `Global | `Buffer_local of Nvim_internal.Buffer.t ]
   -> lhs:string
   -> rhs:string
   -> mode:Mode.t
   -> unit
+  -> unit Api_call.Or_error.t
+
+(** Unset a keymapping. *)
+val unset
+  :  scope:[ `Global | `Buffer_local of Nvim_internal.Buffer.t ]
+  -> lhs:string
+  -> mode:Mode.t
   -> unit Api_call.Or_error.t

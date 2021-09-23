@@ -39,6 +39,18 @@ type t =
   }
 [@@deriving sexp_of]
 
+let sexp_of_t t =
+  let t =
+    match am_running_test, t.name with
+    | false, _ | _, None -> t
+    | true, Some name ->
+      (match Uuid.of_string name with
+       | _ -> { t with name = Some "<uuid-omitted-in-test>" }
+       | exception _ -> t)
+  in
+  sexp_of_t t
+;;
+
 let convert_version obj =
   let open Or_error.Let_syntax in
   let%bind m = Extract.map_of_msgpack_map obj in

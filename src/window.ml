@@ -1,11 +1,6 @@
 open Core
 include Nvim_internal.Window
 
-type position =
-  { row : int
-  ; col : int
-  }
-
 let get_height ~window =
   Nvim_internal.nvim_win_get_height ~window |> Api_call.of_api_result
 ;;
@@ -19,11 +14,11 @@ let get_cursor ~window =
   let%map cursor = Nvim_internal.nvim_win_get_cursor ~window |> Api_call.of_api_result in
   let open Or_error.Let_syntax in
   match%bind cursor with
-  | [ Msgpack.Integer row; Integer col ] -> Ok { row; col }
+  | [ Msgpack.Integer row; Integer col ] -> Ok { Position.One_indexed_row.row; col }
   | _ -> Or_error.error_string "malformed result from [nvim_win_get_cursor]"
 ;;
 
-let set_cursor ~window ~row ~col =
+let set_cursor ~window { Position.One_indexed_row.row; col } =
   let pos = [ Msgpack.Integer row; Integer col ] in
   Nvim_internal.nvim_win_set_cursor ~window ~pos |> Api_call.of_api_result
 ;;
@@ -85,7 +80,7 @@ module Untested = struct
     in
     let open Or_error.Let_syntax in
     match%bind position with
-    | [ Msgpack.Integer row; Integer col ] -> Ok { row; col }
+    | [ Msgpack.Integer row; Integer col ] -> Ok { Position.row; col }
     | _ -> Or_error.error_string "malformed result from [nvim_win_get_position]"
   ;;
 
@@ -98,4 +93,49 @@ module Untested = struct
   ;;
 
   let is_valid ~window = Nvim_internal.nvim_win_is_valid ~window |> Api_call.of_api_result
+
+  let get_config ~window =
+    Nvim_internal.nvim_win_get_config ~window
+    |> Api_call.of_api_result
+    |> Api_call.map_bind ~f:Extract.map_of_msgpack_alist
+  ;;
+
+  let set_config ~window ~config =
+    let config = Extract.map_to_msgpack_alist config in
+    Nvim_internal.nvim_win_set_config ~window ~config |> Api_call.of_api_result
+  ;;
+
+  let open_ ~buffer ~enter ~config =
+    let config = Extract.map_to_msgpack_alist config in
+    Nvim_internal.nvim_open_win ~buffer ~enter ~config |> Api_call.of_api_result
+  ;;
+
+  module When_this_is_the_buffer's_last_window = struct
+    type t =
+      | Hide
+      | Unload of { if_modified : [ `Hide | `Abort ] }
+  end
+
+  let close ~window ~when_this_is_the_buffer's_last_window =
+    (match when_this_is_the_buffer's_last_window with
+     | When_this_is_the_buffer's_last_window.Hide -> Nvim_internal.nvim_win_hide ~window
+     | Unload { if_modified } ->
+       let force =
+         match if_modified with
+         | `Hide -> true
+         | `Abort -> false
+       in
+       Nvim_internal.nvim_win_close ~window ~force)
+    |> Api_call.of_api_result
+  ;;
+
+  module Expert = struct
+    let set_buf ~window ~buffer =
+      Nvim_internal.nvim_win_set_buf ~window ~buffer |> Api_call.of_api_result
+    ;;
+
+    let win_call ~window ~lua_callback =
+      Nvim_internal.nvim_win_call ~window ~fun_:lua_callback |> Api_call.of_api_result
+    ;;
+  end
 end

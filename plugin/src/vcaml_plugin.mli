@@ -1,1 +1,1 @@
-include Vcaml_plugin_intf.Intf
+include Vcaml_plugin_intf.Vcaml_plugin

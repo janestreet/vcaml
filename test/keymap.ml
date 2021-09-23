@@ -5,25 +5,25 @@ open Vcaml
 open Test_client
 
 let%expect_test "Test keymaps" =
-  let test ~client ~current_buffer mode =
+  let test ~client mode =
     let open Deferred.Or_error.Let_syntax in
+    let current_buffer = `Buffer_local (Buffer.Unsafe.of_int 0) in
     let query =
       let open Api_call.Or_error.Let_syntax in
-      let%map () = Keymap.set ~lhs:"a" ~rhs:"a" ~mode ()
-      and () = Keymap.set ~lhs:"b" ~rhs:"a" ~mode ~recursive:true ~silent:true ()
-      and () = Keymap.set ~lhs:"c" ~rhs:"c" ~mode ~scope:`Current_buffer ~nowait:true ()
+      let%map () = Keymap.set ~lhs:"a" ~rhs:"a" ~mode ~scope:`Global ()
+      and () =
+        Keymap.set ~lhs:"b" ~rhs:"a" ~mode ~scope:`Global ~recursive:true ~silent:true ()
+      and () = Keymap.set ~lhs:"c" ~rhs:"c" ~mode ~scope:current_buffer ~nowait:true ()
       and global_keymaps = Keymap.get ~scope:`Global ~mode
-      and local_keymaps = Keymap.get ~scope:(`Buffer_local current_buffer) ~mode in
+      and local_keymaps = Keymap.get ~scope:current_buffer ~mode in
       global_keymaps @ local_keymaps
     in
-    let%map keymaps = run_join client query in
+    let%map keymaps = run_join [%here] client query in
     print_s [%message "Test" (mode : Keymap.Mode.t) (keymaps : Keymap.t list)]
   in
   let%bind () =
     with_client (fun client ->
-      let open Deferred.Or_error.Let_syntax in
-      let%bind current_buffer = run_join client Vcaml.Nvim.get_current_buf in
-      Deferred.Or_error.List.iter Keymap.Mode.all ~f:(test ~client ~current_buffer))
+      Deferred.Or_error.List.iter Keymap.Mode.all ~f:(test ~client))
   in
   [%expect
     {|
@@ -118,5 +118,39 @@ let%expect_test "Test keymaps" =
         (nowait false) (silent true) (recursive true) (sid 0))
        ((lhs c) (rhs c) (mode Language) (scope (Buffer_local 1)) (expr false)
         (nowait true) (silent false) (recursive false) (sid 0))))) |}];
+  return ()
+;;
+
+let%expect_test "Test unsetting keymap in specific mode" =
+  let%bind () =
+    with_client (fun client ->
+      let query =
+        let open Api_call.Or_error.Let_syntax in
+        let%map () =
+          Keymap.set
+            ~lhs:"a"
+            ~rhs:"a"
+            ~mode:Normal_and_visual_and_operator_pending
+            ~scope:`Global
+            ()
+        and () = Keymap.unset ~lhs:"a" ~mode:Visual ~scope:`Global
+        and () = Keymap.unset ~lhs:"a" ~mode:Normal ~scope:`Global
+        and remaining_keymaps =
+          Keymap.get ~scope:`Global ~mode:Normal_and_visual_and_operator_pending
+        in
+        remaining_keymaps
+      in
+      let open Deferred.Or_error.Let_syntax in
+      let%map keymaps = run_join [%here] client query in
+      print_s [%message "Remaining keymaps" (keymaps : Keymap.t list)])
+  in
+  [%expect
+    {|
+    ("Remaining keymaps"
+     (keymaps
+      (((lhs a) (rhs a) (mode Operator_pending) (scope Global) (expr false)
+        (nowait false) (silent false) (recursive false) (sid 0))
+       ((lhs a) (rhs a) (mode Select) (scope Global) (expr false) (nowait false)
+        (silent false) (recursive false) (sid 0))))) |}];
   return ()
 ;;

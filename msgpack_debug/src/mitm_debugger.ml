@@ -36,9 +36,15 @@ let debug_messages info reader writer =
 ;;
 
 let on_connect ~client_pipe _addr host_reader host_writer =
-  let%bind socket = Msgpack_unix.Unix_socket.open_from_filename client_pipe in
-  let client_reader = Msgpack_unix.Unix_socket.reader socket in
-  let client_writer = Msgpack_unix.Unix_socket.writer socket in
+  let%bind socket =
+    Msgpack_unix.open_from_filename
+      client_pipe
+      ~close_reader_and_writer_on_disconnect:true
+      ~on_error:(fun ~message msgpack ->
+        raise_s [%message message ~_:(msgpack : Msgpack.t)])
+  in
+  let client_reader = Msgpack_rpc.reader socket in
+  let client_writer = Msgpack_rpc.writer socket in
   let%bind (_ : (unit, string) result list) =
     Deferred.all
       [ debug_messages (Info.To_client client_pipe) client_reader host_writer

@@ -5,7 +5,7 @@ open Vcaml_simple_editor
 open Deferred.Or_error.Let_syntax
 
 let print_window_count ~client =
-  let%map wins = Nvim.list_wins |> run_join client in
+  let%map wins = Nvim.list_wins |> run_join [%here] client in
   let num_wins = List.length wins in
   print_s [%message (num_wins : int)]
 ;;
@@ -36,22 +36,22 @@ let wait_for_jobs ~sequencer ~num_jobs =
 
 let escape_and_feedkeys ~client ~keys ~sequencer =
   let%bind escaped_keys =
-    Nvim.replace_termcodes ~str:keys ~from_part:true ~do_lt:false ~special:true
-    |> run_join client
+    Nvim.replace_termcodes ~str:keys ~replace_keycodes:true |> run_join [%here] client
   in
   let wait_on_completion = wait_for_jobs ~sequencer ~num_jobs:(expected_num_jobs ~keys) in
   let%bind () =
-    Nvim.feedkeys ~keys:escaped_keys ~mode:"t" ~escape_csi:true |> run_join client
+    Nvim.feedkeys ~keys:escaped_keys ~mode:"t" ~escape_csi:true |> run_join [%here] client
   in
   let%bind () = Deferred.ok wait_on_completion in
   Deferred.ok (Async.Throttle.prior_jobs_done sequencer)
 ;;
 
 let get_contents ~client ~buffer =
-  Buffer.get_lines ~buffer ~start:0 ~end_:(-1) ~strict_indexing:true |> run_join client
+  Buffer.get_lines ~buffer ~start:0 ~end_:(-1) ~strict_indexing:true
+  |> run_join [%here] client
 ;;
 
-let kill_plugin ~client = Nvim.command ~command:"q!" |> run_join client
+let kill_plugin ~client = Nvim.command ~command:"q!" |> run_join [%here] client
 
 module Alphabet_test = struct
   let before_plugin ~client = print_window_count ~client
@@ -74,7 +74,7 @@ let%expect_test "splits open a new window and allows the user to send keys" =
   let sequencer = Async.Sequencer.create () in
   let (module Plugin) = Simple_editor.For_testing.create_plugin ~sequencer in
   let%bind.Deferred () =
-    Vcaml_plugin.For_testing.with_client (fun client ->
+    Vcaml_test.with_client (fun client ->
       let%bind () = Alphabet_test.before_plugin ~client in
       let%bind _state =
         Plugin.run_for_testing
@@ -102,7 +102,9 @@ module Backspace_test = struct
     =
     let key_sequence = "<BS>this<BS><CR><BS> a drink with jam and bread" in
     let%bind () = escape_and_feedkeys ~client ~keys:key_sequence ~sequencer in
-    let%bind () = Window.set_cursor ~window ~row:1 ~col:2 |> run_join client in
+    let%bind () =
+      Window.set_cursor ~window { row = 1; col = 2 } |> run_join [%here] client
+    in
     let%bind () = escape_and_feedkeys ~client ~keys:"<BS>" ~sequencer in
     let%bind contents = get_contents ~client ~buffer in
     print_s [%message (contents : string list)];
@@ -113,7 +115,7 @@ module Backspace_test = struct
     let sequencer = Async.Sequencer.create () in
     let (module Plugin) = Simple_editor.For_testing.create_plugin ~sequencer in
     let%bind.Deferred _state =
-      Vcaml_plugin.For_testing.with_client (fun client ->
+      Vcaml_test.with_client (fun client ->
         Plugin.run_for_testing ~during_plugin:(during_plugin ~client ~sequencer) client)
     in
     [%expect {| (contents ("ti a drink with jam and bread")) |}];
@@ -130,7 +132,9 @@ module Enter_test = struct
     =
     let key_sequence = "<CR>second linethird line<CR>fourth line" in
     let%bind () = escape_and_feedkeys ~client ~keys:key_sequence ~sequencer in
-    let%bind () = Window.set_cursor ~window ~row:2 ~col:11 |> run_join client in
+    let%bind () =
+      Window.set_cursor ~window { row = 2; col = 11 } |> run_join [%here] client
+    in
     let%bind () = escape_and_feedkeys ~client ~keys:"<CR>" ~sequencer in
     let%bind contents = get_contents ~client ~buffer in
     print_s [%message (contents : string list)];
@@ -141,7 +145,7 @@ module Enter_test = struct
     let sequencer = Async.Sequencer.create () in
     let (module Plugin) = Simple_editor.For_testing.create_plugin ~sequencer in
     let%bind.Deferred _state =
-      Vcaml_plugin.For_testing.with_client (fun client ->
+      Vcaml_test.with_client (fun client ->
         Plugin.run_for_testing ~during_plugin:(during_plugin ~client ~sequencer) client)
     in
     [%expect {| (contents ("" "second line" "third line" "fourth line")) |}];

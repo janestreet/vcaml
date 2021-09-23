@@ -1,6 +1,10 @@
 open! Core
 open Async
+module Error_type := Nvim_internal.Error_type
 
-module Make (U : Msgpack_rpc.S) : sig
-  val attach : U.t -> on_error:(Error.t -> unit) -> Client.t Deferred.t
-end
+val attach
+  :  Msgpack_rpc.t
+  -> on_error:(Error.t -> unit)
+  -> on_error_event:(Error_type.t -> message:string -> unit)
+  -> time_source:Time_source.t
+  -> Client.t Deferred.Or_error.t
