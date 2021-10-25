@@ -6,6 +6,7 @@ open Deferred.Or_error.Let_syntax
 module Buffer_data = struct
   type t =
     { current_file_pattern : File_pattern.t option
+    ; is_redundant_mli : bool
     ; file_patterns : File_pattern.t list
     }
 
@@ -13,13 +14,21 @@ module Buffer_data = struct
     let%bind buffer = Nvim.get_current_buf |> Vcaml.run_join [%here] client in
     let%bind filename = Buffer.get_name ~buffer |> Vcaml.run_join [%here] client in
     let%bind.Deferred file_patterns = File_pattern.list filename in
-    return { file_patterns; current_file_pattern = File_pattern.of_filename filename }
+    let current_file_pattern = File_pattern.of_filename filename in
+    let%bind.Deferred is_redundant_mli =
+      match current_file_pattern with
+      | None -> Deferred.return false
+      | Some current_file_pattern -> File_pattern.is_redundant_mli current_file_pattern
+    in
+    return { file_patterns; current_file_pattern; is_redundant_mli }
   ;;
 end
 
 let swap_vim_in_direction swap_in_direction client =
-  let%bind { current_file_pattern; file_patterns } = Buffer_data.fetch_from_vim client in
-  match swap_in_direction ~current_file_pattern ~file_patterns with
+  let%bind { current_file_pattern; file_patterns; is_redundant_mli } =
+    Buffer_data.fetch_from_vim client
+  in
+  match swap_in_direction ~current_file_pattern ~is_redundant_mli ~file_patterns with
   | None -> return ()
   | Some file_pattern ->
     let%bind new_buffer =

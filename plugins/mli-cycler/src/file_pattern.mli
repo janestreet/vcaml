@@ -11,9 +11,20 @@ val to_filename : t -> Filename.t
 val dirname : t -> Filename.t
 val to_short_filename : t -> string
 val to_intf_name : t -> string
+val is_redundant_mli : t -> bool Deferred.t
 
 (** High-level functions that deal with cycling logic *)
 
 val list : Filename.t -> t list Deferred.t
-val next : current_file_pattern:t option -> file_patterns:t list -> t option
-val prev : current_file_pattern:t option -> file_patterns:t list -> t option
+
+val next
+  :  current_file_pattern:t option
+  -> is_redundant_mli:bool
+  -> file_patterns:t list
+  -> t option
+
+val prev
+  :  current_file_pattern:t option
+  -> is_redundant_mli:bool
+  -> file_patterns:t list
+  -> t option

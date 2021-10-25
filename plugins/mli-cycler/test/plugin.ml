@@ -225,7 +225,7 @@ let%expect_test "still lists files when on a redundant mli" =
   return ()
 ;;
 
-let%expect_test "cycling forward from a redundant mli puts us at the start of the list" =
+let%expect_test "cycling forward from a redundant mli puts us in the intf we included" =
   let empty_files = [ "foo.ml"; "foo_intf.ml" ] in
   let files_with_includes = [ "foo.mli", "Foo_intf.My_awesome_module" ] in
   let%bind () =
@@ -241,11 +241,11 @@ let%expect_test "cycling forward from a redundant mli puts us at the start of th
     {|
     (current_file foo.mli)
     "Cycling forward..."
-    (current_file foo.ml) |}];
+    (current_file foo_intf.ml) |}];
   return ()
 ;;
 
-let%expect_test "cycling backward from a redundant mli puts us at the start of the list" =
+let%expect_test "cycling backward from a redundant mli puts us in the intf we included" =
   let empty_files = [ "foo.ml"; "foo_intf.ml" ] in
   let files_with_includes = [ "foo.mli", "Foo_intf.My_awesome_module" ] in
   let%bind () =
@@ -261,7 +261,7 @@ let%expect_test "cycling backward from a redundant mli puts us at the start of t
     {|
     (current_file foo.mli)
     "Cycling backward..."
-    (current_file foo.ml) |}];
+    (current_file foo_intf.ml) |}];
   return ()
 ;;
 

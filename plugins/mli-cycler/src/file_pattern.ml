@@ -112,6 +112,13 @@ let is_redundant_mli t =
   | Mli _ as mli -> are_all_lines_redundant mli
 ;;
 
+let rec to_intf t =
+  match t with
+  | Intf _ -> t
+  | Ml s | Mli s -> Intf s
+  | Number (n, t) -> Number (n, to_intf t)
+;;
+
 let list filename =
   match of_filename filename with
   | None -> return []
@@ -139,21 +146,40 @@ let find_file_pattern_at_offset ~offset ~current_file_pattern ~file_patterns =
 let find_next_file_pattern_in_list = find_file_pattern_at_offset ~offset:1
 let find_prev_file_pattern_in_list = find_file_pattern_at_offset ~offset:(-1)
 
-let get_file_pattern_with_fn ~current_file_pattern ~file_patterns ~file_pattern_fn =
-  [ file_pattern_fn ~current_file_pattern ~file_patterns; List.nth file_patterns 0 ]
+let get_file_pattern_with_fn
+      ~current_file_pattern
+      ~is_redundant_mli
+      ~file_patterns
+      ~file_pattern_fn
+  =
+  let intf_for_redundant_mli =
+    match current_file_pattern, is_redundant_mli with
+    | Some current_file_pattern, true ->
+      (* We don't just use [Some (to_intf current_file_pattern)] here because it's
+         possible for this [List.find] to be [None] in rare cases. In these cases, this
+         would cause us to attempt to open a file which doesn't exist. *)
+      List.find file_patterns ~f:(equal (to_intf current_file_pattern))
+    | _ -> None
+  in
+  [ intf_for_redundant_mli
+  ; file_pattern_fn ~current_file_pattern ~file_patterns
+  ; List.nth file_patterns 0
+  ]
   |> List.fold ~init:None ~f:Option.first_some
 ;;
 
-let next ~current_file_pattern ~file_patterns =
+let next ~current_file_pattern ~is_redundant_mli ~file_patterns =
   get_file_pattern_with_fn
     ~current_file_pattern
+    ~is_redundant_mli
     ~file_patterns
     ~file_pattern_fn:find_next_file_pattern_in_list
 ;;
 
-let prev ~current_file_pattern ~file_patterns =
+let prev ~current_file_pattern ~is_redundant_mli ~file_patterns =
   get_file_pattern_with_fn
     ~current_file_pattern
+    ~is_redundant_mli
     ~file_patterns
     ~file_pattern_fn:find_prev_file_pattern_in_list
 ;;
