@@ -31,14 +31,14 @@ function! s:list()
   call jobstart([s:bin_path, 'list'])
 endfunction
 
-function! s:setup_commands()
-  command! -buffer MliCyclerNext call s:next()
-  command! -buffer MliCyclerPrev call s:previous()
-  command! -buffer MliCyclerListFzf call s:list_fzf()
-  command! -buffer MliCyclerList call s:list()
+function! s:set_up_commands()
+  command! -bar -buffer MliCyclerNext call s:next()
+  command! -bar -buffer MliCyclerPrev call s:previous()
+  command! -bar -buffer MliCyclerListFzf call s:list_fzf()
+  command! -bar -buffer MliCyclerList call s:list()
 endfunction
 
-augroup MliCycler
+augroup mli_cycler
   autocmd!
-  autocmd FileType ocaml call s:setup_commands()
+  autocmd FileType ocaml call s:set_up_commands()
 augroup END

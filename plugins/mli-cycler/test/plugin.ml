@@ -265,7 +265,7 @@ let%expect_test "cycling backward from a redundant mli puts us in the intf we in
   return ()
 ;;
 
-let%expect_test "cycling forward withing numbered files switches between them" =
+let%expect_test "cycling forward within numbered files switches between them" =
   let empty_files = [ "foo1.ml"; "foo1.mli"; "foo2.ml"; "foo2.mli" ] in
   let%bind () =
     Vcaml_test.with_client (fun client ->
@@ -287,6 +287,37 @@ let%expect_test "cycling forward withing numbered files switches between them" =
     (current_file foo2.mli)
     "Cycling forward..."
     (current_file foo1.ml) |}];
+  return ()
+;;
+
+let%expect_test "files numbered with leading zeroes are treated as their own group (and \
+                 don't cycle to 0{n+1}.ml)"
+  =
+  let empty_files = [ "foo_01.ml"; "foo_01.mli"; "foo_02.ml"; "foo_02.mli" ] in
+  let%bind () =
+    Vcaml_test.with_client (fun client ->
+      let open Deferred.Or_error.Let_syntax in
+      let%bind () =
+        setup_client
+          ~empty_files
+          ~files_with_includes:[]
+          ~entry_point:"foo_01.ml"
+          ~client
+      in
+      let%bind () = print_current_file client in
+      repeat_n_times 4 ~f:(fun () -> cycle_forward client))
+  in
+  [%expect
+    {|
+    (current_file foo_01.ml)
+    "Cycling forward..."
+    (current_file foo_01.mli)
+    "Cycling forward..."
+    (current_file foo_01.ml)
+    "Cycling forward..."
+    (current_file foo_01.mli)
+    "Cycling forward..."
+    (current_file foo_01.ml) |}];
   return ()
 ;;
 

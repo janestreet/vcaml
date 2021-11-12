@@ -211,12 +211,18 @@ let%expect_test "find_by_name_or_create buffers with weird characters" =
   return ()
 ;;
 
-let%expect_test "set_option" =
+let%expect_test "get_option and set_option" =
   Backtrace.elide := true;
   let%bind () =
     with_client (fun client ->
       let open Deferred.Or_error.Let_syntax in
       let%bind buffer = Vcaml.Nvim.get_current_buf |> run_join [%here] client in
+      let print_modifiability () =
+        Buffer.get_option ~buffer ~name:"modifiable" ~type_:Boolean
+        |> run_join [%here] client
+        >>| fun modifiable -> print_s [%message (modifiable : bool)]
+      in
+      let%bind () = print_modifiability () in
       let%bind.Deferred modify_success =
         Buffer.set_lines
           ~buffer
@@ -236,6 +242,7 @@ let%expect_test "set_option" =
           ~value:false
         |> run_join [%here] client
       in
+      let%bind () = print_modifiability () in
       let%bind.Deferred modify_error =
         Buffer.set_lines
           ~buffer
@@ -250,7 +257,9 @@ let%expect_test "set_option" =
   in
   [%expect
     {|
+    (modifiable true)
     (modify_success (Ok ()))
+    (modifiable false)
     (modify_error
      (Error
       (("Called from" lib/vcaml/test/buffer.ml:LINE:COL)

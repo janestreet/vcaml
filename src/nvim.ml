@@ -606,7 +606,7 @@ let echo_in_rpcrequest message =
 ;;
 
 (* These functions are part of the Neovim API but are not exposed in VCaml. *)
-module Unused = struct
+module _ = struct
   (* If we are going to expose this function we should only do it in a typesafe way
      similar to the way we expose [nvim_call_function] via [wrap_viml_function]. I'm not
      sure there's actually much value in exposing this function since OCaml plugins likely
@@ -626,7 +626,7 @@ module Unused = struct
   let (_ : _) = Nvim_internal.nvim_get_proc
   let (_ : _) = Nvim_internal.nvim_get_proc_children
 
-  module How_do_these_work = struct
+  module _ = struct
     let _ = Nvim_internal.nvim_select_popupmenu_item
     let _ = Nvim_internal.nvim_set_hl
   end

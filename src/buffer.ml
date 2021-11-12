@@ -265,6 +265,12 @@ module Subscriber = struct
   ;;
 end
 
+let get_option ~buffer ~name ~type_ =
+  Nvim_internal.nvim_buf_get_option ~buffer ~name
+  |> Api_call.of_api_result
+  |> Api_call.map_bind ~f:(Extract.value type_)
+;;
+
 let set_option ~buffer ~scope ~name ~type_ ~value =
   let vcaml_tmp = "__vcaml_tmp" in
   let value = Extract.inject type_ value in
@@ -338,12 +344,6 @@ module Untested = struct
 
   let del_var ~buffer ~name =
     Nvim_internal.nvim_buf_del_var ~buffer ~name |> Api_call.of_api_result
-  ;;
-
-  let get_option ~buffer ~name ~type_ =
-    Nvim_internal.nvim_buf_get_option ~buffer ~name
-    |> Api_call.of_api_result
-    |> Api_call.map_bind ~f:(Extract.value type_)
   ;;
 
   let is_loaded ~buffer =

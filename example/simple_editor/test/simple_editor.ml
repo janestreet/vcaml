@@ -93,7 +93,7 @@ let%expect_test "splits open a new window and allows the user to send keys" =
   Deferred.return ()
 ;;
 
-module Backspace_test = struct
+module _ = struct
   let during_plugin
         ~sequencer
         ~client
@@ -123,7 +123,7 @@ module Backspace_test = struct
   ;;
 end
 
-module Enter_test = struct
+module _ = struct
   let during_plugin
         ~sequencer
         ~client

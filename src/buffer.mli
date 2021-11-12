@@ -105,6 +105,8 @@ module Subscriber : sig
     -> Event.t Async.Pipe.Reader.t Async.Deferred.Or_error.t
 end
 
+val get_option : buffer:t -> name:string -> type_:'a Type.t -> 'a Api_call.Or_error.t
+
 val set_option
   :  buffer:t
   -> scope:[ `Local | `Global ]
@@ -133,7 +135,6 @@ module Untested : sig
     -> unit Api_call.Or_error.t
 
   val del_var : buffer:t -> name:string -> unit Api_call.Or_error.t
-  val get_option : buffer:t -> name:string -> type_:'a Type.t -> 'a Api_call.Or_error.t
   val is_loaded : buffer:t -> bool Api_call.Or_error.t
   val is_valid : buffer:t -> bool Api_call.Or_error.t
   val unload : buffer:t -> even_if_modified:bool -> unit Api_call.Or_error.t

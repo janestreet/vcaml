@@ -565,7 +565,7 @@ let%expect_test "Get and set variables" =
   return ()
 ;;
 
-module Fast = struct
+module _ = struct
   module Nvim = Nvim.Fast
 
   let%expect_test "[get_mode] and [input]" =
@@ -965,7 +965,8 @@ let%expect_test "Asynchronous write failure is returned to outstanding requests"
         Vcaml.Client.attach
           (Embed
              { prog = neovim_path
-             ; args = [ "--headless"; "-n"; "--embed"; "--clean" ]
+             ; args =
+                 [ "--headless"; "-n"; "--embed"; "--clean"; "--listen"; "./socket" ]
              ; working_dir
              ; env = `Extend []
              })

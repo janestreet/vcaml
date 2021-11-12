@@ -43,7 +43,14 @@ let of_filename filename =
   let root, digits = split_root_and_digits root_with_digits in
   match digits with
   | "" -> constructor root
-  | x -> Number (Int.of_string x, constructor root)
+  | _ ->
+    (* If the digits have a leading 0, [digits <> (Int.to_string (Int.of_string digits))].
+       This causes issues when cycling, so we treat the whole (root + digits) as the
+       filename in that case. *)
+    let parsed = Int.of_string digits in
+    if String.equal (Int.to_string parsed) digits
+    then Number (parsed, constructor root)
+    else constructor (root ^ digits)
 ;;
 
 let rec get_root = function

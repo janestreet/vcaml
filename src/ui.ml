@@ -139,7 +139,7 @@ module Untested = struct
 end
 
 (* These functions are part of the Neovim API but are not exposed in VCaml. *)
-module Unused = struct
+module _ = struct
   let (_ : _) = Nvim_internal.nvim_ui_set_option
   let (_ : _) = Nvim_internal.nvim_ui_try_resize
 end

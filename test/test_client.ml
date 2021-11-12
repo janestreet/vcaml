@@ -14,23 +14,17 @@ module Default = struct
   let time_source = Time_source.read_only (Time_source.create ~now:Time_ns.epoch ())
 end
 
-let args =
-  [ "--headless"
-  ; (* Start the editor without a gui *)
-    "-n" (* Disable swapfiles *)
-  ; "--embed"
-  (* use stdin and stdout instead of unix pipe for communication with the
-     plugin *)
-  ; "--clean" (* Start with no init.vim or shada file *)
-  ; "--listen"
-  (* There is some undocumented internal limit for the socket length (it doesn't appear in
-     `:h limits`) so we use a relative path (relative to the temporary working dir). *)
-  ; "./socket"
-  ]
-;;
+(* Start the editor without a gui, use stdin and stdout instead of Unix pipe for
+   communication with the plugin, place socket relative to the temporary working directory
+   since there's some undocumented internal limit for the socket length (it doesn't appear
+   in `:h limits). *)
+let required_args = [ "--headless"; "--embed"; "--listen"; "./socket" ]
+
+(* Start with no init.vim, no shada file, and no swap files. *)
+let default_args = [ "--clean"; "-n" ]
 
 let with_client
-      ?(args = args)
+      ?(args = default_args)
       ?env
       ?links
       ?(on_error = Default.on_error)
@@ -40,6 +34,7 @@ let with_client
   =
   Expect_test_helpers_async.within_temp_dir ?links (fun () ->
     let nvim_log_file = "nvim_low_level_log.txt" in
+    let args = required_args @ args in
     let%bind working_dir = Sys.getcwd () in
     let env =
       let env =
