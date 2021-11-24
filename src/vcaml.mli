@@ -31,14 +31,18 @@ module Client : sig
       with the information necessary to construct the [Msgpack_rpc] channel. *)
   module Connection_type : sig
     type _ t =
-      | Unix : string -> Client.t t
+      | Unix : [ `Child | `Socket of string ] -> Client.t t
       (** Neovim opens up a Unix domain socket that plugins can connect to, so VCaml (when
-          given a path to this socket), can connect and start talking to Neovim.
-
-          A note on using this kind of connection: if the VCaml plugin is being run as a
-          bang (!) command, api calls such as command and command_output may hang, as they
-          must wait until the invocation of the plugin terminates before being executed by
-          Neovim. *)
+          given a path to this socket), can connect and start talking to Neovim. If the
+          VCaml plugin is being launched from within Neovim the [jobstart] command should
+          be used to launch it asynchronously. If it is launched synchronously (e.g., with
+          [!]) and it invokes a (non-"fast") API call, Neovim and the plugin will deadlock
+          because Neovim will enqueue the call on its event loop but it cannot process it
+          until the synchronous invocation returns. Calling [jobwait] immediately on the
+          job id returned by [jobstart] without yielding to Neovim's event loop will
+          deadlock for the same reason. To perform a synchronous task, first launch the
+          plugin asynchrounously with [jobstart], then communicate with it over a
+          synchronous RPC using [rpcrequest]. *)
       | Embed :
           { prog : string
           ; args : string list
@@ -63,10 +67,10 @@ module Client : sig
       messages. [on_error_event] is invoked when Neovim sends us an asynchronous error
       event to inform us that it encountered a problem with a message we sent. *)
   val attach
-    :  ?close_reader_and_writer_on_disconnect:bool (* Default: [true] *)
+    :  ?close_reader_and_writer_on_disconnect:(* Default: [true] *) bool
+    -> ?on_error:((* Default: raise *) Error.t -> unit)
+    -> ?on_error_event:((* Default: raise *) Error_type.t -> message:string -> unit)
     -> 'a Connection_type.t
-    -> on_error:(Error.t -> unit)
-    -> on_error_event:(Error_type.t -> message:string -> unit)
     -> time_source:Time_source.t
     -> 'a Deferred.Or_error.t
 

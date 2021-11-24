@@ -1,3 +1,2 @@
-(library (name mli_plugin)
- (libraries async core_kernel.core re_jane vcaml vcaml_plugin)
+(library (name mli_plugin) (libraries async core_kernel.core re_jane vcaml)
  (preprocess (pps ppx_jane)))

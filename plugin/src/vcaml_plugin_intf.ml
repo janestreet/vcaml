@@ -52,18 +52,6 @@ module Raise_on_any_error : Error_handlers = struct
   ;;
 end
 
-module type Oneshot_arg = sig
-  include Error_handlers
-
-  val execute : Client.t -> unit Deferred.Or_error.t
-end
-
-module type Oneshot_s = sig
-  val run : unit -> unit Deferred.Or_error.t
-  val run_for_testing : Client.t -> unit Deferred.Or_error.t
-  val command : summary:string -> unit -> Core.Command.t
-end
-
 module type Persistent_arg = sig
   include Error_handlers
 
@@ -94,13 +82,6 @@ end
 
 module type Vcaml_plugin = sig
   module Raise_on_any_error = Raise_on_any_error
-
-  module Oneshot : sig
-    module type Arg = Oneshot_arg
-    module type S = Oneshot_s
-
-    module Make (O : Arg) : S
-  end
 
   module Persistent : sig
     module type Arg = Persistent_arg

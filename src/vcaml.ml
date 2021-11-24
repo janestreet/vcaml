@@ -32,7 +32,7 @@ module Client = struct
 
   module Connection_type = struct
     type _ t =
-      | Unix : string -> Client.t t
+      | Unix : [ `Child | `Socket of string ] -> Client.t t
       | Embed :
           { prog : string
           ; args : string list
@@ -47,9 +47,10 @@ module Client = struct
   let attach
         (type a)
         ?(close_reader_and_writer_on_disconnect = true)
+        ?(on_error = Error.raise)
+        ?(on_error_event =
+          fun error_type ~message -> raise_s [%message message (error_type : Error_type.t)])
         (connection_type : a Connection_type.t)
-        ~on_error
-        ~on_error_event
         ~time_source
     : a Deferred.Or_error.t
     =
@@ -62,9 +63,14 @@ module Client = struct
       Transport.attach connection ~on_error ~on_error_event ~time_source
     in
     match connection_type with
-    | Unix sock_name ->
+    | Unix socket ->
+      let socket =
+        match socket with
+        | `Socket socket -> socket
+        | `Child -> Sys.getenv_exn "NVIM_LISTEN_ADDRESS"
+      in
       make_client
-        (Msgpack_unix.open_from_filename sock_name ~close_reader_and_writer_on_disconnect)
+        (Msgpack_unix.open_from_filename socket ~close_reader_and_writer_on_disconnect)
     | Embed { prog; args; working_dir; env } ->
       (match List.exists args ~f:(String.equal "--embed") with
        | false ->

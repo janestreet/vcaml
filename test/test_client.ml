@@ -287,7 +287,7 @@ let socket_client
       ?(time_source = Default.time_source)
       socket
   =
-  Vcaml.Client.attach ~on_error ~on_error_event ~time_source (Unix socket)
+  Vcaml.Client.attach ~on_error ~on_error_event ~time_source (Unix (`Socket socket))
 ;;
 
 module For_debugging = struct
@@ -299,7 +299,8 @@ module For_debugging = struct
         f
     =
     let%bind client =
-      Vcaml.Client.attach ~on_error ~on_error_event ~time_source (Unix socket) >>| ok_exn
+      Vcaml.Client.attach ~on_error ~on_error_event ~time_source (Unix (`Socket socket))
+      >>| ok_exn
     in
     let%bind attached_uis =
       Vcaml.run_join [%here] client Vcaml.Ui.describe_attached_uis >>| ok_exn

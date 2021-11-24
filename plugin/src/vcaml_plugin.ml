@@ -4,36 +4,6 @@ open Vcaml
 module Rpc_handler = Vcaml_plugin_intf.Rpc_handler
 module Raise_on_any_error = Vcaml_plugin_intf.Raise_on_any_error
 
-let get_realtime_client ~on_error ~on_error_event =
-  let pipe = Sys.getenv_exn "NVIM_LISTEN_ADDRESS" in
-  Client.attach
-    (Unix pipe)
-    ~on_error
-    ~on_error_event
-    ~time_source:(Time_source.wall_clock ())
-;;
-
-module Oneshot = struct
-  module type Arg = Vcaml_plugin_intf.Oneshot_arg
-  module type S = Vcaml_plugin_intf.Oneshot_s
-
-  module Make (O : Arg) = struct
-    let run_for_testing = O.execute
-
-    let run () =
-      let open Deferred.Or_error.Let_syntax in
-      let%bind client =
-        get_realtime_client ~on_error:O.on_error ~on_error_event:O.on_error_event
-      in
-      O.execute client
-    ;;
-
-    let command ~summary () =
-      Async.Command.async_or_error ~summary (Core.Command.Param.return (fun () -> run ()))
-    ;;
-  end
-end
-
 module Persistent = struct
   module type Arg = Vcaml_plugin_intf.Persistent_arg
   module type S = Vcaml_plugin_intf.Persistent_s
@@ -95,7 +65,7 @@ module Persistent = struct
           ~chan_id
           ~vimscript_notify_fn:P.vimscript_notify_fn
       in
-      let%bind () = during_plugin ~client ~chan_id ~state in
+      let%bind () = during_plugin ~chan_id ~state in
       let%bind () = Deferred.ok (Ivar.read terminate_var) in
       let%bind () = P.on_shutdown client state in
       return state
@@ -106,16 +76,18 @@ module Persistent = struct
     let run () =
       let open Deferred.Or_error.Let_syntax in
       let%bind client =
-        get_realtime_client ~on_error:P.on_error ~on_error_event:P.on_error_event
+        Client.attach
+          (Unix `Child)
+          ~on_error:P.on_error
+          ~on_error_event:P.on_error_event
+          ~time_source:(Time_source.wall_clock ())
       in
-      let%bind _state =
-        run_internal ~client ~during_plugin:(fun ~client:_ -> ignore_during_plugin)
-      in
+      let%bind _state = run_internal ~client ~during_plugin:ignore_during_plugin in
       return ()
     ;;
 
     let run_for_testing ?(during_plugin = ignore_during_plugin) client =
-      run_internal ~client ~during_plugin:(fun ~client:_ -> during_plugin)
+      run_internal ~client ~during_plugin
     ;;
 
     let command ~summary () =

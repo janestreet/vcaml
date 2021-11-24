@@ -13,7 +13,7 @@ let print_messages client =
 let%expect_test "plugin echoes a message" =
   let%map () =
     Vcaml_test.with_client (fun client ->
-      let%bind.Deferred.Or_error () = Hello_world.For_testing.run client in
+      let%bind.Deferred.Or_error () = Hello_world.For_testing.echo_hello_world client in
       print_messages client)
   in
   [%expect "(message \"Hello world!\")"]

@@ -11,8 +11,8 @@ module Buffer_data = struct
     }
 
   let fetch_from_vim client =
-    let%bind buffer = Nvim.get_current_buf |> Vcaml.run_join [%here] client in
-    let%bind filename = Buffer.get_name ~buffer |> Vcaml.run_join [%here] client in
+    let%bind buffer = Nvim.get_current_buf |> run_join [%here] client in
+    let%bind filename = Buffer.get_name ~buffer |> run_join [%here] client in
     let%bind.Deferred file_patterns = File_pattern.list filename in
     let current_file_pattern = File_pattern.of_filename filename in
     let%bind.Deferred is_redundant_mli =
@@ -24,88 +24,99 @@ module Buffer_data = struct
   ;;
 end
 
-let swap_vim_in_direction swap_in_direction client =
+let swap_vim_in_direction swap_in_direction client ~sink =
   let%bind { current_file_pattern; file_patterns; is_redundant_mli } =
     Buffer_data.fetch_from_vim client
   in
   match swap_in_direction ~current_file_pattern ~is_redundant_mli ~file_patterns with
   | None -> return ()
   | Some file_pattern ->
-    let%bind new_buffer =
-      Buffer.find_by_name_or_create ~name:(File_pattern.to_filename file_pattern)
-      |> Vcaml.run_join [%here] client
-    in
-    Nvim.set_current_buf ~buffer:new_buffer |> Vcaml.run_join [%here] client
+    Nvim.command ~command:[%string {| %{sink} %{File_pattern.to_filename file_pattern} |}]
+    |> run_join [%here] client
 ;;
 
-module Echo_file_patterns = Vcaml_plugin.Oneshot.Make (struct
-    include Vcaml_plugin.Raise_on_any_error
+let next_file_pattern = swap_vim_in_direction File_pattern.next
+let prev_file_pattern = swap_vim_in_direction File_pattern.prev
 
-    let execute client =
-      let%bind { file_patterns; _ } = Buffer_data.fetch_from_vim client in
-      let stringified_file_list =
-        List.map ~f:File_pattern.to_short_filename file_patterns |> String.concat ~sep:", "
-      in
-      Nvim.command ~command:(Printf.sprintf "echom \"%s\"" stringified_file_list)
-      |> Vcaml.run_join [%here] client
-    ;;
-  end)
+let echo_file_patterns client =
+  let%bind { file_patterns; _ } = Buffer_data.fetch_from_vim client in
+  let stringified_file_list =
+    List.map ~f:File_pattern.to_short_filename file_patterns |> String.concat ~sep:", "
+  in
+  Nvim.command ~command:(Printf.sprintf "echom \"%s\"" stringified_file_list)
+  |> run_join [%here] client
+;;
 
-module List_file_patterns_in_fzf = Vcaml_plugin.Oneshot.Make (struct
-    include Vcaml_plugin.Raise_on_any_error
-
-    let run_fzf =
-      wrap_viml_function ~function_name:"fzf#run" ~type_:Defun.Vim.(unary Object Nil)
-    ;;
-
-    let execute client =
-      let%bind { file_patterns; _ } = Buffer_data.fetch_from_vim client in
-      match file_patterns with
-      | [] -> return ()
-      | hd :: _ as file_patterns ->
-        let lines = List.map ~f:File_pattern.to_short_filename file_patterns in
-        let fzf_config =
-          Msgpack.Map
-            [ String "source", Array (List.map ~f:(fun line -> Msgpack.String line) lines)
-            ; String "down", Integer (List.length lines + 2)
-            ; String "sink", String "e"
-            ; String "dir", String (File_pattern.dirname hd)
-            ]
-        in
-        let%bind () = Vcaml.run_join [%here] client (run_fzf fzf_config) in
-        return ()
-    ;;
-  end)
-
-module Next_file_pattern = Vcaml_plugin.Oneshot.Make (struct
-    include Vcaml_plugin.Raise_on_any_error
-
-    let execute = swap_vim_in_direction File_pattern.next
-  end)
-
-module Prev_file_pattern = Vcaml_plugin.Oneshot.Make (struct
-    include Vcaml_plugin.Raise_on_any_error
-
-    let execute = swap_vim_in_direction File_pattern.prev
-  end)
+let list_file_patterns_in_fzf client =
+  let run_fzf =
+    wrap_viml_function ~function_name:"MliCyclerFzf" ~type_:Defun.Vim.(unary Object Nil)
+  in
+  let%bind { file_patterns; _ } = Buffer_data.fetch_from_vim client in
+  match file_patterns with
+  | [] -> return ()
+  | hd :: _ as file_patterns ->
+    let lines = List.map ~f:File_pattern.to_short_filename file_patterns in
+    let config =
+      Msgpack.Map
+        [ String "source", Array (List.map ~f:(fun line -> Msgpack.String line) lines)
+        ; String "down", Integer (List.length lines + 2)
+        ; String "dir", String (File_pattern.dirname hd)
+        ]
+    in
+    let%bind () = run_join [%here] client (run_fzf config) in
+    return ()
+;;
 
 let main =
-  Core.Command.group
+  let module Command = Async.Command in
+  let run f () =
+    let%bind client =
+      Client.attach (Unix `Child) ~time_source:(Time_source.wall_clock ())
+    in
+    f client
+  in
+  Command.group
     ~summary:"plugin to cycle between ml, mli, and intf files"
     [ ( "list-fzf"
-      , List_file_patterns_in_fzf.command
+      , Command.async_or_error
           ~summary:"list all possible files to cycle through in fzf"
-          () )
+          (Command.Param.return (run list_file_patterns_in_fzf)) )
     ; ( "list"
-      , Echo_file_patterns.command ~summary:"echo all possible files to cycle through" ()
-      )
+      , Command.async_or_error
+          ~summary:"echo all possible files to cycle through"
+          (Command.Param.return (run echo_file_patterns)) )
     ; ( "next"
-      , Next_file_pattern.command
+      , Command.async_or_error
           ~summary:"switch the current buffer to the next file in the list"
-          () )
+          (let%map_open.Command () = return ()
+           and sink =
+             flag_optional_with_default_doc
+               "sink"
+               string
+               [%sexp_of: string]
+               ~default:"edit"
+               ~doc:"STRING Neovim command to invoke with next file as argument"
+           in
+           run (next_file_pattern ~sink)) )
     ; ( "prev"
-      , Prev_file_pattern.command
-          ~summary:"switch the current buffer to the prev file in the list"
-          () )
+      , Command.async_or_error
+          ~summary:"switch the current buffer to the previous file in the list"
+          (let%map_open.Command () = return ()
+           and sink =
+             flag_optional_with_default_doc
+               "sink"
+               string
+               [%sexp_of: string]
+               ~default:"edit"
+               ~doc:"STRING Neovim command to invoke with previous file as argument"
+           in
+           run (prev_file_pattern ~sink)) )
     ]
 ;;
+
+module For_testing = struct
+  let next_file_pattern = next_file_pattern ~sink:"edit"
+  let prev_file_pattern = prev_file_pattern ~sink:"edit"
+  let echo_file_patterns = echo_file_patterns
+  let list_file_patterns_in_fzf = list_file_patterns_in_fzf
+end

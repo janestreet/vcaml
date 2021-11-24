@@ -9,14 +9,28 @@ let s:bin_path = fnamemodify(resolve(expand('<sfile>:p')), ':h').'/bin/main.exe'
 
 " Goes to the next ml/mli/intf file in the list of ml/mli/intf files for the
 " current buffer.
-function! s:next()
-  call jobstart([s:bin_path, 'next'])
+function! s:next(...)
+  if a:0 == 0
+    call jobstart([s:bin_path, 'next'])
+  else
+    call jobstart([s:bin_path, 'next', "-sink", a:1])
+  endif
 endfunction
 
 " Goes to the next ml/mli/intf file in the list of ml/mli/intf files for the
 " current buffer.
-function! s:previous()
-  call jobstart([s:bin_path, 'prev'])
+function! s:previous(...)
+  if a:0 == 0
+    call jobstart([s:bin_path, 'prev'])
+  else
+    call jobstart([s:bin_path, 'prev', "-sink", a:1])
+  endif
+endfunction
+
+" This helper function is needed because we can't pass the result of [fzf#wrap] over
+" Msgpack RPC to then call [fzf#run] because the sink value is a funcref.
+function! MliCyclerFzf(config)
+  call fzf#run(fzf#wrap(a:config))
 endfunction
 
 " Displays the list of ml/mli/intf files for the current buffer in an fzf
@@ -32,8 +46,8 @@ function! s:list()
 endfunction
 
 function! s:set_up_commands()
-  command! -bar -buffer MliCyclerNext call s:next()
-  command! -bar -buffer MliCyclerPrev call s:previous()
+  command! -bar -buffer -nargs=? MliCyclerNext call s:next(<f-args>)
+  command! -bar -buffer -nargs=? MliCyclerPrev call s:previous(<f-args>)
   command! -bar -buffer MliCyclerListFzf call s:list_fzf()
   command! -bar -buffer MliCyclerList call s:list()
 endfunction
