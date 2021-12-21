@@ -4,15 +4,12 @@ open! Async
 let neovim_path = Core.Sys.getenv "NEOVIM_PATH" |> Option.value ~default:"nvim"
 let hundred_ms = Time_ns.Span.create ~ms:100 ()
 
-module Default = struct
-  let on_error = Error.raise
+let time_source_at_epoch =
+  Time_source.read_only (Time_source.create ~now:Time_ns.epoch ())
+;;
 
-  let on_error_event error_type ~message =
-    raise_s [%message message (error_type : Vcaml.Error_type.t)]
-  ;;
-
-  let time_source = Time_source.read_only (Time_source.create ~now:Time_ns.epoch ())
-end
+(* Start with no init.vim, no shada file, and no swap files. *)
+let default_args = [ "--clean"; "-n" ]
 
 (* Start the editor without a gui, use stdin and stdout instead of Unix pipe for
    communication with the plugin, place socket relative to the temporary working directory
@@ -20,16 +17,13 @@ end
    in `:h limits). *)
 let required_args = [ "--headless"; "--embed"; "--listen"; "./socket" ]
 
-(* Start with no init.vim, no shada file, and no swap files. *)
-let default_args = [ "--clean"; "-n" ]
-
 let with_client
       ?(args = default_args)
       ?env
       ?links
-      ?(on_error = Default.on_error)
-      ?(on_error_event = Default.on_error_event)
-      ?(time_source = Default.time_source)
+      ?(time_source = time_source_at_epoch)
+      ?(on_error = `Raise)
+      ?(before_connecting = ignore)
       f
   =
   Expect_test_helpers_async.within_temp_dir ?links (fun () ->
@@ -46,11 +40,12 @@ let with_client
       in
       `Replace_raw env
     in
+    let client = Vcaml.Client.create ~on_error in
+    before_connecting client;
     let%bind client, _process =
       Vcaml.Client.attach
+        client
         (Embed { prog = neovim_path; args; working_dir; env })
-        ~on_error
-        ~on_error_event
         ~time_source
       >>| ok_exn
     in
@@ -86,7 +81,7 @@ module Test_ui = struct
     ; mutable cursor_row : int
     ; flushed : [ `Awaiting_first_flush | `Flush of string | `Detached ] Mvar.Read_write.t
     ; ui : Vcaml.Ui.t Set_once.t
-    ; client : Vcaml.Client.t
+    ; client : [ `connected ] Vcaml.Client.t
     }
 
   let ui_to_string t =
@@ -157,6 +152,22 @@ module Test_ui = struct
         Array.iteri row ~f:(fun x c ->
           if x < width && y < height then new_array.(y).(x) <- c));
       t.buffer <- new_array
+    | Grid_scroll { grid = 1; top; bot; left = _; right = _; rows; cols = 0 } ->
+      (* In Neovim 0.5.0, [cols] is fixed at [0] so we never need [left] or [right]. *)
+      unflush t;
+      (* Establish our understanding of grid scrolling. If this is violated we are
+         probably misinterpreting this event. *)
+      assert (abs rows < bot - top);
+      (match Sign.of_int rows with
+       | Zero -> ()
+       | Neg ->
+         for i = bot - 1 downto top - rows do
+           t.buffer.(i) <- Array.copy t.buffer.(i + rows)
+         done
+       | Pos ->
+         for i = top to bot - 1 - rows do
+           t.buffer.(i) <- Array.copy t.buffer.(i + rows)
+         done)
     | Win_viewport _ ->
       (* This only applies to ext_multigrid but is sent anyway due to a bug:
          https://github.com/neovim/neovim/issues/14956 *)
@@ -168,6 +179,7 @@ module Test_ui = struct
     | Mode_change _
     | Mode_info_set _
     | Mouse_off
+    | Mouse_on
     | Option_set _
     | Update_bg _
     | Update_fg _
@@ -195,6 +207,7 @@ module Test_ui = struct
         ~height
         ~options:Vcaml.Ui.Options.default
         ~on_event:(apply t)
+        ~on_parse_error:`Raise
     in
     Set_once.set_exn t.ui [%here] ui;
     return t
@@ -276,31 +289,34 @@ let wait_until_text ?(timeout = Time_ns.Span.of_int_sec 2) here ui ~f =
   wait_until_text_stabilizes ()
 ;;
 
-let with_ui_client ?on_error ?on_error_event ?width ?height ?time_source f =
-  with_client ?on_error ?on_error_event ?time_source (fun client ->
+let with_ui_client ?width ?height ?time_source ?on_error ?before_connecting f =
+  with_client ?time_source ?on_error ?before_connecting (fun client ->
     Test_ui.with_ui [%here] ?width ?height client (fun ui -> f client ui))
 ;;
 
 let socket_client
-      ?(on_error = Default.on_error)
-      ?(on_error_event = Default.on_error_event)
-      ?(time_source = Default.time_source)
+      ?(time_source = time_source_at_epoch)
+      ?(on_error = `Raise)
+      ?(before_connecting = ignore)
       socket
   =
-  Vcaml.Client.attach ~on_error ~on_error_event ~time_source (Unix (`Socket socket))
+  let client = Vcaml.Client.create ~on_error in
+  before_connecting client;
+  Vcaml.Client.attach client ~time_source (Unix (`Socket socket))
 ;;
 
 module For_debugging = struct
   let with_ui_client
-        ?(on_error = Default.on_error)
-        ?(on_error_event = Default.on_error_event)
-        ?(time_source = Default.time_source)
+        ?(time_source = time_source_at_epoch)
+        ?(on_error = `Raise)
+        ?(before_connecting = ignore)
         ~socket
         f
     =
     let%bind client =
-      Vcaml.Client.attach ~on_error ~on_error_event ~time_source (Unix (`Socket socket))
-      >>| ok_exn
+      let client = Vcaml.Client.create ~on_error in
+      before_connecting client;
+      Vcaml.Client.attach client ~time_source (Unix (`Socket socket)) >>| ok_exn
     in
     let%bind attached_uis =
       Vcaml.run_join [%here] client Vcaml.Ui.describe_attached_uis >>| ok_exn
@@ -319,3 +335,80 @@ module For_debugging = struct
     result
   ;;
 end
+
+let%expect_test "We cannot have two blocking RPCs with the same name" =
+  let open Vcaml in
+  let register_dummy_rpc_handler ~name client =
+    Vcaml.register_request_blocking
+      client
+      ~name
+      ~type_:Defun.Ocaml.Sync.(Nil @-> return Nil)
+      ~f:(fun ~keyboard_interrupted:_ ~client:_ () -> Deferred.Or_error.return ())
+  in
+  let%map () =
+    with_client (fun client ->
+      register_dummy_rpc_handler client ~name:"test";
+      Expect_test_helpers_base.require_does_raise [%here] (fun () ->
+        register_dummy_rpc_handler client ~name:"test");
+      Deferred.Or_error.return ())
+  in
+  [%expect {| (Failure "Already defined synchronous RPC 'test'") |}]
+;;
+
+let%expect_test "We cannot have two async RPCs with the same name" =
+  let open Vcaml in
+  let register_dummy_rpc_handler ~name client =
+    Vcaml.register_request_async
+      client
+      ~name
+      ~type_:Defun.Ocaml.Async.(Nil @-> unit)
+      ~f:(fun ~client:_ () -> Deferred.Or_error.return ())
+  in
+  let%map () =
+    with_client (fun client ->
+      register_dummy_rpc_handler client ~name:"test";
+      Expect_test_helpers_base.require_does_raise [%here] (fun () ->
+        register_dummy_rpc_handler client ~name:"test");
+      Deferred.Or_error.return ())
+  in
+  [%expect {| (Failure "Already defined asynchronous RPC 'test'") |}]
+;;
+
+(* We allow this in case a plugin wants to implement slightly different semantics based
+   on whether it is called with [rpcrequest] or [rpcnotify]. *)
+let%expect_test "We can have an async RPC and a blocking RPC with the same name" =
+  let open Vcaml in
+  let%map () =
+    with_client (fun client ->
+      let name = "test" in
+      Vcaml.register_request_blocking
+        client
+        ~name
+        ~type_:Defun.Ocaml.Sync.(Nil @-> return Nil)
+        ~f:(fun ~keyboard_interrupted:_ ~client:_ () -> Deferred.Or_error.return ());
+      Vcaml.register_request_async
+        client
+        ~name
+        ~type_:Defun.Ocaml.Async.(Nil @-> unit)
+        ~f:(fun ~client:_ () -> Deferred.Or_error.return ());
+      Deferred.Or_error.return ())
+  in
+  [%expect {| |}]
+;;
+
+let%expect_test "We can have two separate Embedded connections with RPC handlers sharing \
+                 names without error (no bleeding state)"
+  =
+  let open Vcaml in
+  let register_dummy_rpc_handler ~name client =
+    Vcaml.register_request_blocking
+      client
+      ~name
+      ~type_:Defun.Ocaml.Sync.(Nil @-> return Nil)
+      ~f:(fun ~keyboard_interrupted:_ ~client:_ () -> Deferred.Or_error.return ());
+    Deferred.Or_error.return ()
+  in
+  let%bind () = with_client (register_dummy_rpc_handler ~name:"test") in
+  let%map () = with_client (register_dummy_rpc_handler ~name:"test") in
+  [%expect {| |}]
+;;

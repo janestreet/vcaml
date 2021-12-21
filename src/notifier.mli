@@ -1,8 +1,9 @@
+open Core
+
 (** A [Notifier.t] sends API calls as asynchronous notifications. In most cases you don't
     need this; you can just send a regular request and not wait for the result. However,
     there are some API calls that are documented as being more performant when sent as
     notifications. *)
-
 module Notification : sig
   type t
 
@@ -42,8 +43,13 @@ end
 
 module Error_type = Nvim_internal.Error_type
 
-val notify : Client.t -> Notification.t -> unit
+val notify : [ `connected ] Client.t -> Notification.t -> unit
+val error : [ `connected ] Client.t -> Error.t -> unit
 
 module For_testing : sig
-  val send_raw : Client.t -> function_name:string -> params:Msgpack.t list -> unit
+  val send_raw
+    :  [ `connected ] Client.t
+    -> function_name:string
+    -> params:Msgpack.t list
+    -> unit
 end

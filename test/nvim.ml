@@ -72,7 +72,7 @@ let%expect_test "set_current_buf" =
         Nvim.set_current_buf ~buffer:expected_buf |> run_join [%here] client
       in
       let%bind actual_buf = Nvim.get_current_buf |> run_join [%here] client in
-      print_s [%message (expected_buf : Buffer.t) (actual_buf : Vcaml.Buffer.t)];
+      print_s [%message (expected_buf : Buffer.t) (actual_buf : Buffer.t)];
       return ())
   in
   [%expect "((expected_buf 1) (actual_buf 1))"];
@@ -449,7 +449,9 @@ let%expect_test "get_hl_by_id" =
     with_client (fun client ->
       let open Deferred.Or_error.Let_syntax in
       let get_hl_id =
-        wrap_viml_function ~type_:Defun.Vim.(unary String Integer) ~function_name:"hlID"
+        wrap_viml_function
+          ~type_:Defun.Vim.(String @-> return Integer)
+          ~function_name:"hlID"
       in
       let%bind hl_id = get_hl_id "ErrorMsg" |> run_join [%here] client in
       let%bind color256 =
@@ -639,7 +641,7 @@ module _ = struct
         let%bind () = Pipe.write writer "hello\n" |> Deferred.ok in
         let%bind () = Pipe.write writer "world!" |> Deferred.ok in
         Pipe.close writer;
-        let%bind () = flushed |> Deferred.ok in
+        let%bind () = flushed in
         let%bind lines =
           Buffer.get_lines
             ~buffer:(Buffer.Unsafe.of_int 0)
@@ -696,7 +698,7 @@ module _ = struct
         let%bind () = switch_buffers ~buffer:alt_buf |> Deferred.ok in
         let%bind () = Pipe.write writer "world!" |> Deferred.ok in
         Pipe.close writer;
-        let%bind () = flushed |> Deferred.ok in
+        let%bind () = flushed in
         let%bind lines = get_lines () in
         print_s [%sexp (lines : string list)];
         return ())
@@ -708,48 +710,6 @@ module _ = struct
     return ()
   ;;
 end
-
-let%expect_test "Failure to parse async request" =
-  let failed_to_parse = Ivar.create () in
-  let%bind rpcnotify_return_value =
-    with_client (fun client ->
-      let open Deferred.Or_error.Let_syntax in
-      let%bind channel =
-        let%map channel = get_current_chan ~client in
-        channel.id
-      in
-      let call_async_func =
-        wrap_viml_function
-          ~type_:Defun.Vim.(Integer @-> String @-> String @-> return Integer)
-          ~function_name:"rpcnotify"
-          channel
-          "async_func"
-      in
-      register_request_async
-        [%here]
-        client
-        ~on_error:(fun error ->
-          print_s [%sexp (error : Error.t)];
-          Ivar.fill failed_to_parse ())
-        ~name:"async_func"
-        ~type_:Defun.Ocaml.Async.(Nil @-> unit)
-        ~f:(fun () ->
-          print_s [%message "Parsing unexpectedly succeeded."];
-          Deferred.return ());
-      call_async_func "bad argument" |> run_join [%here] client)
-  in
-  assert (rpcnotify_return_value = 1);
-  let%bind result = with_timeout (Time.Span.of_int_sec 3) (Ivar.read failed_to_parse) in
-  print_s [%sexp (result : [ `Result of unit | `Timeout ])];
-  [%expect
-    {|
-    (((method_name async_func) (params ((String "bad argument"))))
-     ("Wrong argument type"
-      ("witness does not match message type" (witness Nil)
-       (msg (String "bad argument")))))
-    (Result ()) |}];
-  return ()
-;;
 
 let%expect_test "Error in the middle of an atomic call is returned correctly" =
   Backtrace.elide := true;
@@ -801,13 +761,12 @@ let%expect_test "Reentrant client" =
         client
         ~name:"factorial"
         ~type_:Defun.Ocaml.Sync.(Type.Integer @-> return Integer)
-        ~f:(fun ~keyboard_interrupted:_ n ->
+        ~f:(fun ~keyboard_interrupted:_ ~client n ->
           match n with
           | 0 -> return 1
           | _ ->
             let%map result = run_join [%here] client (factorial (n - 1)) in
-            n * result)
-      |> ok_exn;
+            n * result);
       run_join [%here] client (factorial 5))
   in
   let%bind result = with_timeout (Time.Span.of_int_sec 3) result in
@@ -851,7 +810,7 @@ let%expect_test "Varargs" =
         in
         let%bind () = Nvim.command ~command:"write" |> run_join [%here] client in
         let%bind () = Nvim.command ~command:"source %" |> run_join [%here] client in
-        let nvim_call_function ~keyboard_interrupted:_ func args =
+        let nvim_call_function ~keyboard_interrupted:_ ~client func args =
           wrap_viml_function
             ~type_:Defun.Vim.(String @-> Array Object @-> return Object)
             ~function_name:"nvim_call_function"
@@ -865,8 +824,7 @@ let%expect_test "Varargs" =
           ~type_:
             Defun.Ocaml.Sync.(
               String @-> Expert.varargs ~args_type:Object ~return_type:Object)
-          ~f:nvim_call_function
-        |> ok_exn;
+          ~f:nvim_call_function;
         let expr =
           sprintf
             !"TestDispatcher(function(\"rpcrequest\", [ %d, \"call\" ]))"
@@ -916,13 +874,12 @@ let%expect_test "Varargs (async)" =
         let%bind () = Nvim.command ~command:"write" |> run_join [%here] client in
         let%bind () = Nvim.command ~command:"source %" |> run_join [%here] client in
         register_request_async
-          [%here]
           client
           ~name:"print"
           ~type_:Defun.Ocaml.Async.(String @-> Expert.varargs Object)
-          ~f:(fun name args ->
+          ~f:(fun ~client:_ name args ->
             print_s [%message (name : string) (args : Msgpack.t list)];
-            Mvar.put printed ());
+            Mvar.put printed () |> Deferred.ok);
         let expr =
           sprintf !"TestPrinter(function(\"rpcnotify\", [ %d, \"print\" ]))" channel
         in
@@ -962,7 +919,9 @@ let%expect_test "Asynchronous write failure is returned to outstanding requests"
     Expect_test_helpers_async.within_temp_dir (fun () ->
       let%bind working_dir = Sys.getcwd () in
       let%bind client, nvim =
-        Vcaml.Client.attach
+        let client = Client.create ~on_error:`Raise in
+        Client.attach
+          client
           (Embed
              { prog = neovim_path
              ; args =
@@ -971,9 +930,8 @@ let%expect_test "Asynchronous write failure is returned to outstanding requests"
              ; env = `Extend []
              })
           ~close_reader_and_writer_on_disconnect
-          ~on_error:Default.on_error
-          ~on_error_event:Default.on_error_event
-          ~time_source:Default.time_source
+          ~time_source:
+            (Time_source.read_only (Time_source.create ~now:Time_ns.epoch ()))
         >>| ok_exn
       in
       Process.send_signal nvim Signal.term;
@@ -987,7 +945,7 @@ let%expect_test "Asynchronous write failure is returned to outstanding requests"
       in
       let%bind result = write_after_termination in
       print_s (omit_unstable_writer_info [%sexp (result : unit Or_error.t)]);
-      Vcaml.Client.close client)
+      Client.close client)
   in
   let%bind () = test ~close_reader_and_writer_on_disconnect:true in
   [%expect
@@ -1135,10 +1093,9 @@ let%expect_test "[rpcrequest] blocks other channels" =
               client
               ~name:function_name
               ~type_:Defun.Ocaml.Sync.(Nil @-> return Nil)
-              ~f:(fun ~keyboard_interrupted:_ () ->
+              ~f:(fun ~keyboard_interrupted:_ ~client:_ () ->
                 Ivar.fill blocking ();
-                Ivar.read result |> Deferred.ok)
-            |> ok_exn;
+                Ivar.read result |> Deferred.ok);
             let result_deferred = run_join [%here] client call_rpc in
             let%map () = Ivar.read blocking in
             fun response ->
@@ -1218,10 +1175,9 @@ let%expect_test "Plugin dying during [rpcrequest] does not bring down Neovim" =
               client
               ~name:function_name
               ~type_:Defun.Ocaml.Sync.(Nil @-> return Nil)
-              ~f:(fun ~keyboard_interrupted:_ () ->
+              ~f:(fun ~keyboard_interrupted:_ ~client:_ () ->
                 Ivar.fill blocking ();
-                Deferred.never ())
-            |> ok_exn;
+                Deferred.never ());
             don't_wait_for (run_join [%here] client call_rpc >>| ok_exn);
             Ivar.read blocking
           in
@@ -1288,15 +1244,16 @@ let%expect_test "Simple test of [Child] client" =
           let test () =
             let open Deferred.Or_error.Let_syntax in
             let%bind client =
+              let client = Client.create ~on_error:`Raise in
               (* We don't close the reader and writer on disconnect because we want
                  [Reader.stdin] and [Writer.stdout] to continue to work after restoring
                  the original stdin and stdout. *)
               Client.attach
                 ~close_reader_and_writer_on_disconnect:false
-                ~on_error:Default.on_error
-                ~on_error_event:Default.on_error_event
-                ~time_source:Default.time_source
-                Child
+                ~time_source:
+                  (Time_source.read_only (Time_source.create ~now:Time_ns.epoch ()))
+                client
+                Stdio
             in
             let%bind result =
               run_join
@@ -1427,12 +1384,11 @@ let on_keyboard_interrupt_abort_rpcrequest_and_notify_callback ~timeout ~time_so
         client
         ~name:function_name
         ~type_:Defun.Ocaml.Sync.(Nil @-> return Nil)
-        ~f:(fun ~keyboard_interrupted () ->
+        ~f:(fun ~keyboard_interrupted ~client () ->
           Ivar.fill blocking ();
           upon keyboard_interrupted (fun () -> print_endline "Keyboard interrupt!");
           let%bind () = Ivar.read sent_keys in
-          f client)
-      |> ok_exn;
+          f client);
       let%bind result =
         run_join
           [%here]

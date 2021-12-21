@@ -18,71 +18,89 @@ module Position = Position
 module Tabpage = Tabpage
 module Type = Nvim_internal.Phantom
 module Ui = Ui
+module Vcaml_error = Vcaml_error
 module Version = Nvim_internal.Version
 module Window = Window
 
-(** Version of Neovim for which this library is built. *)
+(** API version for which this library is built (not the same as the Neovim version). *)
 val version : Version.t
 
 module Client : sig
-  type t = Client.t
+  type 'state t = 'state Client.t
+
+  (** [on_error] is invoked when VCaml fails to parse a response from Neovim and when
+      Neovim sends us an asynchronous error event to inform us that it encountered a
+      problem with a message we sent. *)
+  val create
+    :  on_error:[ `Raise | `Call of Vcaml_error.t -> unit ]
+    -> [ `not_connected ] t
 
   (** A value of type [Connection_type.t] describes the type of connection to use, along
-      with the information necessary to construct the [Msgpack_rpc] channel. *)
+      with the information necessary to connect to Neovim.
+
+      With a [Unix] connection, the plugin communicates with Neovim over the unix domain
+      socket it uses to serve RPC requests. [Unix `Child] should be used if the plugin is
+      launched from within Neovim; if it is launched independently a path to the socket
+      will need to be provided.
+
+      With a [Stdio] connection, the plugin communicates with Neovim using its own stdin
+      and stdout (which means stdout cannot be used for logging). This connection type
+      should only be used if the plugin is launched from Neovim with [jobstart] with
+      [rpc:1] in [opts].
+
+      [Stdio] connections are useful for synchronous, "one-shot" plugins where you want to
+      synchronously start the process, communicate with Neovim, and shut down. To make
+      this work, after starting the plugin, issue an [rpcrequest], which will cause Neovim
+      to block. The plugin should register the requested RPC before connecting to Neovim
+      to ensure the RPC is defined at the time Neovim's request is handled. After handling
+      the request, the plugin should shut down. If you tried to do this with a [Unix]
+      connection then after the process is launched you would need to create a new channel
+      but Neovim can't do that while in the middle of processing whatever logic it's
+      currently executing that launched the process. To achieve synchronicity in this way
+      you'd need a continuation - after launching the process you'd need to yield to the
+      event loop so the channel could be established, and then the plugin would need to
+      invoke a callback in Neovim to continue.
+
+      The [Embed] connection is the inverse of the [Stdio] connection - instead of the
+      OCaml app being launched by Neovim, Neovim is launched by the OCaml app. Just as
+      in a [Stdio] connection the app's stdin and stdout are used for RPC communication,
+      here Neovim's stdin and stdout are used to communicate with the embedding process.
+      [Embed] is most useful for testing and for graphical applications that want to
+      embed Neovim for editing text. When [Embed] is used the [--embed] flag must be
+      passed in [args]. *)
   module Connection_type : sig
     type _ t =
-      | Unix : [ `Child | `Socket of string ] -> Client.t t
-      (** Neovim opens up a Unix domain socket that plugins can connect to, so VCaml (when
-          given a path to this socket), can connect and start talking to Neovim. If the
-          VCaml plugin is being launched from within Neovim the [jobstart] command should
-          be used to launch it asynchronously. If it is launched synchronously (e.g., with
-          [!]) and it invokes a (non-"fast") API call, Neovim and the plugin will deadlock
-          because Neovim will enqueue the call on its event loop but it cannot process it
-          until the synchronous invocation returns. Calling [jobwait] immediately on the
-          job id returned by [jobstart] without yielding to Neovim's event loop will
-          deadlock for the same reason. To perform a synchronous task, first launch the
-          plugin asynchrounously with [jobstart], then communicate with it over a
-          synchronous RPC using [rpcrequest]. *)
+      | Unix : [ `Child | `Socket of string ] -> [ `connected ] Client.t t
+      | Stdio : [ `connected ] Client.t t
       | Embed :
           { prog : string
           ; args : string list
           ; working_dir : string
           ; env : Core_unix.env
           }
-          -> (Client.t * Async.Process.t) t
-      (** VCaml spawns a Neovim instance with all of the provided parameters and then
-          communicates with it via its stdin and stdout. The [--embed] flag should be
-          passed in [args]. *)
-      | Child : Client.t t
-      (** The VCaml program is running as a child of Neovim and communicates with Neovim
-          via its own stdin and stdout. This can be done by invoking [jobstart] in Neovim
-          with [rpc:1] in [opts]. See `:h jobstart`. *)
+          -> ([ `connected ] Client.t * Async.Process.t) t
   end
 
-  (** Attach to Neovim over an RPC channel.
-
-      [on_error] is invoked when VCaml encounters a problem, e.g., failing to parse a
-      response from Neovim. It is also the default error handler in cases where an
-      optional error handler is not provided for handling errors for specific kinds of
-      messages. [on_error_event] is invoked when Neovim sends us an asynchronous error
-      event to inform us that it encountered a problem with a message we sent. *)
+  (** Attach to Neovim over an RPC channel. Once [attach] is called Neovim can start
+      sending RPC requests and notifications, so handlers should be registered in advance
+      with [register_request_async] and [register_request_blocking] as needed. Registering
+      more handlers after attaching is allowed. Calling [attach] twice will raise. *)
   val attach
     :  ?close_reader_and_writer_on_disconnect:(* Default: [true] *) bool
-    -> ?on_error:((* Default: raise *) Error.t -> unit)
-    -> ?on_error_event:((* Default: raise *) Error_type.t -> message:string -> unit)
+    -> [ `not_connected ] t
     -> 'a Connection_type.t
     -> time_source:Time_source.t
     -> 'a Deferred.Or_error.t
 
   (** Close the client and release the underlying file descriptors. Can be called safely
       multiple times. *)
-  val close : t -> unit Deferred.t
+  val close : [ `connected ] t -> unit Deferred.t
 
   (** Returns neovim's id for the channel over which neovim and the client communicate.
       This can be useful when you want to register an RPC event to fire upon a certain
       event happening in vim (e.g. keypress or autocmd), since registering events require
       the channel id. *)
-  val rpc_channel_id : t -> int
+  val rpc_channel_id : [ `connected ] t -> int
 end
 
 (** A ['a Api_call.t] is a thunked call to neovim returning a Msgpack-encoded ['a]. No RPC
@@ -114,29 +132,35 @@ module Api_call : sig
   module Or_error = Api_call.Or_error
 end
 
-val run : Source_code_position.t -> Client.t -> 'a Api_call.t -> 'a Deferred.Or_error.t
+val run
+  :  Source_code_position.t
+  -> [ `connected ] Client.t
+  -> 'a Api_call.t
+  -> 'a Deferred.Or_error.t
 
 val run_join
   :  Source_code_position.t
-  -> Client.t
+  -> [ `connected ] Client.t
   -> 'a Api_call.Or_error.t
   -> 'a Deferred.Or_error.t
 
 module Defun : sig
-  (** A [Defun.Vim.t] value is a reified value corresponding to the type of
-      a function. It is used by [wrap_viml_function] to produce a regular ocaml
-      function of the correct type. *)
+  (** A [Defun.Vim.t] value is a reified value corresponding to the type of a function. It
+      is used by [wrap_viml_function] to produce a regular ocaml function of the correct
+      type.
+
+      Important notes about [Nil]:
+
+      1. If you are wrapping a function that takes no arguments, just use [return T]. Do
+      not use [Nil @-> return T].
+
+      2. If you are wrapping a native (non-API) Vimscript function that does not have an
+      explicit return statement, its implicit return is [Integer 0], not [Nil]. *)
   module Vim : sig
     type ('f, 'leftmost_input, 'out) t
 
-    (** Wraps a [Type.t] to be used as the rightmost (return) type of this function. Note
-        that native (non-API) Vimscript functions always return a value (the default
-        return value is 0). *)
+    (** Wraps a [Type.t] to be used as the rightmost (return) type of this function. *)
     val return : 'a Type.t -> ('a Api_call.Or_error.t, unit, 'a) t
-
-    (** N.B. If you are wrapping a function that takes no arguments, just use [return T].
-        Do not use [unary Nil (return T)] or [Nil @-> return T]. *)
-    val unary : 'a Type.t -> 'b Type.t -> ('a -> 'b Api_call.Or_error.t, 'a, 'b) t
 
     (** Add an extra argument to an existing function arity.
 
@@ -170,11 +194,11 @@ module Defun : sig
     module Async : sig
       type 'f t
 
-      val unit : unit Deferred.t t
+      val unit : unit Deferred.Or_error.t t
       val ( @-> ) : 'a Type.t -> 'b t -> ('a -> 'b) t
 
       module Expert : sig
-        val varargs : 'a Type.t -> ('a list -> unit Deferred.t) t
+        val varargs : 'a Type.t -> ('a list -> unit Deferred.Or_error.t) t
       end
     end
   end
@@ -206,25 +230,43 @@ val wrap_viml_function
     Neovim during the blocking RPC, consider whether a keyboard interrupt should prevent
     those calls from being run.
 
-    Asynchronous requests cannot directly return values to Neovim, but they do not block
-    Neovim while running. They can be used to indirectly update Neovim and avoid blocking
-    user input and other events. *)
+    An async request will enqueue logic on Neovim's event loop instead of blocking.
+    Importantly, the state of the editor may have changed between the time the async
+    request was made and the time Neovim process any of its logic. *)
 val register_request_blocking
-  :  Client.t
+  :  _ Client.t
   -> name:string
   -> type_:('fn, 'leftmost) Defun.Ocaml.Sync.t
-  -> f:(keyboard_interrupted:unit Deferred.t -> 'fn)
-  -> unit Or_error.t
+  -> f:(keyboard_interrupted:unit Deferred.t -> client:[ `connected ] Client.t -> 'fn)
+  -> unit
 
 val register_request_async
-  :  ?on_error:(Error.t -> unit)
-  -> Source_code_position.t
-  -> Client.t
+  :  _ Client.t
   -> name:string
   -> type_:'fn Defun.Ocaml.Async.t
-  -> f:'fn
+  -> f:(client:[ `connected ] Client.t -> 'fn)
   -> unit
 
 module Expert : sig
   module Notifier = Notifier
+end
+
+(* These functions are exported solely for the vcaml_plugin library's use. Clients should
+   not call them. *)
+module Private : sig
+  val register_request_blocking
+    :  _ Client.t
+    -> name:string
+    -> type_:('fn, 'leftmost) Defun.Ocaml.Sync.t
+    -> f:(keyboard_interrupted:unit Deferred.t -> client:[ `connected ] Client.t -> 'fn)
+    -> wrap_f:((unit -> Msgpack.t Deferred.Or_error.t) -> Msgpack.t Deferred.Or_error.t)
+    -> unit
+
+  val register_request_async
+    :  _ Client.t
+    -> name:string
+    -> type_:'fn Defun.Ocaml.Async.t
+    -> f:(client:[ `connected ] Client.t -> 'fn)
+    -> wrap_f:((unit -> unit Deferred.Or_error.t) -> unit Deferred.Or_error.t)
+    -> unit
 end

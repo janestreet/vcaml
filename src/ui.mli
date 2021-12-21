@@ -37,13 +37,13 @@ type t
 (** Note that setting certain UI options implicitly sets other UI options despite the
     value passed here. See `:h ui-option` for details. *)
 val attach
-  :  ?on_error:(Error.t -> unit)
-  -> Source_code_position.t
-  -> Client.t
+  :  Source_code_position.t
+  -> [ `connected ] Client.t
   -> width:int
   -> height:int
   -> options:Nvim_internal.Ui_options.t
   -> on_event:(Event.t -> unit)
+  -> on_parse_error:[ `Raise | `Ignore | `Call of Error.t -> Msgpack_rpc.Event.t -> unit ]
   -> t Deferred.Or_error.t
 
 val detach : t -> Source_code_position.t -> unit Deferred.Or_error.t

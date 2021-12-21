@@ -254,6 +254,9 @@ let list_runtime_paths =
   List.map result ~f:Extract.string |> Or_error.combine_errors
 ;;
 
+let err_write ~str = Nvim_internal.nvim_err_write ~str |> Api_call.of_api_result
+let err_writeln ~str = Nvim_internal.nvim_err_writeln ~str |> Api_call.of_api_result
+
 module Fast = struct
   let get_mode =
     Nvim_internal.nvim_get_mode
@@ -317,8 +320,7 @@ module Fast = struct
     |> Api_call.Or_error.map ~f:(fun (true | false) -> ())
   ;;
 
-  let paste_stream here (client : Client.t) =
-    let T = Client.Private.eq in
+  let paste_stream here client =
     let open Async in
     let flushed = Ivar.create () in
     let writer =
@@ -344,8 +346,8 @@ module Fast = struct
             | Ok false ->
               (* Documentation says we must stop pasting when we receive [false]. *)
               force_stop ()
-            | Error error ->
-              client.on_error error;
+            | Error _ as error ->
+              Ivar.fill flushed error;
               force_stop ())
         in
         let%bind () =
@@ -359,9 +361,9 @@ module Fast = struct
             >>| tag_callsite here
             >>| (function
               | Ok () -> ()
-              | Error error -> client.on_error error)
+              | Error _ as error -> Ivar.fill flushed error)
         in
-        Ivar.fill flushed ();
+        Ivar.fill_if_empty flushed (Ok ());
         return ())
     in
     writer, Ivar.read flushed
@@ -450,8 +452,6 @@ module Untested = struct
   ;;
 
   let out_write ~str = Nvim_internal.nvim_out_write ~str |> Api_call.of_api_result
-  let err_write ~str = Nvim_internal.nvim_err_write ~str |> Api_call.of_api_result
-  let err_writeln ~str = Nvim_internal.nvim_err_writeln ~str |> Api_call.of_api_result
 
   let list_tabpages =
     let open Api_call.Let_syntax in

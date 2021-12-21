@@ -27,7 +27,6 @@ module Notification = struct
            this GADT, so it can have the type [i -> Msgpack.t] (which is fixed by [arity]
            in this function). Otherwise, it needs the type [forall 'a . 'a witness -> 'a
            -> Msgpack.t], which is not that easily expressible. *)
-        let T = Client.Private.eq in
         match arity with
         | Unit -> T (Nvim_internal.nvim_call_function ~fn:function_name ~args:(f []))
         | Cons (typ, rest) ->
@@ -37,6 +36,8 @@ module Notification = struct
     in
     custom type_ Fn.id
   ;;
+
+  let err_writeln ~str = T (Nvim_internal.nvim_err_writeln ~str)
 
   module Untested = struct
     let nvim_buf_add_highlight ~buffer ~namespace ~hl_group ~line ~col_start ~col_end =
@@ -52,15 +53,22 @@ module Notification = struct
   end
 end
 
-let notify (client : Client.t) (Notification.T notification) =
-  let T = Client.Private.eq in
-  client.call_nvim_api_fn notification Notification
+let notify client (Notification.T notification) =
+  let client = Type_equal.conv Client.Private.eq client in
+  let (Connected state) = client.state in
+  state.call_nvim_api_fn notification Notification
+;;
+
+let error client error =
+  let notification = Notification.err_writeln ~str:(Error.to_string_hum error) in
+  notify client notification
 ;;
 
 module For_testing = struct
-  let send_raw (client : Client.t) ~function_name:name ~params =
-    let T = Client.Private.eq in
+  let send_raw client ~function_name:name ~params =
+    let client = Type_equal.conv Client.Private.eq client in
+    let (Connected state) = client.state in
     let notification = { Nvim_internal.Api_result.name; params; witness = Nil } in
-    client.call_nvim_api_fn notification Notification
+    state.call_nvim_api_fn notification Notification
   ;;
 end

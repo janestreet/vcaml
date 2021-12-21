@@ -8,11 +8,16 @@ type 'a t
 
 val map_bind : 'a Or_error.t t -> f:('a -> 'b Or_error.t) -> 'b Or_error.t t
 val of_api_result : 'a Nvim_internal.Api_result.t -> 'a Or_error.t t
-val run : Source_code_position.t -> Client.t -> 'a t -> 'a Deferred.Or_error.t
+
+val run
+  :  Source_code_position.t
+  -> [ `connected ] Client.t
+  -> 'a t
+  -> 'a Deferred.Or_error.t
 
 val run_join
   :  Source_code_position.t
-  -> Client.t
+  -> [ `connected ] Client.t
   -> 'a Or_error.t t
   -> 'a Deferred.Or_error.t
 

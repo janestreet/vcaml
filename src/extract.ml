@@ -5,16 +5,11 @@ let convert_msgpack_error result ~on_keyboard_interrupt =
   match result with
   | Ok _ as ok -> ok
   | Error (Msgpack.Array [ Integer error_type; String msg ]) ->
-    (match Error_type.of_int error_type with
-     | Ok error_type ->
-       (match error_type, msg with
-        | Exception, "Keyboard interrupt" -> on_keyboard_interrupt ()
-        | _ -> ());
-       Or_error.error_s [%message "Vim returned error" msg (error_type : Error_type.t)]
-     | Error _ ->
-       Or_error.error_s
-         [%message
-           "Vim returned error with unrecognized error type" msg (error_type : int)])
+    let error_type = Error_type.of_int error_type in
+    (match error_type, msg with
+     | Exception, "Keyboard interrupt" -> on_keyboard_interrupt ()
+     | _ -> ());
+    Or_error.error_s [%message "Vim returned error" msg (error_type : Error_type.t)]
   | Error error -> Or_error.error "Msgpack error response" error [%sexp_of: Msgpack.t]
 ;;
 

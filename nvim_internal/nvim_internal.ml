@@ -110,12 +110,13 @@ module Error_type = struct
   type t =
     | Exception
     | Validation
+    | Unknown of int
   [@@deriving sexp_of]
 
   let of_int = function
-    | 0 -> Ok Exception
-    | 1 -> Ok Validation
-    | id -> Or_error.error_s [%message "Unrecognized error type" (id : int)]
+    | 0 -> Exception
+    | 1 -> Validation
+    | id -> Unknown id
   ;;
 end
 

@@ -25,16 +25,21 @@ end
 
 module State = struct
   type t =
-    { buffer : Buffer.t
-    ; window : Window.t
+    { buffer : Buffer.t Set_once.t
+    ; window : Window.t Set_once.t
     }
+  [@@deriving sexp_of]
 end
 
-let create_simple_editor ~sequencer =
-  let module Simple_editor = struct
-    include Vcaml_plugin.Raise_on_any_error
+module type S = Vcaml_plugin.Persistent.S with type state := State.t
 
-    type state = State.t
+let create_plugin ~sequencer =
+  let module Arg = struct
+    let name = "simple-editor"
+
+    type state = State.t [@@deriving sexp_of]
+
+    let init_state () = { State.buffer = Set_once.create (); window = Set_once.create () }
 
     let set_modifiable buffer value =
       Buffer.set_option ~buffer ~scope:`Local ~name:"modifiable" ~type_:Boolean ~value
@@ -49,7 +54,7 @@ let create_simple_editor ~sequencer =
     let shutdown_plugin_when_buffer_is_closed ~new_win ~buffer ~chan_id =
       let shutdown_on_leave =
         Printf.sprintf
-          "autocmd BufWinLeave <buffer> silent! call rpcnotify(%d, \"shutdown\", v:null)"
+          "autocmd BufWinLeave <buffer> silent! call rpcnotify(%d, 'shutdown')"
           chan_id
       in
       Api_call.Or_error.all_unit
@@ -64,7 +69,7 @@ let create_simple_editor ~sequencer =
       Nvim.command
         ~command:
           (Printf.sprintf
-             "nnoremap <silent> <buffer> %s :call rpcnotify(%d, \"%s\", v:null)<cr>"
+             "nnoremap <silent> <buffer> %s :call rpcnotify(%d, \"%s\")<cr>"
              key_bind
              chan_id
              rpc_name)
@@ -88,7 +93,7 @@ let create_simple_editor ~sequencer =
       typable_api_call @ special_api_call |> Api_call.Or_error.all_unit
     ;;
 
-    let startup client ~shutdown:_ =
+    let on_startup client state ~shutdown:_ =
       let chan_id = Client.rpc_channel_id client in
       let%bind buffer =
         Buffer.find_by_name_or_create ~name:"simple-editor" |> run_join [%here] client
@@ -100,9 +105,12 @@ let create_simple_editor ~sequencer =
       in
       let%bind () = add_key_listeners_api_call chan_id |> run_join [%here] client in
       let%bind () = set_modifiable buffer false |> run_join [%here] client in
-      return { State.buffer; window = new_win }
+      Set_once.set_exn state.State.buffer [%here] buffer;
+      Set_once.set_exn state.State.window [%here] new_win;
+      return ()
     ;;
 
+    let on_error = `Raise
     let vimscript_notify_fn = None
     let on_shutdown _client _state = return ()
 
@@ -209,11 +217,11 @@ let create_simple_editor ~sequencer =
       | r, c -> delete_in_line client buffer window r c
     ;;
 
-    let handle_edit_request ~f client { State.buffer; window } ~shutdown:_ () =
-      Deferred.map
-        ~f:Or_error.ok_exn
-        (let%bind mark = Window.get_cursor ~window |> run_join [%here] client in
-         f client buffer window mark)
+    let handle_edit_request ~f client { State.buffer; window } ~shutdown:_ =
+      let buffer = Set_once.get_exn buffer [%here] in
+      let window = Set_once.get_exn window [%here] in
+      let%bind mark = Window.get_cursor ~window |> run_join [%here] client in
+      f client buffer window mark
     ;;
 
     let handle_enter_request = handle_edit_request ~f:add_newline_at_mark
@@ -221,22 +229,20 @@ let create_simple_editor ~sequencer =
     let handle_backspace_request = handle_edit_request ~f:delete_character_at_mark
 
     let create_rpc_handler ~rpc_name ~handling_fn =
-      Vcaml_plugin.Rpc_handler.create_async
-        [%here]
+      Vcaml_plugin.Persistent.Rpc.create_async
         ~name:rpc_name
-        ~type_:Defun.Ocaml.Async.(Type.Nil @-> unit)
-        ~f:(fun client state ~shutdown () ->
-          Async.Throttle.enqueue sequencer (fun () ->
-            handling_fn client state ~shutdown ()))
+        ~type_:Defun.Ocaml.Async.unit
+        ~f:(fun state ~shutdown ~client ->
+          Throttle.enqueue sequencer (fun () -> handling_fn client state ~shutdown))
     ;;
 
     let create_key_rpc_handler ~key ~str_to_insert =
       create_rpc_handler ~rpc_name:key ~handling_fn:(handle_key_rpc_request str_to_insert)
     ;;
 
-    let call_shutdown _client _state ~shutdown () =
+    let call_shutdown _client _state ~shutdown =
       shutdown ();
-      Deferred.return ()
+      Deferred.Or_error.return ()
     ;;
 
     let alphabet_handlers =
@@ -270,20 +276,19 @@ let create_simple_editor ~sequencer =
     ;;
   end
   in
-  (module Vcaml_plugin.Persistent.Make (Simple_editor) : Vcaml_plugin.Persistent.S
-     with type state = State.t)
+  (module Vcaml_plugin.Persistent.Make (Arg) : S)
 ;;
 
 let main =
-  Async.Command.async_or_error
-    ~summary:"A simple editor plugin for neovim"
-    (let%map_open.Core.Command () = return () in
-     fun () ->
-       let sequencer = Async.Sequencer.create () in
-       let module Instance = (val create_simple_editor ~sequencer) in
-       Instance.run ())
+  let (module Main) = create_plugin ~sequencer:(Sequencer.create ()) in
+  Main.command ~summary:"A simple editor plugin for Neovim"
 ;;
 
 module For_testing = struct
-  let create_plugin = create_simple_editor
+  module type S = Vcaml_plugin.Persistent.For_testing.S with type plugin_state := State.t
+
+  let create_plugin ~sequencer =
+    let (module Plugin) = create_plugin ~sequencer in
+    (module Plugin.For_testing : S)
+  ;;
 end

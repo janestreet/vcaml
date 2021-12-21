@@ -8,7 +8,7 @@ let with_event_printing ~f =
   (* These tests may be fragile; the nvim docs don't specify exactly how
      [nvim_buf_lines_event] events are grouped or reported. *)
   with_client (fun client ->
-    let subscriber = Buffer.Subscriber.create client in
+    let subscriber = Buffer.Subscriber.create client ~on_parse_error:`Raise in
     let%bind events =
       Buffer.Subscriber.subscribe subscriber [%here] ~buffer:`Current ~send_buffer:true
     in

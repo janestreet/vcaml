@@ -22,6 +22,7 @@ module Position = Position
 module Tabpage = Tabpage
 module Type = Nvim_internal.Phantom
 module Ui = Ui
+module Vcaml_error = Vcaml_error
 module Version = Nvim_internal.Version
 module Window = Window
 
@@ -31,37 +32,39 @@ module Client = struct
   include Client
 
   module Connection_type = struct
+    type 'state client = 'state t
+
     type _ t =
-      | Unix : [ `Child | `Socket of string ] -> Client.t t
+      | Unix : [ `Child | `Socket of string ] -> [ `connected ] client t
+      | Stdio : [ `connected ] client t
       | Embed :
           { prog : string
           ; args : string list
           ; working_dir : string
           ; env : Core_unix.env
           }
-          -> (Client.t * Async.Process.t) t
-      | Child : Client.t t
+          -> ([ `connected ] client * Async.Process.t) t
     [@@deriving sexp_of]
   end
+
+  let create ~on_error =
+    let on_error =
+      match on_error with
+      | `Call f -> f
+      | `Raise -> Fn.compose Error.raise Vcaml_error.to_error
+    in
+    create ~on_error
+  ;;
 
   let attach
         (type a)
         ?(close_reader_and_writer_on_disconnect = true)
-        ?(on_error = Error.raise)
-        ?(on_error_event =
-          fun error_type ~message -> raise_s [%message message (error_type : Error_type.t)])
+        client
         (connection_type : a Connection_type.t)
         ~time_source
     : a Deferred.Or_error.t
     =
-    let open Deferred.Or_error.Let_syntax in
-    let make_client connect =
-      let%bind.Deferred connection =
-        connect ~on_error:(fun ~message msgpack ->
-          on_error (Error.create_s [%message message ~_:(msgpack : Msgpack.t)]))
-      in
-      Transport.attach connection ~on_error ~on_error_event ~time_source
-    in
+    let connect = connect client ~close_reader_and_writer_on_disconnect ~time_source in
     match connection_type with
     | Unix socket ->
       let socket =
@@ -69,8 +72,10 @@ module Client = struct
         | `Socket socket -> socket
         | `Child -> Sys.getenv_exn "NVIM_LISTEN_ADDRESS"
       in
-      make_client
-        (Msgpack_unix.open_from_filename socket ~close_reader_and_writer_on_disconnect)
+      let socket = Tcp.Where_to_connect.of_file socket in
+      let%bind _addr, reader, writer = Tcp.connect socket in
+      connect reader writer
+    | Stdio -> connect (force Reader.stdin) (force Writer.stdout)
     | Embed { prog; args; working_dir; env } ->
       (match List.exists args ~f:(String.equal "--embed") with
        | false ->
@@ -80,35 +85,22 @@ module Client = struct
               flag was not passed"
                ~_:(connection_type : _ Connection_type.t)]
        | true ->
-         let%bind nvim_process = Process.create ~prog ~args ~working_dir ~env () in
-         let%bind client =
-           make_client (fun ~on_error ->
-             Msgpack_rpc.connect
-               (Process.stdout nvim_process)
-               (Process.stdin nvim_process)
-               ~on_error
-               ~close_reader_and_writer_on_disconnect
-             |> Deferred.return)
-         in
-         return (client, nvim_process))
-    | Child ->
-      make_client (fun ~on_error ->
-        Msgpack_rpc.connect
-          (force Reader.stdin)
-          (force Writer.stdout)
-          ~on_error
-          ~close_reader_and_writer_on_disconnect
-        |> Deferred.return)
+         let open Deferred.Or_error.Let_syntax in
+         let%bind nvim = Process.create ~prog ~args ~working_dir ~env () in
+         let%bind client = connect (Process.stdout nvim) (Process.stdin nvim) in
+         return (client, nvim))
   ;;
 
-  let close (client : Client.t) =
-    let T = Client.Private.eq in
-    client.close ()
+  let close client =
+    let client = Type_equal.conv Private.eq client in
+    let (Connected state) = client.state in
+    state.close ()
   ;;
 
-  let rpc_channel_id (client : Client.t) =
-    let T = Client.Private.eq in
-    client.rpc_channel_id
+  let rpc_channel_id client =
+    let client = Type_equal.conv Private.eq client in
+    let (Connected state) = client.state in
+    Set_once.get_exn state.rpc_channel_id [%here]
   ;;
 end
 
@@ -122,7 +114,6 @@ module Defun = struct
       | Cons : 'a Type.t * ('b, _, 'output) t -> ('a -> 'b, 'a, 'output) t
 
     let return t = Nullary t
-    let unary t_in t_out = Cons (t_in, return t_out)
     let ( @-> ) a t = Cons (a, t)
 
     let rec make_fn
@@ -133,8 +124,8 @@ module Defun = struct
       (* Due to the fact that OCaml does not (easily) support higher-ranked polymorphism,
          we need to construct the function [to_msgpack] *after* we unpack this GADT, so it
          can have the type [i -> Msgpack.t] (which is fixed by [arity] in this function).
-         Otherwise, it needs the type [forall 'a . 'a witness -> 'a -> Msgpack.t], which is
-         not that easily expressible. *)
+         Otherwise, it needs the type [forall 'a . 'a witness -> 'a -> Msgpack.t], which
+         is not that easily expressible. *)
       match arity with
       | Nullary return_type ->
         let args = f [] in
@@ -168,30 +159,43 @@ module Defun = struct
             -> ('leftmost list -> 'output_deferred_or_error, 'leftmost list) t
         | Cons : 'a Type.t * ('b, _) t -> ('a -> 'b, 'a) t
 
+      let valid_number_of_args : ('fn, 'i) t -> int -> bool =
+        let rec f : type fn i. (fn, i) t -> required:int -> int -> bool =
+          fun t ~required ->
+            match t with
+            | Nullary _ -> ( = ) required
+            | Varargs _ -> Int.( <= ) required
+            | Cons (_, t) -> f t ~required:(required + 1)
+        in
+        f ~required:0
+      ;;
+
       let rec make_fn
         : type fn i. (fn, i) t -> fn -> Msgpack.t list -> Msgpack.t Deferred.Or_error.t
         =
         fun arity f l ->
-        let open Deferred.Or_error.Let_syntax in
-        match arity, l with
-        | Nullary (return_type, T), ([] | [ Nil ]) ->
-          let%map v = f in
-          Extract.inject return_type v
-        | Varargs (leftmost, output, T), l ->
-          (match List.map l ~f:(Extract.value leftmost) |> Or_error.combine_errors with
-           | Error error ->
-             Deferred.Or_error.error_s
-               [%message
-                 "Wrong argument type"
-                   ~expected_type:(leftmost : _ Type.t)
-                   (error : Error.t)]
-           | Ok l ->
-             let%map v = f l in
-             Extract.inject output v)
-        | Cons (leftmost, rest), x :: xs ->
-          let%bind v = Extract.value leftmost x |> Deferred.return in
-          make_fn rest (f v) xs
-        | _, _ -> Deferred.Or_error.error_s [%message "Wrong number of arguments"]
+          let open Deferred.Or_error.Let_syntax in
+          match arity, l with
+          | Nullary (return_type, T), [] ->
+            let%map v = f in
+            Extract.inject return_type v
+          | Varargs (leftmost, output, T), l ->
+            (match List.map l ~f:(Extract.value leftmost) |> Or_error.combine_errors with
+             | Error error ->
+               Deferred.Or_error.error_s
+                 [%message
+                   "Wrong argument type"
+                     ~expected_type:(leftmost : _ Type.t)
+                     (error : Error.t)]
+             | Ok l ->
+               let%map v = f l in
+               Extract.inject output v)
+          | Cons (leftmost, rest), x :: xs ->
+            let%bind v = Extract.value leftmost x |> Deferred.return in
+            make_fn rest (f v) xs
+          | _, _ ->
+            (* This should be caught by the [valid_number_of_args] check. *)
+            Deferred.Or_error.error_s [%message "[BUG] Wrong number of arguments"]
       ;;
 
       let return t = Nullary (t, T)
@@ -206,28 +210,40 @@ module Defun = struct
       exception Failed_to_parse of Error.t
 
       type 'f t =
-        | Unit : unit Deferred.t t
-        | Varargs : 'a Type.t -> ('a list -> unit Deferred.t) t
+        | Unit : unit Deferred.Or_error.t t
+        | Varargs : 'a Type.t -> ('a list -> unit Deferred.Or_error.t) t
         | Cons : 'a Type.t * 'b t -> ('a -> 'b) t
 
-      let rec make_fn : type fn. fn t -> fn -> Msgpack.t list -> unit Deferred.t =
+      let valid_number_of_args : 'fn t -> int -> bool =
+        let rec f : type fn. fn t -> required:int -> int -> bool =
+          fun t ~required ->
+            match t with
+            | Unit -> ( = ) required
+            | Varargs _ -> Int.( <= ) required
+            | Cons (_, t) -> f t ~required:(required + 1)
+        in
+        f ~required:0
+      ;;
+
+      let rec make_fn : type fn. fn t -> fn -> Msgpack.t list -> unit Deferred.Or_error.t =
         fun arity f l ->
-        match arity, l with
-        | Varargs typ, l ->
-          (match List.map l ~f:(Extract.value typ) |> Or_error.combine_errors with
-           | Error error ->
-             raise (Failed_to_parse (Error.tag error ~tag:"Wrong argument type"))
-           | Ok l -> f l)
-        | Unit, [] -> return ()
-        | Unit, [ Msgpack.Nil ] -> return ()
-        | Cons (leftmost, rest), x :: xs ->
-          (match%bind Extract.value leftmost x |> return with
-           | Ok v ->
-             let f' = f v in
-             make_fn rest f' xs
-           | Error error ->
-             raise (Failed_to_parse (Error.tag error ~tag:"Wrong argument type")))
-        | _ -> raise (Failed_to_parse (Error.of_string "Wrong number of arguments"))
+          match arity, l with
+          | Varargs typ, l ->
+            (match List.map l ~f:(Extract.value typ) |> Or_error.combine_errors with
+             | Error error ->
+               raise (Failed_to_parse (Error.tag error ~tag:"Wrong argument type"))
+             | Ok l -> f l)
+          | Unit, [] -> f
+          | Cons (leftmost, rest), x :: xs ->
+            (match%bind Extract.value leftmost x |> return with
+             | Ok v ->
+               let f' = f v in
+               make_fn rest f' xs
+             | Error error ->
+               raise (Failed_to_parse (Error.tag error ~tag:"Wrong argument type")))
+          | _ ->
+            (* This should be caught by the [valid_number_of_args] check. *)
+            raise (Failed_to_parse (Error.of_string "[BUG] Wrong number of arguments"))
       ;;
 
       let unit = Unit
@@ -242,47 +258,53 @@ end
 
 let wrap_viml_function ~type_ ~function_name = Defun.Vim.make_fn function_name type_ Fn.id
 
-let register_request_blocking (client : Client.t) ~name ~type_ ~f =
-  let T = Client.Private.eq in
-  client.register_request ~name ~f:(fun request ->
-    let T = Client.Private.eq in
-    let keyboard_interrupted = Bvar.wait client.keyboard_interrupts in
-    let response = Defun.Ocaml.Sync.make_fn type_ (f ~keyboard_interrupted) request in
-    (* In the case of a keyboard interrupt we want to return an [Ok] result instead of an
-       [Error] because we don't want to display an error message to the user. We also send
-       ":<BS>" command because Neovim doesn't recognize that it's in a blocked context so
-       it displays a message about how to exit, and we want to hide this message. We use
-       [nvim_feedkeys] instead of [nvim_input] because the latter doesn't reliably clear
-       the command line. *)
-    choose
-      [ choice response Fn.id
-      ; choice keyboard_interrupted (fun () ->
-          client.call_nvim_api_fn
-            (Nvim_internal.nvim_feedkeys ~keys:":\x08" ~mode:"n" ~escape_csi:true)
-            Notification;
-          Ok Msgpack.Nil)
-      ])
+let register_request_blocking_internal client ~name ~type_ ~f ~wrap_f =
+  let client = Type_equal.conv Client.Private.eq client in
+  let valid_number_of_args = Defun.Ocaml.Sync.valid_number_of_args type_ in
+  let f ~keyboard_interrupted client params =
+    match valid_number_of_args (List.length params) with
+    | false -> Deferred.Or_error.error_string "Wrong number of arguments"
+    | true ->
+      wrap_f (fun () ->
+        Defun.Ocaml.Sync.make_fn type_ (f ~keyboard_interrupted ~client) params)
+  in
+  client.register_request_blocking ~name ~f
 ;;
 
-let register_request_async ?on_error here (client : Client.t) ~name ~type_ ~f =
-  let T = Client.Private.eq in
-  let on_error = Option.value on_error ~default:client.on_error in
-  Bus.iter_exn client.events here ~f:(fun ({ method_name; params } as event) ->
-    let T = Client.Private.eq in
-    match String.equal method_name name with
-    | false -> ()
+let register_request_async_internal client ~name ~type_ ~f ~wrap_f =
+  let client = Type_equal.conv Client.Private.eq client in
+  let valid_number_of_args = Defun.Ocaml.Async.valid_number_of_args type_ in
+  let f client params =
+    let event = { Msgpack_rpc.Event.method_name = name; params } in
+    match valid_number_of_args (List.length params) with
+    | false ->
+      Error.create_s [%message "Wrong number of arguments" (event : Msgpack_rpc.Event.t)]
+      |> Notifier.error client
     | true ->
       don't_wait_for
         (match%map
            Monitor.try_with ~extract_exn:true (fun () ->
-             Defun.Ocaml.Async.make_fn type_ f params)
+             wrap_f (fun () -> Defun.Ocaml.Async.make_fn type_ (f ~client) params))
          with
-         | Ok () -> ()
+         | Ok (Ok ()) -> ()
+         | Ok (Error error) -> Notifier.error client error
          | Error (Defun.Ocaml.Async.Failed_to_parse error) ->
-           on_error (Error.tag_s error ~tag:[%sexp (event : Msgpack_rpc.event)])
-         | Error exn -> raise exn))
+           Notifier.error
+             client
+             (Error.tag_s error ~tag:[%sexp (event : Msgpack_rpc.Event.t)])
+         | Error exn -> raise exn)
+  in
+  client.register_request_async ~name ~f
 ;;
+
+let register_request_async = register_request_async_internal ~wrap_f:(fun f -> f ())
+let register_request_blocking = register_request_blocking_internal ~wrap_f:(fun f -> f ())
 
 module Expert = struct
   module Notifier = Notifier
+end
+
+module Private = struct
+  let register_request_async = register_request_async_internal
+  let register_request_blocking = register_request_blocking_internal
 end

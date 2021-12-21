@@ -8,7 +8,7 @@ module Options = struct
   let default = { empty with ext_linegrid = true }
 end
 
-type t = Client.t
+type t = [ `connected ] Client.t
 
 module Description = struct
   type t =
@@ -20,12 +20,25 @@ module Description = struct
   [@@deriving sexp_of]
 end
 
-let attach ?on_error here (client : Client.t) ~width ~height ~options ~on_event =
-  let T = Client.Private.eq in
-  let on_error = Option.value on_error ~default:client.on_error in
+let attach here client ~width ~height ~options ~on_event ~on_parse_error =
+  let events =
+    let client = Type_equal.conv Client.Private.eq client in
+    client.events
+  in
+  let on_parse_error =
+    match on_parse_error with
+    | `Call f -> f
+    | `Ignore -> fun _ _ -> ()
+    | `Raise ->
+      fun error event ->
+        raise_s
+          [%message
+            "Failed to parse buffer event"
+              (error : Error.t)
+              ~_:(event : Msgpack_rpc.Event.t)]
+  in
   let cleared_screen = Set_once.create () in
-  Bus.iter_exn client.events here ~f:(fun ({ method_name; params } as event) ->
-    let T = Client.Private.eq in
+  Bus.iter_exn events here ~f:(fun ({ method_name; params } as event) ->
     match method_name with
     | "redraw" ->
       List.iter params ~f:(fun param ->
@@ -39,8 +52,7 @@ let attach ?on_error here (client : Client.t) ~width ~height ~options ~on_event 
                Set_once.set_if_none cleared_screen [%here] ()
              | _ -> ());
             if Set_once.is_some cleared_screen then on_event event)
-        | Error error ->
-          on_error (Error.tag_s error ~tag:[%sexp (event : Msgpack_rpc.event)]))
+        | Error error -> on_parse_error error event)
     | _ -> ());
   let options : (Msgpack.t * Msgpack.t) list =
     let use field =

@@ -4,17 +4,15 @@ open Vcaml
 
 module State : sig
   type t =
-    { window : Window.t
-    ; buffer : Buffer.t
+    { window : Window.t Set_once.t
+    ; buffer : Buffer.t Set_once.t
     }
 end
 
 val main : Core.Command.t
 
 module For_testing : sig
-  val run
-    :  time_source:Time_source.t
-    -> ?during_plugin:(chan_id:int -> state:State.t -> unit Deferred.Or_error.t)
-    -> Client.t
-    -> State.t Deferred.Or_error.t
+  module type S = Vcaml_plugin.Persistent.For_testing.S with type plugin_state := State.t
+
+  val create_plugin : time_source:Time_source.t -> (module S)
 end

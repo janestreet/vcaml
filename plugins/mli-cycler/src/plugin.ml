@@ -49,70 +49,52 @@ let echo_file_patterns client =
 
 let list_file_patterns_in_fzf client =
   let run_fzf =
-    wrap_viml_function ~function_name:"MliCyclerFzf" ~type_:Defun.Vim.(unary Object Nil)
+    wrap_viml_function
+      ~function_name:"MliCyclerFzf"
+      ~type_:Defun.Vim.(Dict @-> return Nil)
   in
   let%bind { file_patterns; _ } = Buffer_data.fetch_from_vim client in
   match file_patterns with
   | [] -> return ()
   | hd :: _ as file_patterns ->
     let lines = List.map ~f:File_pattern.to_short_filename file_patterns in
-    let config =
-      Msgpack.Map
-        [ String "source", Array (List.map ~f:(fun line -> Msgpack.String line) lines)
-        ; String "down", Integer (List.length lines + 2)
-        ; String "dir", String (File_pattern.dirname hd)
-        ]
+    let config : (Msgpack.t * Msgpack.t) list =
+      [ String "source", Array (List.map ~f:(fun line -> Msgpack.String line) lines)
+      ; String "down", Integer (List.length lines + 2)
+      ; String "dir", String (File_pattern.dirname hd)
+      ]
     in
     let%bind () = run_join [%here] client (run_fzf config) in
     return ()
 ;;
 
-let main =
-  let module Command = Async.Command in
-  let run f () =
-    let%bind client =
-      Client.attach (Unix `Child) ~time_source:(Time_source.wall_clock ())
-    in
-    f client
-  in
-  Command.group
-    ~summary:"plugin to cycle between ml, mli, and intf files"
-    [ ( "list-fzf"
-      , Command.async_or_error
-          ~summary:"list all possible files to cycle through in fzf"
-          (Command.Param.return (run list_file_patterns_in_fzf)) )
-    ; ( "list"
-      , Command.async_or_error
-          ~summary:"echo all possible files to cycle through"
-          (Command.Param.return (run echo_file_patterns)) )
-    ; ( "next"
-      , Command.async_or_error
-          ~summary:"switch the current buffer to the next file in the list"
-          (let%map_open.Command () = return ()
-           and sink =
-             flag_optional_with_default_doc
-               "sink"
-               string
-               [%sexp_of: string]
-               ~default:"edit"
-               ~doc:"STRING Neovim command to invoke with next file as argument"
-           in
-           run (next_file_pattern ~sink)) )
-    ; ( "prev"
-      , Command.async_or_error
-          ~summary:"switch the current buffer to the previous file in the list"
-          (let%map_open.Command () = return ()
-           and sink =
-             flag_optional_with_default_doc
-               "sink"
-               string
-               [%sexp_of: string]
-               ~default:"edit"
-               ~doc:"STRING Neovim command to invoke with previous file as argument"
-           in
-           run (prev_file_pattern ~sink)) )
-    ]
-;;
+module Plugin = Vcaml_plugin.Oneshot.Make (struct
+    let name = "mli-cycler"
+    let on_error = `Raise
+
+    let rpc_handlers =
+      let rpc = Vcaml_plugin.Oneshot.Rpc.create in
+      [ rpc
+          ~name:"list-fzf"
+          ~type_:Defun.Ocaml.Sync.(return Nil)
+          ~f:(fun ~keyboard_interrupted:_ ~client -> list_file_patterns_in_fzf client)
+      ; rpc
+          ~name:"list"
+          ~type_:Defun.Ocaml.Sync.(return Nil)
+          ~f:(fun ~keyboard_interrupted:_ ~client -> echo_file_patterns client)
+      ; rpc
+          ~name:"next"
+          ~type_:Defun.Ocaml.Sync.(String @-> return Nil)
+          ~f:(fun ~keyboard_interrupted:_ ~client sink -> next_file_pattern client ~sink)
+      ; rpc
+          ~name:"prev"
+          ~type_:Defun.Ocaml.Sync.(String @-> return Nil)
+          ~f:(fun ~keyboard_interrupted:_ ~client sink -> prev_file_pattern client ~sink)
+      ]
+    ;;
+  end)
+
+let main = Plugin.command ~summary:"Launch mli-cycler and await rpc."
 
 module For_testing = struct
   let next_file_pattern = next_file_pattern ~sink:"edit"

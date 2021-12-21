@@ -42,7 +42,13 @@ let escape_and_feedkeys ~client ~keys ~sequencer =
   let%bind () =
     Nvim.feedkeys ~keys:escaped_keys ~mode:"t" ~escape_csi:true |> run_join [%here] client
   in
-  let%bind () = Deferred.ok wait_on_completion in
+  let%bind () =
+    match%bind
+      with_timeout (Time.Span.of_int_sec 3) wait_on_completion |> Deferred.ok
+    with
+    | `Result result -> return result
+    | `Timeout -> Deferred.Or_error.error_s [%message "Timed out waiting on completion."]
+  in
   Deferred.ok (Async.Throttle.prior_jobs_done sequencer)
 ;;
 
@@ -53,35 +59,30 @@ let get_contents ~client ~buffer =
 
 let kill_plugin ~client = Nvim.command ~command:"q!" |> run_join [%here] client
 
-module Alphabet_test = struct
-  let before_plugin ~client = print_window_count ~client
-
-  let during_plugin ~sequencer ~client ~chan_id:_ ~state:{ Simple_editor.State.buffer; _ }
-    =
-    let key_sequence =
-      "the quick brown fox jumps over the lazy dog<CR>THE QUICK BROWN FOX JUMPS OVER THE \
-       LAZY DOG "
-    in
-    let%bind () = print_window_count ~client in
-    let%bind () = escape_and_feedkeys ~client ~keys:key_sequence ~sequencer in
-    let%bind contents = get_contents ~client ~buffer in
-    print_s [%message (contents : string list)];
-    kill_plugin ~client
-  ;;
-end
-
 let%expect_test "splits open a new window and allows the user to send keys" =
-  let sequencer = Async.Sequencer.create () in
-  let (module Plugin) = Simple_editor.For_testing.create_plugin ~sequencer in
-  let%bind.Deferred () =
+  let%map.Deferred () =
     Vcaml_test.with_client (fun client ->
-      let%bind () = Alphabet_test.before_plugin ~client in
-      let%bind _state =
-        Plugin.run_for_testing
-          ~during_plugin:(Alphabet_test.during_plugin ~sequencer ~client)
-          client
+      let sequencer = Sequencer.create () in
+      let (module Plugin) = Simple_editor.For_testing.create_plugin ~sequencer in
+      let%bind () = print_window_count ~client in
+      let%bind { plugin_state = { buffer; window = _ }
+               ; shutdown = _
+               ; wait_for_shutdown
+               }
+        =
+        Plugin.start ~client
       in
-      return ())
+      let buffer = Set_once.get_exn buffer [%here] in
+      let key_sequence =
+        "the quick brown fox jumps over the lazy dog<CR>THE QUICK BROWN FOX JUMPS OVER \
+         THE LAZY DOG "
+      in
+      let%bind () = print_window_count ~client in
+      let%bind () = escape_and_feedkeys ~client ~keys:key_sequence ~sequencer in
+      let%bind contents = get_contents ~client ~buffer in
+      print_s [%message (contents : string list)];
+      let%bind () = kill_plugin ~client in
+      wait_for_shutdown)
   in
   [%expect
     {|
@@ -89,66 +90,53 @@ let%expect_test "splits open a new window and allows the user to send keys" =
   (num_wins 2)
   (contents
    ("the quick brown fox jumps over the lazy dog"
-    "THE QUICK BROWN FOX JUMPS OVER THE LAZY DOG ")) |}];
-  Deferred.return ()
+    "THE QUICK BROWN FOX JUMPS OVER THE LAZY DOG ")) |}]
 ;;
 
-module _ = struct
-  let during_plugin
-        ~sequencer
-        ~client
-        ~chan_id:_
-        ~state:{ Simple_editor.State.buffer; window }
-    =
-    let key_sequence = "<BS>this<BS><CR><BS> a drink with jam and bread" in
-    let%bind () = escape_and_feedkeys ~client ~keys:key_sequence ~sequencer in
-    let%bind () =
-      Window.set_cursor ~window { row = 1; col = 2 } |> run_join [%here] client
-    in
-    let%bind () = escape_and_feedkeys ~client ~keys:"<BS>" ~sequencer in
-    let%bind contents = get_contents ~client ~buffer in
-    print_s [%message (contents : string list)];
-    kill_plugin ~client
-  ;;
+let%expect_test "backspace" =
+  let%map.Deferred () =
+    Vcaml_test.with_client (fun client ->
+      let sequencer = Sequencer.create () in
+      let (module Plugin) = Simple_editor.For_testing.create_plugin ~sequencer in
+      let%bind { plugin_state = { buffer; window }; shutdown = _; wait_for_shutdown } =
+        Plugin.start ~client
+      in
+      let buffer = Set_once.get_exn buffer [%here] in
+      let window = Set_once.get_exn window [%here] in
+      let key_sequence = "<BS>this<BS><CR><BS> a drink with jam and bread" in
+      let%bind () = escape_and_feedkeys ~client ~keys:key_sequence ~sequencer in
+      let%bind () =
+        Window.set_cursor ~window { row = 1; col = 2 } |> run_join [%here] client
+      in
+      let%bind () = escape_and_feedkeys ~client ~keys:"<BS>" ~sequencer in
+      let%bind contents = get_contents ~client ~buffer in
+      print_s [%message (contents : string list)];
+      let%bind () = kill_plugin ~client in
+      wait_for_shutdown)
+  in
+  [%expect {| (contents ("ti a drink with jam and bread")) |}]
+;;
 
-  let%expect_test "backspace" =
-    let sequencer = Async.Sequencer.create () in
-    let (module Plugin) = Simple_editor.For_testing.create_plugin ~sequencer in
-    let%bind.Deferred _state =
-      Vcaml_test.with_client (fun client ->
-        Plugin.run_for_testing ~during_plugin:(during_plugin ~client ~sequencer) client)
-    in
-    [%expect {| (contents ("ti a drink with jam and bread")) |}];
-    Deferred.return ()
-  ;;
-end
-
-module _ = struct
-  let during_plugin
-        ~sequencer
-        ~client
-        ~chan_id:_
-        ~state:{ Simple_editor.State.buffer; window }
-    =
-    let key_sequence = "<CR>second linethird line<CR>fourth line" in
-    let%bind () = escape_and_feedkeys ~client ~keys:key_sequence ~sequencer in
-    let%bind () =
-      Window.set_cursor ~window { row = 2; col = 11 } |> run_join [%here] client
-    in
-    let%bind () = escape_and_feedkeys ~client ~keys:"<CR>" ~sequencer in
-    let%bind contents = get_contents ~client ~buffer in
-    print_s [%message (contents : string list)];
-    kill_plugin ~client
-  ;;
-
-  let%expect_test "enter" =
-    let sequencer = Async.Sequencer.create () in
-    let (module Plugin) = Simple_editor.For_testing.create_plugin ~sequencer in
-    let%bind.Deferred _state =
-      Vcaml_test.with_client (fun client ->
-        Plugin.run_for_testing ~during_plugin:(during_plugin ~client ~sequencer) client)
-    in
-    [%expect {| (contents ("" "second line" "third line" "fourth line")) |}];
-    Deferred.return ()
-  ;;
-end
+let%expect_test "enter" =
+  let%map.Deferred () =
+    Vcaml_test.with_client (fun client ->
+      let sequencer = Sequencer.create () in
+      let (module Plugin) = Simple_editor.For_testing.create_plugin ~sequencer in
+      let%bind { plugin_state = { buffer; window }; shutdown = _; wait_for_shutdown } =
+        Plugin.start ~client
+      in
+      let buffer = Set_once.get_exn buffer [%here] in
+      let window = Set_once.get_exn window [%here] in
+      let key_sequence = "<CR>second linethird line<CR>fourth line" in
+      let%bind () = escape_and_feedkeys ~client ~keys:key_sequence ~sequencer in
+      let%bind () =
+        Window.set_cursor ~window { row = 2; col = 11 } |> run_join [%here] client
+      in
+      let%bind () = escape_and_feedkeys ~client ~keys:"<CR>" ~sequencer in
+      let%bind contents = get_contents ~client ~buffer in
+      print_s [%message (contents : string list)];
+      let%bind () = kill_plugin ~client in
+      wait_for_shutdown)
+  in
+  [%expect {| (contents ("" "second line" "third line" "fourth line")) |}]
+;;

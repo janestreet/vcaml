@@ -20,10 +20,11 @@ type _ t =
 
 let of_api_result x = Single x
 
-let call_atomic (client : Client.t) ~calls =
-  let T = Client.Private.eq in
+let call_atomic client ~calls =
+  let client = Type_equal.conv Client.Private.eq client in
   let api_call = Nvim_internal.nvim_call_atomic ~calls in
-  client.call_nvim_api_fn api_call Request
+  let (Connected state) = client.state in
+  state.call_nvim_api_fn api_call Request
 ;;
 
 let rec collect_calls : type a. a t -> Msgpack.t list = function
@@ -53,12 +54,14 @@ let rec extract_results : type a. Msgpack.t list -> a t -> a * Msgpack.t list =
     (left, right), rest
 ;;
 
-let rec run : type a. Client.t -> a t -> a Deferred.Or_error.t =
+let rec run : type a. [ `connected ] Client.t -> a t -> a Deferred.Or_error.t =
   fun client res ->
-  let T = Client.Private.eq in
   match res with
   | Const x -> return (Ok x)
-  | Single api -> client.call_nvim_api_fn api Request |> Deferred.ok
+  | Single api ->
+    let client = Type_equal.conv Client.Private.eq client in
+    let (Connected state) = client.state in
+    state.call_nvim_api_fn api Request |> Deferred.ok
   | Map (f, c) -> run client c |> Deferred.Or_error.map ~f
   | Map_bind (f, c) ->
     let%map result = run client c in
@@ -71,6 +74,7 @@ let rec run : type a. Client.t -> a t -> a Deferred.Or_error.t =
        let r = Or_error.try_with (fun () -> extract_results results res) in
        return (Or_error.map ~f:Tuple2.get1 r)
      | Ok [ Msgpack.Array _; Array [ Integer index; Integer error_type; String msg ] ] ->
+       let client = Type_equal.conv Client.Private.eq client in
        Extract.convert_msgpack_error
          (Error (Array [ Integer error_type; String msg ]))
          ~on_keyboard_interrupt:(Bvar.broadcast client.keyboard_interrupts)

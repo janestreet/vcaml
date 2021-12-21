@@ -1,5 +1,8 @@
 open Base
 
+(** Parser and Serializer for Msgpack data.
+    https://github.com/msgpack/msgpack/blob/master/spec.md *)
+
 module Internal : sig
   module Parser : module type of Parser
   module Serializer : module type of Serializer

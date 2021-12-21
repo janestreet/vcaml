@@ -16,7 +16,10 @@ let main =
      fun () ->
        let open Deferred.Or_error.Let_syntax in
        let%bind client =
-         Client.attach (Unix `Child) ~time_source:(Time_source.wall_clock ())
+         Client.attach
+           (Client.create ~on_error:`Raise)
+           (Unix `Child)
+           ~time_source:(Time_source.wall_clock ())
        in
        echo_hello_world client)
 ;;

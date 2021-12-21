@@ -52,17 +52,14 @@ val create : listed:bool -> scratch:bool -> t Api_call.Or_error.t
 val find_by_name_or_create : name:string -> t Api_call.Or_error.t
 
 module Subscriber : sig
-  type buffer :=
-    [ `Current
-    | `Numbered of t
-    ]
-
+  type buffer := t
   type t
 
-  (** Only one [t] should be created for a given client. [on_error] is invoked when we
-      receive buffer event messages that we fail to parse (and therefore cannot be
-      attributed to a particular buffer). *)
-  val create : ?on_error:(Error.t -> unit) -> Client.t -> t
+  (** Only one [t] should be created for a given client. *)
+  val create
+    :  [ `connected ] Client.t
+    -> on_parse_error:[ `Raise | `Ignore | `Call of Msgpack_rpc.Event.t -> unit ]
+    -> t
 
 
   (** Attach to an existing buffer and receive a pipe of updates pretaining to this
@@ -100,7 +97,7 @@ module Subscriber : sig
     -> ?preview:bool
     -> t
     -> Source_code_position.t
-    -> buffer:buffer
+    -> buffer:[ `Current | `Numbered of buffer ]
     -> send_buffer:bool
     -> Event.t Async.Pipe.Reader.t Async.Deferred.Or_error.t
 end

@@ -320,7 +320,7 @@ let%expect_test "files numbered with leading zeroes are treated as their own gro
   return ()
 ;;
 
-let%expect_test "listing files in fzf attempts a call to fzf#run" =
+let%expect_test "listing files in fzf attempts a call to MliCyclerFzf" =
   let%bind result =
     try_with
       ~run:

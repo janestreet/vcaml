@@ -1,6 +1,8 @@
 open! Core
 open! Async
 
+
+
 module Info = struct
   type t =
     | To_client of string
@@ -28,37 +30,37 @@ let print_with_passthrough info writer msg =
   return ()
 ;;
 
-let debug_messages info reader writer =
+let debug_messages info ~to_:reader ~from:writer =
   Angstrom_async.parse_many
     Msgpack.Internal.Parser.msg
     (print_with_passthrough info writer)
     reader
-;;
-
-let on_connect ~client_pipe _addr host_reader host_writer =
-  let%bind socket =
-    Msgpack_unix.open_from_filename
-      client_pipe
-      ~close_reader_and_writer_on_disconnect:true
-      ~on_error:(fun ~message msgpack ->
-        raise_s [%message message ~_:(msgpack : Msgpack.t)])
-  in
-  let client_reader = Msgpack_rpc.reader socket in
-  let client_writer = Msgpack_rpc.writer socket in
-  let%bind (_ : (unit, string) result list) =
-    Deferred.all
-      [ debug_messages (Info.To_client client_pipe) client_reader host_writer
-      ; debug_messages (Info.From_client client_pipe) host_reader client_writer
-      ]
-  in
-  return ()
+  |> Deferred.ignore_m
 ;;
 
 let start_server ~host_pipe ~client_pipe =
+  let host_socket = Tcp.Where_to_listen.of_file host_pipe in
+  let client_socket = Tcp.Where_to_connect.of_file client_pipe in
   Tcp.Server.create
     ~on_handler_error:`Raise
-    (Tcp.Where_to_listen.of_file host_pipe)
-    (on_connect ~client_pipe)
+    host_socket
+    (fun _host_addr host_reader host_writer ->
+       let%bind _client_addr, client_reader, client_writer = Tcp.connect client_socket in
+       let rpc =
+         Msgpack_rpc.create ~on_error:(fun error ->
+           error |> Msgpack_rpc.Error.to_error |> Error.raise)
+       in
+       let (_ : [ `connected ] Msgpack_rpc.t) =
+         Msgpack_rpc.connect
+           rpc
+           client_reader
+           client_writer
+           ~close_reader_and_writer_on_disconnect:true
+       in
+       Deferred.all_unit
+         [ debug_messages (To_client client_pipe) ~to_:client_reader ~from:host_writer
+         ; debug_messages (From_client client_pipe) ~to_:host_reader ~from:client_writer
+         ])
 ;;
 
 let run_prog_with_fresh_pipe ~prog ~pipe =

@@ -8,23 +8,6 @@ open Import
 module Command = Unshadow.Command
 include Nvim_internal.Buffer
 
-(* We can't use [Vcaml.Client.eval] because of dependency cycles
-
-   This function is pretty fragile, but there isn't really a better way to know what
-   buffer we're currently in, so we pretty much have to do this to get good filtering
-   from [`Current] event listen requests. *)
-let current_buffer =
-  let query : Msgpack.t Nvim_internal.Api_result.t =
-    { name = "nvim_eval"
-    ; params = [ String "bufnr(\"%\")" ]
-    ; witness = Nvim_internal.Phantom.Object
-    }
-  in
-  let open Api_call.Let_syntax in
-  let%map result = Api_call.of_api_result query in
-  Or_error.bind ~f:of_msgpack result
-;;
-
 module Event = struct
   exception Parse_error
 
@@ -44,7 +27,7 @@ module Event = struct
     | Detach of t
   [@@deriving sexp_of]
 
-  let parse { Msgpack_rpc.method_name; params } =
+  let parse { Msgpack_rpc.Event.method_name; params } =
     let of_msgpack_exn msg =
       match of_msgpack msg with
       | Ok buffer -> buffer
@@ -134,37 +117,43 @@ let find_by_name_or_create ~name =
 ;;
 
 module Subscriber = struct
+  type buffer = t [@@deriving sexp_of]
+
   type t =
-    { client : Client.t
-    ; on_error : Error.t -> unit
+    { client : [ `connected ] Client.Private.t
+    ; on_parse_error : Msgpack_rpc.Event.t -> unit
     }
 
-  let create ?on_error (client : Client.t) =
-    let T = Client.Private.eq in
-    let on_error = Option.value on_error ~default:client.on_error in
-    { client; on_error }
+  let create client ~on_parse_error =
+    let client = Type_equal.conv Client.Private.eq client in
+    let on_parse_error =
+      match on_parse_error with
+      | `Call f -> f
+      | `Ignore -> ignore
+      | `Raise ->
+        fun event ->
+          raise_s
+            [%message "Failed to parse buffer event" ~_:(event : Msgpack_rpc.Event.t)]
+    in
+    { client; on_parse_error }
   ;;
 
   let buf_events t here =
-    let T = Client.Private.eq in
-    let r, w = Pipe.create () in
-    let s =
-      Bus.subscribe_exn t.client.events here ~f:(fun e ->
-        match Event.parse e with
-        | Some evt -> Pipe.write_without_pushback_if_open w evt
+    let reader, writer = Pipe.create () in
+    let subscriber =
+      Bus.subscribe_exn t.client.events here ~f:(fun event ->
+        match Event.parse event with
+        | Some event -> Pipe.write_without_pushback_if_open writer event
         | None -> ()
-        | exception Event.Parse_error ->
-          t.on_error
-            (Error.create_s
-               [%message "Failed to parse buffer event" ~_:(e : Msgpack_rpc.event)]))
+        | exception Event.Parse_error -> t.on_parse_error event)
     in
     upon
-      (Deferred.any [ Pipe.closed r; Pipe.closed w ])
+      (Deferred.any [ Pipe.closed reader; Pipe.closed writer ])
       (fun () ->
-         Pipe.close_read r;
-         Pipe.close w;
-         Bus.unsubscribe t.client.events s);
-    r
+         Pipe.close_read reader;
+         Pipe.close writer;
+         Bus.unsubscribe t.client.events subscriber);
+    reader
   ;;
 
   let subscribe
@@ -181,12 +170,17 @@ module Subscriber = struct
         ~buffer
         ~send_buffer
     =
-    let buffer_query =
-      match buffer with
-      | `Current -> Unsafe.of_int 0
-      | `Numbered b -> b
+    let buf_events = buf_events t here in
+    let run_join here call =
+      let client = Type_equal.conv (Type_equal.sym Client.Private.eq) t.client in
+      Api_call.run_join here client call
     in
     let attach =
+      let buffer =
+        match buffer with
+        | `Current -> Unsafe.of_int 0
+        | `Numbered b -> b
+      in
       let opts =
         [ "on_lines", `Luaref on_lines
         ; "on_bytes", `Luaref on_bytes
@@ -202,31 +196,33 @@ module Subscriber = struct
             Some (Msgpack.String label, Nvim_internal.Luaref.to_msgpack callback)
           | label, `Boolean (Some flag) -> Some (Msgpack.String label, Boolean flag))
       in
-      Nvim_internal.nvim_buf_attach ~buffer:buffer_query ~send_buffer ~opts
-      |> Api_call.of_api_result
+      Nvim_internal.nvim_buf_attach ~buffer ~send_buffer ~opts |> Api_call.of_api_result
     in
-    let curr_bufnr =
-      match buffer with
-      | `Current -> current_buffer
-      | `Numbered b -> Api_call.return (Ok b)
+    let call =
+      let buffer =
+        match buffer with
+        | `Current -> Api_call.of_api_result Nvim_internal.nvim_get_current_buf
+        | `Numbered buffer -> Api_call.Or_error.return buffer
+      in
+      Api_call.Or_error.both attach buffer
     in
-    let call = Api_call.both attach curr_bufnr in
-    let open Deferred.Or_error.Let_syntax in
-    (* We always run the actual attach because it's possible that the user has deleted the
-       buffer (and so we want to fail with an error). *)
-    let%bind success, bufnr =
-      Api_call.run [%here] t.client call |> Deferred.map ~f:(tag_callsite here)
-    in
-    let run_attach () =
+    match%bind run_join [%here] call |> Deferred.map ~f:(tag_callsite here) with
+    | Error _ as error ->
+      Pipe.close_read buf_events;
+      return error
+    | Ok (false, buffer) ->
+      Pipe.close_read buf_events;
+      Deferred.Or_error.error_s [%message "Failed to attach to buffer" (buffer : buffer)]
+    | Ok (true, buffer) ->
       let open Deferred.Or_error.Let_syntax in
-      if%bind Deferred.return success
-      then (
-        let%bind bufnr = Deferred.return bufnr in
-        let T = Client.Private.eq in
-        Hashtbl.change t.client.buffers_attached bufnr ~f:(function
+      (* We always run the actual attach because it's possible that the user has deleted
+         the buffer (and so we want to fail with an error). *)
+      let (Connected state) = t.client.state in
+      let run_attach () =
+        Hashtbl.change state.buffers_attached buffer ~f:(function
           | Some x -> Some (x + 1)
           | None -> Some 1);
-        let incoming = Pipe.filter (buf_events t here) ~f:(Event.for_buffer bufnr) in
+        let incoming = Pipe.filter buf_events ~f:(Event.for_buffer buffer) in
         let r =
           Pipe.create_reader ~close_on_exception:false (fun w ->
             Pipe.iter incoming ~f:(function
@@ -236,32 +232,26 @@ module Subscriber = struct
                    interrupting us *)
                 Pipe.write_without_pushback_if_open w evt;
                 Pipe.close w;
-                Hashtbl.remove t.client.buffers_attached bufnr;
+                Hashtbl.remove state.buffers_attached buffer;
                 return ()
               | evt -> Pipe.write_if_open w evt))
         in
         upon (Pipe.closed r) (fun () ->
           upon
-            (Api_call.run_join
+            (run_join
                [%here]
-               t.client
-               (Nvim_internal.nvim_buf_detach ~buffer:bufnr |> Api_call.of_api_result))
+               (Nvim_internal.nvim_buf_detach ~buffer |> Api_call.of_api_result))
             (function
-              | Ok true -> Hashtbl.remove t.client.buffers_attached bufnr
+              | Ok true -> Hashtbl.remove state.buffers_attached buffer
               | _ ->
                 (match on_detach_failure with
                  | `Ignore -> ()
                  | `Raise ->
-                   raise_s
-                     [%message
-                       "Failed to detach from buffer"
-                         (buffer : [ `Current | `Numbered of t ])]
+                   raise_s [%message "Failed to detach from buffer" (buffer : buffer)]
                  | `Call f -> f buffer)));
-        return r)
-      else Deferred.Or_error.error_string "unable to connect to buffer"
-    in
-    let T = Client.Private.eq in
-    Throttle.enqueue t.client.attach_sequencer run_attach
+        return r
+      in
+      Throttle.enqueue state.attach_sequencer run_attach
   ;;
 end
 

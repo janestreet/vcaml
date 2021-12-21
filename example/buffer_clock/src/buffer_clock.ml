@@ -4,9 +4,10 @@ open Vcaml
 
 module State = struct
   type t =
-    { window : Window.t
-    ; buffer : Buffer.t
+    { window : Window.t Set_once.t
+    ; buffer : Buffer.t Set_once.t
     }
+  [@@deriving sexp_of]
 end
 
 (* Simple Vcaml plugin to create a new buffer/window which will display the current time
@@ -72,24 +73,27 @@ let start_plugin ~time_source ~client ~buffer ~shutdown =
   return new_win
 ;;
 
-module type Time_source_arg = sig
-  val time_source : Time_source.t
-end
+module type S = Vcaml_plugin.Persistent.S with type state := State.t
 
-module Make_buffer_clock (T : Time_source_arg) = Vcaml_plugin.Persistent.Make (struct
-    include Vcaml_plugin.Raise_on_any_error
+let create_plugin ~time_source =
+  let module Arg = struct
+    let name = "buffer-clock"
 
-    type state = State.t
+    type state = State.t [@@deriving sexp_of]
 
     let rpc_handlers = []
+    let init_state () = { State.window = Set_once.create (); buffer = Set_once.create () }
 
-    let startup client ~shutdown =
+    let on_startup client state ~shutdown =
       let open Deferred.Or_error.Let_syntax in
-      let subscriber = Buffer.Subscriber.create client in
+      let subscriber = Buffer.Subscriber.create client ~on_parse_error:`Raise in
       let%bind buffer =
-        Buffer.find_by_name_or_create ~name:"Vcaml_buffer_clock" |> run_join [%here] client
+        Buffer.find_by_name_or_create ~name:"Vcaml_buffer_clock"
+        |> run_join [%here] client
       in
-      let%bind win = start_plugin ~time_source:T.time_source ~client ~buffer ~shutdown in
+      let%bind window = start_plugin ~time_source ~client ~buffer ~shutdown in
+      Set_once.set_exn state.State.buffer [%here] buffer;
+      Set_once.set_exn state.State.window [%here] window;
       let%bind events =
         Buffer.Subscriber.subscribe
           subscriber
@@ -101,32 +105,30 @@ module Make_buffer_clock (T : Time_source_arg) = Vcaml_plugin.Persistent.Make (s
         (Pipe.iter_without_pushback events ~f:(function
            | Lines _ | Changed_tick _ -> ()
            | Detach _ -> shutdown ()));
-      return { State.window = win; buffer }
+      return ()
     ;;
 
+    let on_error = `Raise
     let vimscript_notify_fn = None
     let on_shutdown _ _ = Deferred.Or_error.return ()
-  end)
-
-module Buffer_clock_plugin = Make_buffer_clock (struct
-    let time_source = Time_source.wall_clock ()
-  end)
+  end
+  in
+  (module Vcaml_plugin.Persistent.Make (Arg) : S)
+;;
 
 let main =
-  Buffer_clock_plugin.command
+  let (module Main) = create_plugin ~time_source:(Time_source.wall_clock ()) in
+  Main.command
     ~summary:
-      "start a Vcaml process which opens a new buffer and window with a clock in the \
-       current neovim instance (shuts down on clock buffer deletion)"
-    ()
+      "Start a VCaml process that opens a new buffer and window with a clock in the \
+       current Neovim instance (shuts down on clock buffer deletion)."
 ;;
 
 module For_testing = struct
-  let run ~time_source =
-    let module Test_plugin =
-      Make_buffer_clock (struct
-        let time_source = time_source
-      end)
-    in
-    Test_plugin.run_for_testing
+  module type S = Vcaml_plugin.Persistent.For_testing.S with type plugin_state := State.t
+
+  let create_plugin ~time_source =
+    let (module Plugin) = create_plugin ~time_source in
+    (module Plugin.For_testing : S)
   ;;
 end

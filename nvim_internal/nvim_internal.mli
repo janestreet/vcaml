@@ -74,9 +74,10 @@ module Error_type : sig
   type t =
     | Exception
     | Validation
+    | Unknown of int
   [@@deriving sexp_of]
 
-  val of_int : int -> t Or_error.t
+  val of_int : int -> t
 end
 
 module Ui_event : sig

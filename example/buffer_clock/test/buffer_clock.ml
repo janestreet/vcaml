@@ -25,37 +25,34 @@ let print_buffer_contents ~client ~buffer =
 ;;
 
 let print_window_count client =
-  let%map current_window_count = check_window_count ~client in
+  let%map.Deferred.Or_error current_window_count = check_window_count ~client in
   print_s [%message (current_window_count : int)]
 ;;
 
-let during_plugin
-      ~time_source
-      ~client
-      ~chan_id:_
-      ~state:{ Buffer_clock.State.window; buffer }
-  =
-  let%bind () = print_window_count client in
-  let%bind () = print_buffer_contents ~client ~buffer in
-  let%bind () =
-    Deferred.ok
-      (Time_source.advance_by_alarms_by time_source (Time_ns.Span.of_int_ms 1000))
-  in
-  let%bind () = print_buffer_contents ~client ~buffer in
-  kill_buffer_in_window ~window |> run_join [%here] client
-;;
-
 let%expect_test "plugin opens a new buffer/window which updates until buffer deletion" =
-  let now_str = "2020-01-01 00:00:00.000000000Z" in
-  let mock_time_source = Time_source.create ~now:(Time_ns.of_string now_str) () in
-  let mock_time_source_readonly = Time_source.read_only mock_time_source in
-  let%map.Deferred _state =
+  let%map.Deferred () =
     Vcaml_test.with_client (fun client ->
+      let now_str = "2020-01-01 00:00:00.000000000Z" in
+      let time_source = Time_source.create ~now:(Time_ns.of_string now_str) () in
+      let (module Plugin) =
+        Buffer_clock.For_testing.create_plugin
+          ~time_source:(Time_source.read_only time_source)
+      in
       let%bind () = print_window_count client in
-      Buffer_clock.For_testing.run
-        client
-        ~time_source:mock_time_source_readonly
-        ~during_plugin:(during_plugin ~time_source:mock_time_source ~client))
+      let%bind { plugin_state = { window; buffer }; shutdown = _; wait_for_shutdown } =
+        Plugin.start ~client
+      in
+      let window = Set_once.get_exn window [%here] in
+      let buffer = Set_once.get_exn buffer [%here] in
+      let%bind () = print_window_count client in
+      let%bind () = print_buffer_contents ~client ~buffer in
+      let%bind () =
+        Deferred.ok
+          (Time_source.advance_by_alarms_by time_source (Time_ns.Span.of_int_ms 1000))
+      in
+      let%bind () = print_buffer_contents ~client ~buffer in
+      let%bind () = kill_buffer_in_window ~window |> run_join [%here] client in
+      wait_for_shutdown)
   in
   [%expect
     {|

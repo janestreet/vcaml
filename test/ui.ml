@@ -29,6 +29,7 @@ let%expect_test "Simple test of attach, detach, describe_attached_uis" =
             ; rgb = true
             }
           ~on_event:ignore
+          ~on_parse_error:`Raise
       in
       let%bind descriptions = Ui.describe_attached_uis |> run_join [%here] client in
       print_s [%sexp (descriptions : Ui.Description.t list)];
@@ -390,10 +391,132 @@ let%expect_test "Show echoed content in command line" =
   return ()
 ;;
 
+let%expect_test "Test sending errors" =
+  let%bind () =
+    with_ui_client (fun client ui ->
+      let open Deferred.Or_error.Let_syntax in
+      let%bind () =
+        run_join [%here] client (Nvim.err_write ~str:"This should not display yet...")
+      in
+      let%bind screen = get_screen_contents [%here] ui in
+      print_endline screen;
+      let%bind () =
+        run_join [%here] client (Nvim.err_write ~str:"but now it should!\n")
+      in
+      let%bind screen = get_screen_contents [%here] ui in
+      print_endline screen;
+      let%bind () =
+        run_join [%here] client (Nvim.err_writeln ~str:"This should display now.")
+      in
+      let%bind screen = get_screen_contents [%here] ui in
+      print_endline screen;
+      return ())
+  in
+  [%expect
+    {|
+    ╭────────────────────────────────────────────────────────────────────────────────╮
+    │                                                                                │
+    │~                                                                               │
+    │~                                                                               │
+    │~                                                                               │
+    │~                                                                               │
+    │~                                                                               │
+    │~                                                                               │
+    │~                                                                               │
+    │~                                                                               │
+    │~                                                                               │
+    │~                                                                               │
+    │~                                                                               │
+    │~                                                                               │
+    │~                                                                               │
+    │~                                                                               │
+    │~                                                                               │
+    │~                                                                               │
+    │~                                                                               │
+    │~                                                                               │
+    │~                                                                               │
+    │~                                                                               │
+    │~                                                                               │
+    │~                                                                               │
+    │~                                                                               │
+    │~                                                                               │
+    │~                                                                               │
+    │~                                                                               │
+    │~                                                                               │
+    │[No Name]                                                     0,0-1          All│
+    │                                                                                │
+    ╰────────────────────────────────────────────────────────────────────────────────╯
+    ╭────────────────────────────────────────────────────────────────────────────────╮
+    │                                                                                │
+    │~                                                                               │
+    │~                                                                               │
+    │~                                                                               │
+    │~                                                                               │
+    │~                                                                               │
+    │~                                                                               │
+    │~                                                                               │
+    │~                                                                               │
+    │~                                                                               │
+    │~                                                                               │
+    │~                                                                               │
+    │~                                                                               │
+    │~                                                                               │
+    │~                                                                               │
+    │~                                                                               │
+    │~                                                                               │
+    │~                                                                               │
+    │~                                                                               │
+    │~                                                                               │
+    │~                                                                               │
+    │~                                                                               │
+    │~                                                                               │
+    │~                                                                               │
+    │~                                                                               │
+    │~                                                                               │
+    │~                                                                               │
+    │~                                                                               │
+    │[No Name]                                                     0,0-1          All│
+    │This should not display yet...but now it should!                                │
+    ╰────────────────────────────────────────────────────────────────────────────────╯
+    ╭────────────────────────────────────────────────────────────────────────────────╮
+    │                                                                                │
+    │~                                                                               │
+    │~                                                                               │
+    │~                                                                               │
+    │~                                                                               │
+    │~                                                                               │
+    │~                                                                               │
+    │~                                                                               │
+    │~                                                                               │
+    │~                                                                               │
+    │~                                                                               │
+    │~                                                                               │
+    │~                                                                               │
+    │~                                                                               │
+    │~                                                                               │
+    │~                                                                               │
+    │~                                                                               │
+    │~                                                                               │
+    │~                                                                               │
+    │~                                                                               │
+    │~                                                                               │
+    │~                                                                               │
+    │~                                                                               │
+    │~                                                                               │
+    │~                                                                               │
+    │~                                                                               │
+    │~                                                                               │
+    │~                                                                               │
+    │[No Name]                                                     0,0-1          All│
+    │This should display now.                                                        │
+    ╰────────────────────────────────────────────────────────────────────────────────╯ |}];
+  return ()
+;;
+
 let%expect_test "Naively calling [echo] from inside [rpcrequest] fails" =
   let%bind () =
     let open Deferred.Or_error.Let_syntax in
-    let rpc ~keyboard_interrupted:_ client ui () =
+    let rpc ~keyboard_interrupted:_ ~client ui =
       let%bind () =
         run_join
           [%here]
@@ -411,12 +534,11 @@ let%expect_test "Naively calling [echo] from inside [rpcrequest] fails" =
         register_request_blocking
           client
           ~name:"rpc"
-          ~type_:Defun.Ocaml.Sync.(Nil @-> return Nil)
-          ~f:(rpc client ui)
-        |> ok_exn
+          ~type_:Defun.Ocaml.Sync.(return Nil)
+          ~f:(rpc ui)
       in
       let channel = Client.rpc_channel_id client in
-      Nvim.command ~command:(sprintf "call rpcrequest(%d, 'rpc', v:null)" channel)
+      Nvim.command ~command:(sprintf "call rpcrequest(%d, 'rpc')" channel)
       |> run_join [%here] client)
   in
   [%expect
@@ -459,7 +581,7 @@ let%expect_test "Naively calling [echo] from inside [rpcrequest] fails" =
 let%expect_test "[echo_in_rpcrequest] hack" =
   let%bind () =
     let open Deferred.Or_error.Let_syntax in
-    let rpc ~keyboard_interrupted:_ client ui () =
+    let rpc ~keyboard_interrupted:_ ~client ui =
       let%bind () =
         run_join
           [%here]
@@ -475,12 +597,11 @@ let%expect_test "[echo_in_rpcrequest] hack" =
         register_request_blocking
           client
           ~name:"rpc"
-          ~type_:Defun.Ocaml.Sync.(Nil @-> return Nil)
-          ~f:(rpc client ui)
-        |> ok_exn
+          ~type_:Defun.Ocaml.Sync.(return Nil)
+          ~f:(rpc ui)
       in
       let channel = Client.rpc_channel_id client in
-      Nvim.command ~command:(sprintf "call rpcrequest(%d, 'rpc', v:null)" channel)
+      Nvim.command ~command:(sprintf "call rpcrequest(%d, 'rpc')" channel)
       |> run_join [%here] client)
   in
   [%expect
@@ -516,6 +637,203 @@ let%expect_test "[echo_in_rpcrequest] hack" =
     │~                                                                               │
     │[No Name]                                                     0,0-1          All│
     │Hello, world! 'Quotes' "work" too.                                              │
+    ╰────────────────────────────────────────────────────────────────────────────────╯ |}];
+  return ()
+;;
+
+let%expect_test "Failure to parse async request" =
+  let%bind () =
+    with_ui_client (fun client ui ->
+      let open Deferred.Or_error.Let_syntax in
+      let call_async_func =
+        wrap_viml_function
+          ~type_:Defun.Vim.(Integer @-> String @-> String @-> return Integer)
+          ~function_name:"rpcnotify"
+          (Client.rpc_channel_id client)
+          "async_func"
+      in
+      register_request_async
+        client
+        ~name:"async_func"
+        ~type_:Defun.Ocaml.Async.(Nil @-> unit)
+        ~f:(fun ~client:_ () ->
+          print_s [%message "Parsing unexpectedly succeeded."];
+          Deferred.Or_error.return ());
+      let%bind () =
+        Nvim.command ~command:"set cmdheight=4" |> run_join [%here] client
+      in
+      let%bind rpcnotify_return_value =
+        call_async_func "bad argument" |> run_join [%here] client
+      in
+      assert (rpcnotify_return_value = 1);
+      let%map screen =
+        wait_until_text [%here] ui ~f:(String.is_substring ~substring:"argument")
+      in
+      print_endline screen)
+  in
+  [%expect
+    {|
+    ╭────────────────────────────────────────────────────────────────────────────────╮
+    │                                                                                │
+    │~                                                                               │
+    │~                                                                               │
+    │~                                                                               │
+    │~                                                                               │
+    │~                                                                               │
+    │~                                                                               │
+    │~                                                                               │
+    │~                                                                               │
+    │~                                                                               │
+    │~                                                                               │
+    │~                                                                               │
+    │~                                                                               │
+    │~                                                                               │
+    │~                                                                               │
+    │~                                                                               │
+    │~                                                                               │
+    │~                                                                               │
+    │~                                                                               │
+    │~                                                                               │
+    │~                                                                               │
+    │~                                                                               │
+    │~                                                                               │
+    │~                                                                               │
+    │~                                                                               │
+    │[No Name]                                                     0,0-1          All│
+    │(((method_name async_func) (params ((String "bad argument"))))                  │
+    │ ("Wrong argument type"                                                         │
+    │  ("witness does not match message type" (witness Nil)                          │
+    │   (msg (String "bad argument")))))                                             │
+    ╰────────────────────────────────────────────────────────────────────────────────╯ |}];
+  return ()
+;;
+
+let%expect_test "Too few arguments" =
+  let%bind () =
+    with_ui_client (fun client ui ->
+      let open Deferred.Or_error.Let_syntax in
+      let call_async_func =
+        wrap_viml_function
+          ~type_:Defun.Vim.(Integer @-> String @-> Nil @-> return Integer)
+          ~function_name:"rpcnotify"
+          (Client.rpc_channel_id client)
+          "async_func"
+      in
+      register_request_async
+        client
+        ~name:"async_func"
+        ~type_:Defun.Ocaml.Async.(Nil @-> Nil @-> unit)
+        ~f:(fun ~client:_ () () ->
+          print_s [%message "Parsing unexpectedly succeeded."];
+          Deferred.Or_error.return ());
+      let%bind () =
+        Nvim.command ~command:"set cmdheight=2" |> run_join [%here] client
+      in
+      let%bind rpcnotify_return_value = call_async_func () |> run_join [%here] client in
+      assert (rpcnotify_return_value = 1);
+      let%map screen =
+        wait_until_text [%here] ui ~f:(String.is_substring ~substring:"argument")
+      in
+      print_endline screen)
+  in
+  [%expect
+    {|
+    ╭────────────────────────────────────────────────────────────────────────────────╮
+    │                                                                                │
+    │~                                                                               │
+    │~                                                                               │
+    │~                                                                               │
+    │~                                                                               │
+    │~                                                                               │
+    │~                                                                               │
+    │~                                                                               │
+    │~                                                                               │
+    │~                                                                               │
+    │~                                                                               │
+    │~                                                                               │
+    │~                                                                               │
+    │~                                                                               │
+    │~                                                                               │
+    │~                                                                               │
+    │~                                                                               │
+    │~                                                                               │
+    │~                                                                               │
+    │~                                                                               │
+    │~                                                                               │
+    │~                                                                               │
+    │~                                                                               │
+    │~                                                                               │
+    │~                                                                               │
+    │~                                                                               │
+    │~                                                                               │
+    │[No Name]                                                     0,0-1          All│
+    │("Wrong number of arguments"                                                    │
+    │ (event ((method_name async_func) (params (Nil)))))                             │
+    ╰────────────────────────────────────────────────────────────────────────────────╯ |}];
+  return ()
+;;
+
+let%expect_test "Too many arguments" =
+  let%bind () =
+    with_ui_client (fun client ui ->
+      let open Deferred.Or_error.Let_syntax in
+      let call_async_func =
+        wrap_viml_function
+          ~type_:Defun.Vim.(Integer @-> String @-> Nil @-> return Integer)
+          ~function_name:"rpcnotify"
+          (Client.rpc_channel_id client)
+          "async_func"
+      in
+      register_request_async
+        client
+        ~name:"async_func"
+        ~type_:Defun.Ocaml.Async.unit
+        ~f:(fun ~client:_ ->
+          print_s [%message "Parsing unexpectedly succeeded."];
+          Deferred.Or_error.return ());
+      let%bind () =
+        Nvim.command ~command:"set cmdheight=2" |> run_join [%here] client
+      in
+      let%bind rpcnotify_return_value = call_async_func () |> run_join [%here] client in
+      assert (rpcnotify_return_value = 1);
+      let%map screen =
+        wait_until_text [%here] ui ~f:(String.is_substring ~substring:"argument")
+      in
+      print_endline screen)
+  in
+  [%expect
+    {|
+    ╭────────────────────────────────────────────────────────────────────────────────╮
+    │                                                                                │
+    │~                                                                               │
+    │~                                                                               │
+    │~                                                                               │
+    │~                                                                               │
+    │~                                                                               │
+    │~                                                                               │
+    │~                                                                               │
+    │~                                                                               │
+    │~                                                                               │
+    │~                                                                               │
+    │~                                                                               │
+    │~                                                                               │
+    │~                                                                               │
+    │~                                                                               │
+    │~                                                                               │
+    │~                                                                               │
+    │~                                                                               │
+    │~                                                                               │
+    │~                                                                               │
+    │~                                                                               │
+    │~                                                                               │
+    │~                                                                               │
+    │~                                                                               │
+    │~                                                                               │
+    │~                                                                               │
+    │~                                                                               │
+    │[No Name]                                                     0,0-1          All│
+    │("Wrong number of arguments"                                                    │
+    │ (event ((method_name async_func) (params (Nil)))))                             │
     ╰────────────────────────────────────────────────────────────────────────────────╯ |}];
   return ()
 ;;

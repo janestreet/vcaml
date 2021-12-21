@@ -12,7 +12,6 @@ build: [
 depends: [
   "ocaml" {>= "4.08.0"}
   "async"
-  "async_extra"
   "base"
   "core"
   "core_kernel"
@@ -27,8 +26,8 @@ depends: [
 ]
 synopsis: "OCaml bindings for the Neovim API"
 description: "
-The Neovim text editor comes with an RPC-based public API 
-which can be used to control the editor.  This set of libraries implements 
-an OCaml interface to those APIs, for the purpose of permitting neovim 
+The Neovim text editor comes with an RPC-based public API
+which can be used to control the editor.  This set of libraries implements
+an OCaml interface to those APIs, for the purpose of permitting neovim
 plugins to be written in OCaml.
 "

@@ -1,37 +1,56 @@
 open Core
 open Async
 
-type event =
-  { method_name : string
-  ; params : Msgpack.t list
-  }
-[@@deriving sexp]
+module Event = struct
+  type t =
+    { method_name : string
+    ; params : Msgpack.t list
+    }
+  [@@deriving sexp_of]
+end
 
-type t =
-  { reader : Reader.t
-  ; writer : Writer.t
-  ; notifications_bus : (event -> unit) Bus.Read_only.t
+module Error = struct
+  type t =
+    | Fatal_parse_failure of string
+    | Invalid_rpc_message of Msgpack.t
+    | Response_for_unknown_request of Msgpack.t
+    | Unknown_method_called of Msgpack.t
+  [@@deriving sexp_of]
+
+  let to_error t = Error.create_s [%sexp (t : t)]
+end
+
+(* Because we copy [t] when [connect] is called, this record should not have any mutable
+   fields. We don't want a situation where a [[`not_connected] t] is manipulated after
+   [connect] is called but the [t] returned by [connect] doesn't reflect the change.  *)
+type _ t =
+  { reader : Reader.t Set_once.t
+  ; writer : Writer.t Set_once.t
+  ; notifications : (Event.t -> unit) Bus.Read_write.t
   ; pending_requests : (Msgpack.t, Msgpack.t) Result.t Ivar.t Int.Table.t
   ; callbacks : (Msgpack.t list -> Msgpack.t Deferred.Or_error.t) String.Table.t
   ; create_id : unit -> Int63.t
+  ; on_error : Error.t -> unit
   }
 [@@deriving fields]
 
-let event_loop t notifications_bus ~on_error ~close_reader_and_writer_on_disconnect =
+let event_loop t ~close_reader_and_writer_on_disconnect =
+  let reader = Set_once.get_exn t.reader [%here] in
+  let writer = Set_once.get_exn t.writer [%here] in
   let handle_message msg =
     match msg with
     | Msgpack.Array [ Integer 1; Integer msgid; Nil; result ] ->
       (match Hashtbl.find t.pending_requests msgid with
-       | None -> on_error ~message:(sprintf "Unknown message ID: %d" msgid) msg
+       | None -> t.on_error (Response_for_unknown_request msg)
        | Some box -> Ivar.fill box (Ok result))
     | Array [ Integer 1; Integer msgid; err; Nil ] ->
       (match Hashtbl.find t.pending_requests msgid with
-       | None -> on_error ~message:(sprintf "Unknown message ID: %d" msgid) msg
+       | None -> t.on_error (Response_for_unknown_request msg)
        | Some box -> Ivar.fill box (Error err))
     | Array [ Integer 2; String method_name; Array params ] ->
-      Bus.write notifications_bus { method_name; params }
+      Bus.write t.notifications { method_name; params }
     | Array [ Integer 0; Integer msgid; String method_name; Array params ] ->
-      let respond msg = Writer.write t.writer (Msgpack.string_of_t_exn msg) in
+      let respond msg = Writer.write writer (Msgpack.string_of_t_exn msg) in
       (match Hashtbl.find t.callbacks method_name with
        | None ->
          Array
@@ -43,16 +62,16 @@ let event_loop t notifications_bus ~on_error ~close_reader_and_writer_on_disconn
             let response : Msgpack.t =
               match result with
               | Ok r -> Array [ Integer 1; Integer msgid; Nil; r ]
-              | Error e ->
+              | Error error ->
                 Array
                   [ Integer 1
                   ; Integer msgid
-                  ; String (e |> [%sexp_of: Error.t] |> Sexp.to_string)
+                  ; String (Core.Error.to_string_mach error)
                   ; Nil
                   ]
             in
             respond response))
-    | _ -> on_error ~message:"Unexpected response" msg
+    | _ -> t.on_error (Invalid_rpc_message msg)
   in
   let%bind parse_result =
     Angstrom_async.parse_many
@@ -61,26 +80,24 @@ let event_loop t notifications_bus ~on_error ~close_reader_and_writer_on_disconn
          (* Force synchronous message handling. *)
          handle_message msg;
          return ())
-      t.reader
+      reader
   in
   (match parse_result with
    | Ok () -> ()
-   | Error details ->
-     let message =
-       sprintf "Unable to parse MessagePack-RPC data: %s. Parser stopped." details
-     in
-     on_error ~message Nil);
+   | Error details -> t.on_error (Fatal_parse_failure details));
   match close_reader_and_writer_on_disconnect with
   | false -> return ()
   | true ->
-    let%map () = Writer.close t.writer
-    and () = Reader.close t.reader in
+    let%map () = Writer.close writer
+    and () = Reader.close reader in
     ()
 ;;
 
 (* If the [write] system call fails, fill all outstanding requests with errors. *)
 let handle_write_syscall_failure t ~close_reader_and_writer_on_disconnect =
-  let monitor = Writer.monitor t.writer in
+  let reader = Set_once.get_exn t.reader [%here] in
+  let writer = Set_once.get_exn t.writer [%here] in
+  let monitor = Writer.monitor writer in
   Monitor.detach_and_iter_errors monitor ~f:(fun exn ->
     let exn = Monitor.extract_exn exn in
     let error = Error (Msgpack.String (Exn.to_string exn)) in
@@ -92,37 +109,42 @@ let handle_write_syscall_failure t ~close_reader_and_writer_on_disconnect =
       (* We can close the [Reader.t] because even though there still may be unconsumed
          data, we have already responded to all the pending requests. *)
       don't_wait_for
-        (let%map () = Writer.close t.writer
-         and () = Reader.close t.reader in
+        (let%map () = Writer.close writer
+         and () = Reader.close reader in
          ()))
 ;;
 
-let connect reader writer ~on_error ~close_reader_and_writer_on_disconnect =
-  let notifications_bus =
+let connect t reader writer ~close_reader_and_writer_on_disconnect =
+  Set_once.set_exn t.reader [%here] reader;
+  Set_once.set_exn t.writer [%here] writer;
+  don't_wait_for (event_loop t ~close_reader_and_writer_on_disconnect);
+  handle_write_syscall_failure t ~close_reader_and_writer_on_disconnect;
+  (* Copy [t] to satisfy type checker. Only happens once per connection (and we are using
+     Async anyway) so we prefer it to using [Obj.magic]. *)
+  { t with reader = t.reader }
+;;
+
+let create ~on_error =
+  let notifications =
     Bus.create
       [%here]
       Arity1
       ~on_subscription_after_first_write:Allow
-      ~on_callback_raise:(* This should be impossible. *)
-        Error.raise
+      ~on_callback_raise:Core.Error.raise
+      (* We don't want to catch errors raised by client code. *)
   in
   let module Id_factory = Unique_id.Int63 () in
-  let t =
-    { reader
-    ; writer
-    ; notifications_bus = Bus.read_only notifications_bus
-    ; pending_requests = Int.Table.create ()
-    ; callbacks = String.Table.create ()
-    ; create_id = (fun () -> (Id_factory.create () :> Int63.t))
-    }
-  in
-  don't_wait_for
-    (event_loop t notifications_bus ~on_error ~close_reader_and_writer_on_disconnect);
-  handle_write_syscall_failure t ~close_reader_and_writer_on_disconnect;
-  t
+  { reader = Set_once.create ()
+  ; writer = Set_once.create ()
+  ; notifications
+  ; pending_requests = Int.Table.create ()
+  ; callbacks = String.Table.create ()
+  ; create_id = (fun () -> (Id_factory.create () :> Int63.t))
+  ; on_error
+  }
 ;;
 
-let subscribe t = Async_bus.pipe1_exn t.notifications_bus
+let notifications t = Bus.read_only t.notifications
 
 let to_native_uint32 =
   let mask =
@@ -134,12 +156,13 @@ let to_native_uint32 =
 ;;
 
 let call t ~method_name ~parameters =
+  let writer = Set_once.get_exn t.writer [%here] in
   let msg_id = to_native_uint32 (t.create_id ()) in
   let query =
     Msgpack.Array [ Integer 0; Integer msg_id; String method_name; Array parameters ]
     (* This should be safe b/c we aren't serializing an extension. *)
   in
-  match Writer.is_closed t.writer with
+  match Writer.is_closed writer with
   | true ->
     Error
       (Msgpack.String
@@ -152,27 +175,26 @@ let call t ~method_name ~parameters =
   | false ->
     let result = Ivar.create () in
     Hashtbl.set t.pending_requests ~key:msg_id ~data:result;
-    let () = Writer.write t.writer (Msgpack.string_of_t_exn query) in
+    let () = Writer.write writer (Msgpack.string_of_t_exn query) in
     (* Note that "flushed" performs a flush. We don't bind on it because it will fail if
        the file descriptor is bad (e.g., because the other side disconnected). *)
-    don't_wait_for (Writer.flushed t.writer);
+    don't_wait_for (Writer.flushed writer);
     let%bind result = Ivar.read result in
     Hashtbl.remove t.pending_requests msg_id;
     return result
 ;;
 
 let notify t ~method_name ~parameters =
+  let writer = Set_once.get_exn t.writer [%here] in
   let query =
     Msgpack.Array [ Integer 2; String method_name; Array parameters ]
     (* This should be safe b/c we aren't serializing an extension. *)
   in
-  match Writer.is_closed t.writer with
+  match Writer.is_closed writer with
   | true -> ()
-  | false -> Writer.write t.writer (Msgpack.string_of_t_exn query)
+  | false -> Writer.write writer (Msgpack.string_of_t_exn query)
 ;;
 
-let register_method t ~name ~f =
-  match Hashtbl.add t.callbacks ~key:name ~data:f with
-  | `Ok -> Ok ()
-  | `Duplicate -> Or_error.errorf "Duplicate method name %s" name
-;;
+let register_method t ~name ~f = Hashtbl.add t.callbacks ~key:name ~data:f
+let reader t = Set_once.get_exn t.reader [%here]
+let writer t = Set_once.get_exn t.writer [%here]

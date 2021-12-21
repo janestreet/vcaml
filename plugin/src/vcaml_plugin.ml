@@ -1,97 +1,164 @@
 open! Core
 open! Async
 open Vcaml
-module Rpc_handler = Vcaml_plugin_intf.Rpc_handler
-module Raise_on_any_error = Vcaml_plugin_intf.Raise_on_any_error
+open Vcaml_plugin_intf
+
+module Oneshot = struct
+  include Oneshot
+
+  module Make (O : Arg) = struct
+    let command ~summary =
+      Async.Command.async_or_error
+        ~summary
+        (Core.Command.Param.return (fun () ->
+           let open Deferred.Or_error.Let_syntax in
+           let client = Client.create ~on_error:O.on_error in
+           let shutdown = Ivar.create () in
+           let invoked_rpc = Set_once.create () in
+           let oneshot ~name f =
+             match Set_once.get invoked_rpc with
+             | Some previously_invoked ->
+               Deferred.Or_error.error_s
+                 [%message
+                   "Already invoked an RPC"
+                     ~invoking:(name : string)
+                     (previously_invoked : string)]
+             | None ->
+               Set_once.set_exn invoked_rpc [%here] name;
+               let%map result = f () in
+               Ivar.fill shutdown ();
+               result
+           in
+           List.iter O.rpc_handlers ~f:(fun (Sync_rpc { name; type_; f }) ->
+             Private.register_request_blocking
+               client
+               ~name
+               ~type_
+               ~f
+               ~wrap_f:(oneshot ~name));
+           let%bind (_ : [ `connected ] Client.t) =
+             Client.attach client Stdio ~time_source:(Time_source.wall_clock ())
+           in
+           Ivar.read shutdown |> Deferred.ok))
+    ;;
+  end
+end
 
 module Persistent = struct
-  module type Arg = Vcaml_plugin_intf.Persistent_arg
-  module type S = Vcaml_plugin_intf.Persistent_s
+  include Persistent
 
   module Make (P : Arg) = struct
-    type state = P.state
-
-    let register_handler ~client ~state ~handler ~shutdown =
-      match handler with
-      | Rpc_handler.Sync_handler { name; type_; f } ->
-        register_request_blocking client ~name ~type_ ~f:(f client state ~shutdown)
-      | Async_handler { name; here; type_; f; on_error } ->
-        Or_error.return
-          (register_request_async
-             ?on_error
-             here
-             client
-             ~name
-             ~type_
-             ~f:(f client state ~shutdown))
+    let register_handlers ~client ~state ~shutdown =
+      let shutdown = Ivar.fill_if_empty shutdown in
+      List.iter P.rpc_handlers ~f:(function
+        | Sync_rpc { name; type_; f } ->
+          register_request_blocking client ~name ~type_ ~f:(f state ~shutdown)
+        | Async_rpc { name; type_; f } ->
+          Private.register_request_async
+            client
+            ~name
+            ~type_
+            ~f:(f state ~shutdown)
+            ~wrap_f:(fun f -> f () |> Deferred.Or_error.tag ~tag:P.name))
     ;;
 
-    let perform_handler_registration ~client ~state ~handlers ~shutdown =
-      Deferred.return
-        (handlers
-         |> List.map ~f:(fun handler -> register_handler ~client ~state ~handler ~shutdown)
-         |> Or_error.all_unit)
+    let display_error_in_neovim ~client error =
+      error
+      |> Error.tag ~tag:P.name
+      |> Error.to_string_hum
+      |> (fun str -> Nvim.err_writeln ~str)
+      |> run_join [%here] client
+      (* We can't really do anything interesting with a failure to display an error. *)
+      |> (Deferred.ignore_m : unit Deferred.Or_error.t -> unit Deferred.t)
     ;;
 
-    let notify_vim_of_plugin_start ~client ~chan_id ~vimscript_notify_fn =
-      let open Deferred.Or_error.Let_syntax in
-      match vimscript_notify_fn with
-      | None -> return ()
-      | Some function_name ->
-        (match%bind
-           wrap_viml_function
-             ~type_:(Defun.Vim.unary Integer Integer)
-             ~function_name
-             chan_id
-           |> run_join [%here] client
-         with
-         | 0 -> return ()
-         | error_code ->
-           Deferred.Or_error.errorf "[%s] returned %d" function_name error_code)
-    ;;
-
-    let run_internal ~client ~during_plugin =
-      let open Deferred.Or_error.Let_syntax in
-      let terminate_var = Ivar.create () in
-      let shutdown () = Ivar.fill_if_empty terminate_var () in
-      let chan_id = Client.rpc_channel_id client in
-      let%bind state = P.startup client ~shutdown in
-      let%bind () =
-        perform_handler_registration ~client ~state ~handlers:P.rpc_handlers ~shutdown
+    let start ~client ~state ~shutdown =
+      let%bind result =
+        let open Deferred.Or_error.Let_syntax in
+        let shutdown = Ivar.fill_if_empty shutdown in
+        let chan_id = Client.rpc_channel_id client in
+        let%bind () = P.on_startup client state ~shutdown in
+        match P.vimscript_notify_fn with
+        | None -> return ()
+        | Some function_name ->
+          (match%bind
+             wrap_viml_function
+               ~type_:Defun.Vim.(Integer @-> return Object)
+               ~function_name
+               chan_id
+             |> run_join [%here] client
+           with
+           | Integer 0 -> return ()
+           | value ->
+             Deferred.Or_error.error_s
+               [%message
+                 (sprintf "%s returned a value" function_name) ~_:(value : Msgpack.t)])
       in
       let%bind () =
-        notify_vim_of_plugin_start
-          ~client
-          ~chan_id
-          ~vimscript_notify_fn:P.vimscript_notify_fn
+        match result with
+        | Ok _ -> return ()
+        | Error error -> display_error_in_neovim ~client error
       in
-      let%bind () = during_plugin ~chan_id ~state in
-      let%bind () = Deferred.ok (Ivar.read terminate_var) in
-      let%bind () = P.on_shutdown client state in
-      return state
+      return result
     ;;
 
-    let ignore_during_plugin ~chan_id:_ ~state:_ = Deferred.Or_error.return ()
-
-    let run () =
-      let open Deferred.Or_error.Let_syntax in
-      let%bind client =
-        Client.attach
-          (Unix `Child)
-          ~on_error:P.on_error
-          ~on_error_event:P.on_error_event
-          ~time_source:(Time_source.wall_clock ())
+    let on_shutdown client state =
+      let%bind result = P.on_shutdown client state in
+      let%bind () =
+        match result with
+        | Ok _ -> return ()
+        | Error error -> display_error_in_neovim ~client error
       in
-      let%bind _state = run_internal ~client ~during_plugin:ignore_during_plugin in
-      return ()
+      return result
     ;;
 
-    let run_for_testing ?(during_plugin = ignore_during_plugin) client =
-      run_internal ~client ~during_plugin
+    let command =
+      Async.Command.async_or_error
+        (Core.Command.Param.return (fun () ->
+           let open Deferred.Or_error.Let_syntax in
+           let state = P.init_state () in
+           let shutdown = Ivar.create () in
+           let client = Vcaml.Client.create ~on_error:P.on_error in
+           register_handlers ~client ~state ~shutdown;
+           let%bind client =
+             Vcaml.Client.attach
+               client
+               (Unix `Child)
+               ~time_source:(Time_source.wall_clock ())
+           in
+           let%bind () = start ~client ~state ~shutdown in
+           let%bind () = Ivar.read shutdown |> Deferred.ok in
+           on_shutdown client state))
     ;;
 
-    let command ~summary () =
-      Async.Command.async_or_error ~summary (Core.Command.Param.return (fun () -> run ()))
-    ;;
+    module For_testing = struct
+      type plugin_state = P.state [@@deriving sexp_of]
+
+      module State = struct
+        type t =
+          { plugin_state : plugin_state
+          ; shutdown : unit -> unit
+          ; wait_for_shutdown : unit Or_error.t Deferred.t
+          }
+      end
+
+      let start ~client =
+        let open Deferred.Or_error.Let_syntax in
+        let state = P.init_state () in
+        let shutdown_started = Ivar.create () in
+        let shutdown_finished = Ivar.create () in
+        don't_wait_for
+          (let%bind.Deferred () = Ivar.read shutdown_started in
+           let%map.Deferred result = on_shutdown client state in
+           Ivar.fill shutdown_finished result);
+        register_handlers ~client ~state ~shutdown:shutdown_started;
+        let%bind () = start ~client ~state ~shutdown:shutdown_started in
+        return
+          { State.plugin_state = state
+          ; shutdown = Ivar.fill shutdown_started
+          ; wait_for_shutdown = Ivar.read shutdown_finished
+          }
+      ;;
+    end
   end
 end

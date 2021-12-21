@@ -7,5 +7,5 @@ call jobstart([current_dir . '/bin/main.exe'])
 " connected to neovim
 function! OnGreetingsPluginStart (rpc_chan)
   echo rpcrequest(a:rpc_chan, 'greeting', 'Vcaml user')
-  call rpcrequest(a:rpc_chan, 'shutdown', v:null)
+  call rpcrequest(a:rpc_chan, 'shutdown')
 endfunction

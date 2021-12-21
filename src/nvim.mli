@@ -45,6 +45,8 @@ val get_hl_by_id
 val get_var : name:string -> type_:'a Type.t -> 'a Api_call.Or_error.t
 val set_var : name:string -> type_:'a Type.t -> value:'a -> unit Api_call.Or_error.t
 val list_runtime_paths : string list Api_call.Or_error.t
+val err_write : str:string -> unit Api_call.Or_error.t
+val err_writeln : str:string -> unit Api_call.Or_error.t
 
 module Mouse : sig
   module Button : sig
@@ -106,8 +108,8 @@ module Fast : sig
       is filled after the writer is closed and the paste stream has flushed to Neovim. *)
   val paste_stream
     :  Source_code_position.t
-    -> Client.t
-    -> string Async.Pipe.Writer.t * unit Async.Deferred.t
+    -> [ `connected ] Client.t
+    -> string Async.Pipe.Writer.t * unit Async.Deferred.Or_error.t
 end
 
 (** As of this writing messages echoed during an [rpcrequest] are not displayed until the
@@ -141,8 +143,6 @@ module Untested : sig
   val get_option : name:string -> type_:'a Type.t -> 'a Api_call.Or_error.t
   val set_option : name:string -> type_:'a Type.t -> value:'a -> unit Api_call.Or_error.t
   val out_write : str:string -> unit Api_call.Or_error.t
-  val err_write : str:string -> unit Api_call.Or_error.t
-  val err_writeln : str:string -> unit Api_call.Or_error.t
   val list_tabpages : Tabpage.t list Api_call.Or_error.t
   val get_current_tabpage : Tabpage.t Api_call.Or_error.t
   val set_current_tabpage : tabpage:Tabpage.t -> unit Api_call.Or_error.t
