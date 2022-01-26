@@ -343,19 +343,33 @@ let%expect_test "open up sh" =
   return ()
 ;;
 
+let run_echo_tests ~f ~message =
+  let tests =
+    [ "native_echo", Nvim.command ~command:[%string "echo '%{message}'"]
+    ; "api_out_write", Nvim.out_write ~str:(message ^ "\n")
+    ; "api_echo", Nvim.echo [ { text = message; hl_group = None } ] ~add_to_history:false
+    ]
+  in
+  Deferred.List.map tests ~f:(fun (name, echo) ->
+    let%map output = f ~echo in
+    output, name)
+  >>| String.Map.of_alist_multi
+  >>| Map.iteri ~f:(fun ~key:output ~data:names ->
+    let names = String.concat names ~sep:", " in
+    print_endline [%string "Output for: %{names}\n%{output}\n"])
+;;
+
 let%expect_test "Show echoed content in command line" =
   let%bind () =
-    let open Deferred.Or_error.Let_syntax in
-    with_ui_client (fun client ui ->
-      let%bind () =
-        run_join [%here] client (Nvim.command ~command:"echo 'Hello, world!'")
-      in
-      let%bind screen = get_screen_contents [%here] ui in
-      print_endline screen;
-      return ())
+    run_echo_tests ~message:"Hello, world!" ~f:(fun ~echo ->
+      with_ui_client (fun client ui ->
+        let open Deferred.Or_error.Let_syntax in
+        let%bind () = run_join [%here] client echo in
+        get_screen_contents [%here] ui))
   in
   [%expect
     {|
+    Output for: native_echo, api_out_write, api_echo
     ╭────────────────────────────────────────────────────────────────────────────────╮
     │                                                                                │
     │~                                                                               │
@@ -515,34 +529,29 @@ let%expect_test "Test sending errors" =
 
 let%expect_test "Naively calling [echo] from inside [rpcrequest] fails" =
   let%bind () =
-    let open Deferred.Or_error.Let_syntax in
-    let rpc ~keyboard_interrupted:_ ~client ui =
-      let%bind () =
-        run_join
-          [%here]
-          client
-          (Nvim.command
-             ~command:
-               "echo 'If this message appears we should get rid of [echo_in_rpcrequest]'")
-      in
-      let%bind screen = get_screen_contents [%here] ui in
-      print_endline screen;
-      return ()
-    in
-    with_ui_client (fun client ui ->
-      let () =
-        register_request_blocking
-          client
-          ~name:"rpc"
-          ~type_:Defun.Ocaml.Sync.(return Nil)
-          ~f:(rpc ui)
-      in
-      let channel = Client.rpc_channel_id client in
-      Nvim.command ~command:(sprintf "call rpcrequest(%d, 'rpc')" channel)
-      |> run_join [%here] client)
+    run_echo_tests
+      ~message:"If this message appears we should get rid of [echo_in_rpcrequest]"
+      ~f:(fun ~echo ->
+        let open Deferred.Or_error.Let_syntax in
+        let rpc ~keyboard_interrupted:_ ~client ui =
+          let%bind () = run_join [%here] client echo in
+          get_screen_contents [%here] ui
+        in
+        with_ui_client (fun client ui ->
+          let () =
+            register_request_blocking
+              client
+              ~name:"rpc"
+              ~type_:Defun.Ocaml.Sync.(return String)
+              ~f:(rpc ui)
+          in
+          let channel = Client.rpc_channel_id client in
+          Nvim.eval ~result_type:String ~expr:(sprintf "rpcrequest(%d, 'rpc')" channel)
+          |> run_join [%here] client))
   in
   [%expect
     {|
+    Output for: native_echo, api_out_write, api_echo
     ╭────────────────────────────────────────────────────────────────────────────────╮
     │                                                                                │
     │~                                                                               │

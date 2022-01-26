@@ -114,6 +114,7 @@ module Persistent = struct
 
     let command =
       Async.Command.async_or_error
+        ~summary:P.description
         (Core.Command.Param.return (fun () ->
            let open Deferred.Or_error.Let_syntax in
            let state = P.init_state () in

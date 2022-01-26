@@ -45,8 +45,23 @@ val get_hl_by_id
 val get_var : name:string -> type_:'a Type.t -> 'a Api_call.Or_error.t
 val set_var : name:string -> type_:'a Type.t -> value:'a -> unit Api_call.Or_error.t
 val list_runtime_paths : string list Api_call.Or_error.t
+val out_write : str:string -> unit Api_call.Or_error.t
+val out_writeln : str:string -> unit Api_call.Or_error.t
 val err_write : str:string -> unit Api_call.Or_error.t
 val err_writeln : str:string -> unit Api_call.Or_error.t
+val echo : Highlighted_text.t -> add_to_history:bool -> unit Api_call.Or_error.t
+
+(** As of this writing messages echoed during an [rpcrequest] are not displayed until the
+    request completes. This function hacks around that limitation. A side-effect of this
+    hack is that if the user mashes the keyboard during the [rpcrequest] those keys will
+    be printed after the message. [inputsave] + [inputrestore] does not seem to help
+    mitigate this. For more details about this echoing limitation, see
+    https://github.com/neovim/neovim/issues/14449.
+
+    Note that [err_write] and [err_writeln] do work inside [rpcrequest] but the error
+    message is treated as an exception, so they aren't suitable for regular echoing
+    purposes. *)
+val echo_in_rpcrequest : string -> unit Api_call.Or_error.t
 
 module Mouse : sig
   module Button : sig
@@ -112,14 +127,6 @@ module Fast : sig
     -> string Async.Pipe.Writer.t * unit Async.Deferred.Or_error.t
 end
 
-(** As of this writing messages echoed during an [rpcrequest] are not displayed until the
-    request completes. This function hacks around that limitation. A side-effect of this
-    hack is that if the user mashes the keyboard during the [rpcrequest] those keys will
-    be printed after the message. [inputsave] + [inputrestore] does not seem to help
-    mitigate this. For more details about this echoing limitation, see
-    https://github.com/neovim/neovim/issues/14449. *)
-val echo_in_rpcrequest : string -> unit Api_call.Or_error.t
-
 module Untested : sig
   module Log_level : sig
     type t =
@@ -130,9 +137,8 @@ module Untested : sig
       | Error
   end
 
-  val echo : Highlighted_text.t -> add_to_history:bool -> unit Api_call.Or_error.t
   val notify : Log_level.t -> string -> unit Api_call.Or_error.t
-  val strwidth : text:string -> int Api_call.Or_error.t
+  val get_display_width : text:string -> int Api_call.Or_error.t
   val set_current_dir : dir:string -> unit Api_call.Or_error.t
   val get_current_line : string Api_call.Or_error.t
   val set_current_line : line:string -> unit Api_call.Or_error.t
@@ -142,7 +148,6 @@ module Untested : sig
   val set_vvar : name:string -> type_:'a Type.t -> value:'a -> unit Api_call.Or_error.t
   val get_option : name:string -> type_:'a Type.t -> 'a Api_call.Or_error.t
   val set_option : name:string -> type_:'a Type.t -> value:'a -> unit Api_call.Or_error.t
-  val out_write : str:string -> unit Api_call.Or_error.t
   val list_tabpages : Tabpage.t list Api_call.Or_error.t
   val get_current_tabpage : Tabpage.t Api_call.Or_error.t
   val set_current_tabpage : tabpage:Tabpage.t -> unit Api_call.Or_error.t

@@ -28,6 +28,7 @@ let%expect_test "Oneshot" =
 
 module Plugin = Vcaml_plugin.Persistent.Make (struct
     let name = "vcaml-test-persistent-plugin"
+    let description = "Test plugin"
 
     type state = unit [@@deriving sexp_of]
 
@@ -78,6 +79,7 @@ module type S = Vcaml_plugin.Persistent.S with type state := unit
 let make_plugin ?on_startup ?on_shutdown ?vimscript_notify_fn ?async_rpc ?blocking_rpc () =
   (module Vcaml_plugin.Persistent.Make (struct
        let name = "vcaml-test-persistent-plugin"
+       let description = "Test plugin"
 
        type state = unit [@@deriving sexp_of]
 

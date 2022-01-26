@@ -2,8 +2,8 @@ open! Core
 open! Async
 open Vcaml
 
-(* Simple Vcaml plugin to listen for and respond to rpc messages.
-   Source greetings.vim to use it.*)
+(* Simple VCaml plugin to listen for and respond to RPC messages. Source greetings.vim to
+   use it.*)
 
 let greet _state ~shutdown:_ ~keyboard_interrupted:_ ~client:_ name =
   Deferred.Or_error.return (Printf.sprintf "Hello, %s!" name)
@@ -11,6 +11,7 @@ let greet _state ~shutdown:_ ~keyboard_interrupted:_ ~client:_ name =
 
 include Vcaml_plugin.Persistent.Make (struct
     let name = "greetings"
+    let description = "Start a VCaml process that responds to RPC messages with greetings."
 
     type state = unit [@@deriving sexp_of]
 
@@ -29,7 +30,3 @@ include Vcaml_plugin.Persistent.Make (struct
     let vimscript_notify_fn = Some "OnGreetingsPluginStart"
     let on_shutdown _ _ = Deferred.Or_error.return ()
   end)
-
-let main =
-  command ~summary:"start a Vcaml process which responds to rpc messages with greetings"
-;;

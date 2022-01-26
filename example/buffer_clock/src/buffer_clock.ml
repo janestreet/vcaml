@@ -11,8 +11,8 @@ module State = struct
 end
 
 (* Simple Vcaml plugin to create a new buffer/window which will display the current time
-   and update every second. The plugin is killed upon buffer deletion.
-   Source buffer_clock.vim to use it. *)
+   and update every second. The plugin is killed upon buffer deletion. Source
+   buffer_clock.vim to use it. *)
 
 let win_update_api_call ~new_win ~buffer =
   let%map.Api_call set_height_or_err = Window.set_height ~window:new_win ~height:1
@@ -43,7 +43,7 @@ let update_buffer_with_current_time ~client ~buffer ~time_source () =
       ~buffer
       ~start:0
       ~end_:1
-      ~strict_indexing:false
+      ~strict_indexing:true
       ~replacement:[ Time_ns.to_string_utc (Time_source.now time_source) ]
     |> run_join [%here] client
   in
@@ -80,6 +80,11 @@ let create_plugin ~time_source =
     let name = "buffer-clock"
 
     type state = State.t [@@deriving sexp_of]
+
+    let description =
+      "Start a VCaml process that opens a new buffer and window with a clock in the \
+       current Neovim instance (shuts down on clock buffer deletion)."
+    ;;
 
     let rpc_handlers = []
     let init_state () = { State.window = Set_once.create (); buffer = Set_once.create () }
@@ -119,9 +124,6 @@ let create_plugin ~time_source =
 let main =
   let (module Main) = create_plugin ~time_source:(Time_source.wall_clock ()) in
   Main.command
-    ~summary:
-      "Start a VCaml process that opens a new buffer and window with a clock in the \
-       current Neovim instance (shuts down on clock buffer deletion)."
 ;;
 
 module For_testing = struct

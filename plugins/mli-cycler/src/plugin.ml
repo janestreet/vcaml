@@ -43,8 +43,7 @@ let echo_file_patterns client =
   let stringified_file_list =
     List.map ~f:File_pattern.to_short_filename file_patterns |> String.concat ~sep:", "
   in
-  Nvim.command ~command:(Printf.sprintf "echom \"%s\"" stringified_file_list)
-  |> run_join [%here] client
+  Nvim.out_writeln ~str:stringified_file_list |> run_join [%here] client
 ;;
 
 let list_file_patterns_in_fzf client =

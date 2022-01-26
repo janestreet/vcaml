@@ -254,8 +254,26 @@ let list_runtime_paths =
   List.map result ~f:Extract.string |> Or_error.combine_errors
 ;;
 
+let out_write ~str = Nvim_internal.nvim_out_write ~str |> Api_call.of_api_result
+
+(* For some reason this isn't a supported API function like [err_writeln]. *)
+let out_writeln ~str =
+  Nvim_internal.nvim_out_write ~str:(str ^ "\n") |> Api_call.of_api_result
+;;
+
 let err_write ~str = Nvim_internal.nvim_err_write ~str |> Api_call.of_api_result
 let err_writeln ~str = Nvim_internal.nvim_err_writeln ~str |> Api_call.of_api_result
+
+let echo message ~add_to_history =
+  (* [opts] is not used by this version of Neovim, but may be used in the future. If
+     we expose it, we should do so in a typeful way rather than asking the user to
+     build [Msgpack.t] values. *)
+  Nvim_internal.nvim_echo
+    ~chunks:(Highlighted_text.to_msgpack message)
+    ~history:add_to_history
+    ~opts:[]
+  |> Api_call.of_api_result
+;;
 
 module Fast = struct
   let get_mode =
@@ -370,6 +388,16 @@ module Fast = struct
   ;;
 end
 
+(* The <CR> is buffered and then used to reply to the prompt. The side effect of this
+   dance is that the prompt is echoed to the screen. *)
+let echo_in_rpcrequest message =
+  let message = String.substr_replace_all message ~pattern:"'" ~with_:"'.\"'\".'" in
+  let open Api_call.Or_error.Let_syntax in
+  let%map (_ : int) = Fast.input ~keys:"<CR>"
+  and (_ : string) = eval ~expr:(sprintf "input('%s')" message) ~result_type:String in
+  ()
+;;
+
 module Untested = struct
   module Log_level = struct
     type t =
@@ -388,17 +416,6 @@ module Untested = struct
     ;;
   end
 
-  let echo message ~add_to_history =
-    (* [opts] is not used by this version of Neovim, but may be used in the future. If
-       we expose it, we should do so in a typeful way rather than asking the user to
-       build [Msgpack.t] values. *)
-    Nvim_internal.nvim_echo
-      ~chunks:(Highlighted_text.to_msgpack message)
-      ~history:add_to_history
-      ~opts:[]
-    |> Api_call.of_api_result
-  ;;
-
   let notify log_level message =
     (* [opts] is not used by this version of Neovim, but may be used in the future. If
        we expose it, we should do so in a typeful way rather than asking the user to
@@ -414,7 +431,9 @@ module Untested = struct
       | _ -> Or_error.error_string "unexpected result from [nvim_notify]")
   ;;
 
-  let strwidth ~text = Nvim_internal.nvim_strwidth ~text |> Api_call.of_api_result
+  let get_display_width ~text =
+    Nvim_internal.nvim_strwidth ~text |> Api_call.of_api_result
+  ;;
 
   let set_current_dir ~dir =
     Nvim_internal.nvim_set_current_dir ~dir |> Api_call.of_api_result
@@ -450,8 +469,6 @@ module Untested = struct
     let value = Extract.inject type_ value in
     Nvim_internal.nvim_set_option ~name ~value |> Api_call.of_api_result
   ;;
-
-  let out_write ~str = Nvim_internal.nvim_out_write ~str |> Api_call.of_api_result
 
   let list_tabpages =
     let open Api_call.Let_syntax in
@@ -594,16 +611,6 @@ module Untested = struct
     ;;
   end
 end
-
-(* The <CR> is buffered and then used to reply to the prompt. The side effect of this
-   dance is that the prompt is echoed to the screen. *)
-let echo_in_rpcrequest message =
-  let message = String.substr_replace_all message ~pattern:"'" ~with_:"'.\"'\".'" in
-  let open Api_call.Or_error.Let_syntax in
-  let%map (_ : int) = Fast.input ~keys:"<CR>"
-  and (_ : string) = eval ~expr:(sprintf "input('%s')" message) ~result_type:String in
-  ()
-;;
 
 (* These functions are part of the Neovim API but are not exposed in VCaml. *)
 module _ = struct

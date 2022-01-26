@@ -14,7 +14,7 @@ let of_ascii_list ascii_chars =
 
 let lowercase = of_ascii_list (List.init 26 ~f:(( + ) 97))
 let uppercase = of_ascii_list (List.init 26 ~f:(( + ) 65))
-let typable_characters = lowercase @ uppercase
+let alphabet = lowercase @ uppercase
 
 module Special_characters = struct
   let space = "space"
@@ -33,9 +33,9 @@ end
 
 module type S = Vcaml_plugin.Persistent.S with type state := State.t
 
-let create_plugin ~sequencer =
-  let module Arg = struct
+include Vcaml_plugin.Persistent.Make (struct
     let name = "simple-editor"
+    let description = "A simple editor plugin for Neovim"
 
     type state = State.t [@@deriving sexp_of]
 
@@ -47,20 +47,19 @@ let create_plugin ~sequencer =
 
     let get_split_window =
       let%map.Api_call.Or_error () = Nvim.command ~command:"split"
-      and new_win = Nvim.get_current_win in
-      new_win
+      and window = Nvim.get_current_win in
+      window
     ;;
 
-    let shutdown_plugin_when_buffer_is_closed ~new_win ~buffer ~chan_id =
+    let shutdown_plugin_when_buffer_is_closed ~window ~buffer ~chan_id =
       let shutdown_on_leave =
         Printf.sprintf
-          "autocmd BufWinLeave <buffer> silent! call rpcnotify(%d, 'shutdown')"
+          "autocmd BufWinLeave <buffer> silent! call rpcrequest(%d, 'shutdown')"
           chan_id
       in
       Api_call.Or_error.all_unit
-        [ Nvim.set_current_win ~window:new_win
+        [ Nvim.set_current_win ~window
         ; Nvim.set_current_buf ~buffer
-        ; Nvim.command ~command:"setlocal ve+=onemore"
         ; Nvim.command ~command:shutdown_on_leave
         ]
     ;;
@@ -69,28 +68,39 @@ let create_plugin ~sequencer =
       Nvim.command
         ~command:
           (Printf.sprintf
-             "nnoremap <silent> <buffer> %s :call rpcnotify(%d, \"%s\")<cr>"
+             "nnoremap <silent> <nowait> <buffer> %s <Cmd>call rpcrequest(%d, \"%s\")<CR>"
              key_bind
              chan_id
              rpc_name)
     ;;
 
-    let add_key_listener ~chan_id key =
-      add_vim_binding ~chan_id ~key_bind:key ~rpc_name:key
-    ;;
+    let add_key_listener ~chan_id key = add_vim_binding ~chan_id ~key_bind:key ~rpc_name:key
 
     let add_special_character_listener ~chan_id key =
       add_vim_binding ~chan_id ~key_bind:(Printf.sprintf "<%s>" key) ~rpc_name:key
     ;;
 
     let add_key_listeners_api_call chan_id =
-      let typable_api_call =
-        typable_characters |> List.map ~f:(add_key_listener ~chan_id)
-      in
+      let typable_api_call = alphabet |> List.map ~f:(add_key_listener ~chan_id) in
       let special_api_call =
         Special_characters.all |> List.map ~f:(add_special_character_listener ~chan_id)
       in
       typable_api_call @ special_api_call |> Api_call.Or_error.all_unit
+    ;;
+
+    let set_virtualedit_inside_buffer =
+      let code =
+        {| augroup simple_editor_save_virtualedit
+             autocmd! * <buffer>
+             autocmd BufEnter <buffer> let b:saved_virtualedit = &virtualedit
+             autocmd BufEnter <buffer> set virtualedit=onemore
+             autocmd BufLeave <buffer> let &virtualedit = b:saved_virtualedit
+           augroup END
+
+           let b:saved_virtualedit = &virtualedit
+           set virtualedit=onemore |}
+      in
+      Nvim.source ~code |> Api_call.Or_error.ignore_m
     ;;
 
     let on_startup client state ~shutdown:_ =
@@ -98,15 +108,34 @@ let create_plugin ~sequencer =
       let%bind buffer =
         Buffer.find_by_name_or_create ~name:"simple-editor" |> run_join [%here] client
       in
-      let%bind new_win = run_join [%here] client get_split_window in
+      let%bind window = run_join [%here] client get_split_window in
       let%bind () =
-        shutdown_plugin_when_buffer_is_closed ~new_win ~buffer ~chan_id
+        shutdown_plugin_when_buffer_is_closed ~window ~buffer ~chan_id
         |> run_join [%here] client
       in
       let%bind () = add_key_listeners_api_call chan_id |> run_join [%here] client in
-      let%bind () = set_modifiable buffer false |> run_join [%here] client in
+      let%bind () = set_virtualedit_inside_buffer |> run_join [%here] client in
+      let%bind () =
+        [ set_modifiable buffer false
+        ; Buffer.set_option
+            ~buffer
+            ~scope:`Local
+            ~name:"buftype"
+            ~type_:String
+            ~value:"nofile"
+        ;
+          Window.Untested.set_option
+            ~window
+            ~scope:`Local
+            ~name:"list"
+            ~type_:Boolean
+            ~value:false
+        ]
+        |> Api_call.Or_error.all_unit
+        |> run_join [%here] client
+      in
       Set_once.set_exn state.State.buffer [%here] buffer;
-      Set_once.set_exn state.State.window [%here] new_win;
+      Set_once.set_exn state.State.window [%here] window;
       return ()
     ;;
 
@@ -205,12 +234,7 @@ let create_plugin ~sequencer =
       set_cursor ~client ~window ~row ~col:(col - 1)
     ;;
 
-    let delete_character_at_mark
-          client
-          buffer
-          window
-          { Position.One_indexed_row.row; col }
-      =
+    let delete_character_at_mark client buffer window { Position.One_indexed_row.row; col } =
       match row, col with
       | 1, 0 -> Deferred.Or_error.return ()
       | r, 0 -> delete_from_beginning_of_line client buffer window r
@@ -229,11 +253,11 @@ let create_plugin ~sequencer =
     let handle_backspace_request = handle_edit_request ~f:delete_character_at_mark
 
     let create_rpc_handler ~rpc_name ~handling_fn =
-      Vcaml_plugin.Persistent.Rpc.create_async
+      Vcaml_plugin.Persistent.Rpc.create_sync
         ~name:rpc_name
-        ~type_:Defun.Ocaml.Async.unit
-        ~f:(fun state ~shutdown ~client ->
-          Throttle.enqueue sequencer (fun () -> handling_fn client state ~shutdown))
+        ~type_:Defun.Ocaml.Sync.(return Nil)
+        ~f:(fun state ~shutdown ~keyboard_interrupted:_ ~client ->
+          handling_fn client state ~shutdown)
     ;;
 
     let create_key_rpc_handler ~key ~str_to_insert =
@@ -246,8 +270,7 @@ let create_plugin ~sequencer =
     ;;
 
     let alphabet_handlers =
-      typable_characters
-      |> List.map ~f:(fun key -> create_key_rpc_handler ~key ~str_to_insert:key)
+      List.map alphabet ~f:(fun key -> create_key_rpc_handler ~key ~str_to_insert:key)
     ;;
 
     let space_handler =
@@ -274,21 +297,4 @@ let create_plugin ~sequencer =
       alphabet_handlers
       @ [ space_handler; enter_handler; backspace_handler; shutdown_handler ]
     ;;
-  end
-  in
-  (module Vcaml_plugin.Persistent.Make (Arg) : S)
-;;
-
-let main =
-  let (module Main) = create_plugin ~sequencer:(Sequencer.create ()) in
-  Main.command ~summary:"A simple editor plugin for Neovim"
-;;
-
-module For_testing = struct
-  module type S = Vcaml_plugin.Persistent.For_testing.S with type plugin_state := State.t
-
-  let create_plugin ~sequencer =
-    let (module Plugin) = create_plugin ~sequencer in
-    (module Plugin.For_testing : S)
-  ;;
-end
+  end)

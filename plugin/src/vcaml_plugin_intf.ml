@@ -94,6 +94,9 @@ module Persistent = struct
 
     val name : string
 
+    (** Used as the [summary] argument for [command]. *)
+    val description : string
+
     (** [on_error] is invoked when VCaml fails to parse a response from Neovim and when
         Neovim sends us an asynchronous error event to inform us that it encountered a
         problem with a message we sent. *)
@@ -138,7 +141,7 @@ module Persistent = struct
   module type S = sig
     type state
 
-    val command : summary:string -> Core.Command.t
+    val command : Core.Command.t
 
     module For_testing : For_testing.S with type plugin_state = state
   end
