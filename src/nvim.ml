@@ -1,10 +1,12 @@
 module Unshadow = struct
+  module Buffer = Buffer
   module Command = Command
 end
 
 open Core
 open Import
-module Command = Unshadow.Command
+open Unshadow
+module Luaref = Nvim_internal.Luaref
 
 module Mouse = struct
   module Button = struct
@@ -43,7 +45,7 @@ module Key_modifier = struct
   include Comparable.Make_plain (T)
 end
 
-let list_chans =
+let channels =
   let open Api_call.Let_syntax in
   let%map result = Nvim_internal.nvim_list_chans |> Api_call.of_api_result in
   Or_error.bind
@@ -51,27 +53,24 @@ let list_chans =
     result
 ;;
 
-let command ~command = Nvim_internal.nvim_command ~command |> Api_call.of_api_result
-
-let source ~code =
-  Nvim_internal.nvim_exec ~src:code ~output:true |> Api_call.of_api_result
-;;
+let command command = Nvim_internal.nvim_command ~command |> Api_call.of_api_result
+let source code = Nvim_internal.nvim_exec ~src:code ~output:true |> Api_call.of_api_result
 
 let list_bufs =
   let open Api_call.Let_syntax in
   let%map result = Nvim_internal.nvim_list_bufs |> Api_call.of_api_result in
   let open Or_error.Let_syntax in
   let%bind result = result in
-  List.map result ~f:Nvim_internal.Buffer.of_msgpack |> Or_error.combine_errors
+  List.map result ~f:Buffer.of_msgpack |> Or_error.combine_errors
 ;;
 
-let get_chan_info ~chan =
+let get_channel_info chan =
   let open Api_call.Let_syntax in
   let%map result = Nvim_internal.nvim_get_chan_info ~chan |> Api_call.of_api_result in
   Or_error.bind ~f:(fun r -> Channel_info.of_msgpack (Map r)) result
 ;;
 
-let eval ~expr ~result_type =
+let eval expr ~result_type =
   Nvim_internal.nvim_eval ~expr
   |> Api_call.of_api_result
   |> Api_call.Or_error.map ~f:(Extract.value result_type)
@@ -80,12 +79,8 @@ let eval ~expr ~result_type =
 
 let get_current_buf = Nvim_internal.nvim_get_current_buf |> Api_call.of_api_result
 
-let set_current_buf ~buffer =
+let set_current_buf buffer =
   Nvim_internal.nvim_set_current_buf ~buffer |> Api_call.of_api_result
-;;
-
-let feedkeys ~keys ~mode ~escape_csi =
-  Nvim_internal.nvim_feedkeys ~keys ~mode ~escape_csi |> Api_call.of_api_result
 ;;
 
 let set_client_info
@@ -143,7 +138,7 @@ let set_client_info
 
 let get_current_win = Nvim_internal.nvim_get_current_win |> Api_call.of_api_result
 
-let set_current_win ~window =
+let set_current_win window =
   Nvim_internal.nvim_set_current_win ~window |> Api_call.of_api_result
 ;;
 
@@ -155,7 +150,9 @@ let list_wins =
     result
 ;;
 
-let replace_termcodes ~str ~replace_keycodes =
+type keys_with_replaced_keycodes = string
+
+let replace_termcodes str ~replace_keycodes =
   (* [from_part] is a legacy Vim parameter that should be [true]. Always replace <lt> when
      replacing keycodes (almost surely behavior we want, and simplifies the API). *)
   Nvim_internal.nvim_replace_termcodes
@@ -166,7 +163,19 @@ let replace_termcodes ~str ~replace_keycodes =
   |> Api_call.of_api_result
 ;;
 
-let get_color_by_name ~name =
+let replace_termcodes_only = replace_termcodes ~replace_keycodes:false
+let replace_termcodes_and_keycodes = replace_termcodes ~replace_keycodes:true
+
+let feedkeys keys ~mode =
+  let keys, escape_ks =
+    match keys with
+    | `Escape_k_special_bytes keys -> keys, true
+    | `Already_escaped keys -> keys, false
+  in
+  Nvim_internal.nvim_feedkeys ~keys ~mode ~escape_ks |> Api_call.of_api_result
+;;
+
+let get_color_by_name name =
   Nvim_internal.nvim_get_color_by_name ~name
   |> Api_call.of_api_result
   |> Api_call.map_bind ~f:(function
@@ -213,7 +222,7 @@ let parse_highlight
       [%message "Unable to parse highlight response" (msg : (Msgpack.t * Msgpack.t) list)]
 ;;
 
-let get_hl_by_name (type a) ~name ~(color : a Color.Kind.t) =
+let get_hl_by_name (type a) name ~(color : a Color.Kind.t) =
   let rgb =
     match color with
     | True_color -> true
@@ -224,7 +233,7 @@ let get_hl_by_name (type a) ~name ~(color : a Color.Kind.t) =
   |> Api_call.map_bind ~f:(parse_highlight ~color)
 ;;
 
-let get_hl_by_id (type a) ~hl_id ~(color : a Color.Kind.t) =
+let get_hl_by_id (type a) hl_id ~(color : a Color.Kind.t) =
   let rgb =
     match color with
     | True_color -> true
@@ -235,13 +244,13 @@ let get_hl_by_id (type a) ~hl_id ~(color : a Color.Kind.t) =
   |> Api_call.map_bind ~f:(parse_highlight ~color)
 ;;
 
-let get_var ~name ~type_ =
+let get_var name ~type_ =
   Nvim_internal.nvim_get_var ~name
   |> Api_call.of_api_result
   |> Api_call.map_bind ~f:(Extract.value type_)
 ;;
 
-let set_var ~name ~type_ ~value =
+let set_var name ~type_ ~value =
   let value = Extract.inject type_ value in
   Nvim_internal.nvim_set_var ~name ~value |> Api_call.of_api_result
 ;;
@@ -254,15 +263,15 @@ let list_runtime_paths =
   List.map result ~f:Extract.string |> Or_error.combine_errors
 ;;
 
-let out_write ~str = Nvim_internal.nvim_out_write ~str |> Api_call.of_api_result
+let out_write str = Nvim_internal.nvim_out_write ~str |> Api_call.of_api_result
 
 (* For some reason this isn't a supported API function like [err_writeln]. *)
-let out_writeln ~str =
+let out_writeln str =
   Nvim_internal.nvim_out_write ~str:(str ^ "\n") |> Api_call.of_api_result
 ;;
 
-let err_write ~str = Nvim_internal.nvim_err_write ~str |> Api_call.of_api_result
-let err_writeln ~str = Nvim_internal.nvim_err_writeln ~str |> Api_call.of_api_result
+let err_write str = Nvim_internal.nvim_err_write ~str |> Api_call.of_api_result
+let err_writeln str = Nvim_internal.nvim_err_writeln ~str |> Api_call.of_api_result
 
 let echo message ~add_to_history =
   (* [opts] is not used by this version of Neovim, but may be used in the future. If
@@ -291,7 +300,7 @@ module Fast = struct
               (msg : (Msgpack.t * Msgpack.t) list)])
   ;;
 
-  let input ~keys = Nvim_internal.nvim_input ~keys |> Api_call.of_api_result
+  let input keys = Nvim_internal.nvim_input ~keys |> Api_call.of_api_result
 
   module Untested = struct
     let input_mouse ~button ~action ~modifiers ~grid ~row ~col =
@@ -393,8 +402,8 @@ end
 let echo_in_rpcrequest message =
   let message = String.substr_replace_all message ~pattern:"'" ~with_:"'.\"'\".'" in
   let open Api_call.Or_error.Let_syntax in
-  let%map (_ : int) = Fast.input ~keys:"<CR>"
-  and (_ : string) = eval ~expr:(sprintf "input('%s')" message) ~result_type:String in
+  let%map (_ : int) = Fast.input "<CR>"
+  and (_ : string) = eval (sprintf "input('%s')" message) ~result_type:String in
   ()
 ;;
 
@@ -431,41 +440,39 @@ module Untested = struct
       | _ -> Or_error.error_string "unexpected result from [nvim_notify]")
   ;;
 
-  let get_display_width ~text =
-    Nvim_internal.nvim_strwidth ~text |> Api_call.of_api_result
-  ;;
+  let get_display_width text = Nvim_internal.nvim_strwidth ~text |> Api_call.of_api_result
 
-  let set_current_dir ~dir =
+  let set_current_dir dir =
     Nvim_internal.nvim_set_current_dir ~dir |> Api_call.of_api_result
   ;;
 
   let get_current_line = Nvim_internal.nvim_get_current_line |> Api_call.of_api_result
 
-  let set_current_line ~line =
+  let set_current_line line =
     Nvim_internal.nvim_set_current_line ~line |> Api_call.of_api_result
   ;;
 
-  let del_current_line = Nvim_internal.nvim_del_current_line |> Api_call.of_api_result
-  let del_var ~name = Nvim_internal.nvim_del_var ~name |> Api_call.of_api_result
+  let delete_current_line = Nvim_internal.nvim_del_current_line |> Api_call.of_api_result
+  let delete_var name = Nvim_internal.nvim_del_var ~name |> Api_call.of_api_result
 
-  let get_vvar ~name ~type_ =
+  let get_vvar name ~type_ =
     Nvim_internal.nvim_get_vvar ~name
     |> Api_call.of_api_result
     |> Api_call.map_bind ~f:(Extract.value type_)
   ;;
 
-  let set_vvar ~name ~type_ ~value =
+  let set_vvar name ~type_ ~value =
     let value = Extract.inject type_ value in
     Nvim_internal.nvim_set_vvar ~name ~value |> Api_call.of_api_result
   ;;
 
-  let get_option ~name ~type_ =
+  let get_option name ~type_ =
     Nvim_internal.nvim_get_option ~name
     |> Api_call.of_api_result
     |> Api_call.map_bind ~f:(Extract.value type_)
   ;;
 
-  let set_option ~name ~type_ ~value =
+  let set_option name ~type_ ~value =
     let value = Extract.inject type_ value in
     Nvim_internal.nvim_set_option ~name ~value |> Api_call.of_api_result
   ;;
@@ -482,7 +489,7 @@ module Untested = struct
     Nvim_internal.nvim_get_current_tabpage |> Api_call.of_api_result
   ;;
 
-  let set_current_tabpage ~tabpage =
+  let set_current_tabpage tabpage =
     Nvim_internal.nvim_set_current_tabpage ~tabpage |> Api_call.of_api_result
   ;;
 
@@ -543,7 +550,7 @@ module Untested = struct
     Nvim_internal.nvim_load_context ~dict |> Api_call.of_api_result
   ;;
 
-  let get_hl_id_by_name ~name =
+  let get_hl_id_by_name name =
     Nvim_internal.nvim_get_hl_id_by_name ~name |> Api_call.of_api_result
   ;;
 
@@ -563,7 +570,7 @@ module Untested = struct
       results |> List.map ~f:Extract.string |> Or_error.combine_errors)
   ;;
 
-  let get_option_info ~name =
+  let get_option_info name =
     Nvim_internal.nvim_get_option_info ~name
     |> Api_call.of_api_result
     |> Api_call.map_bind ~f:(fun map -> Option_info.of_msgpack (Map map))
@@ -584,12 +591,76 @@ module Untested = struct
       >>| String.Map.of_alist_exn)
   ;;
 
-  let chan_send ~channel_id data =
-    Nvim_internal.nvim_chan_send ~chan:channel_id ~data |> Api_call.of_api_result
+  let send_to_channel ~channel data =
+    Nvim_internal.nvim_chan_send ~chan:channel ~data |> Api_call.of_api_result
+  ;;
+
+  let get_mark sym =
+    (* [opts] is not used by this version of Neovim, but may be used in the future. If
+       we expose it, we should do so in a typeful way rather than asking the user to
+       build [Msgpack.t] values. *)
+    Nvim_internal.nvim_get_mark ~name:(Char.to_string sym) ~opts:[]
+    |> Api_call.of_api_result
+    |> Api_call.map_bind ~f:(function
+      | [ Integer row; Integer col; buffer; String buffer_name ] ->
+        (match Buffer.of_msgpack buffer with
+         | Error _ as error -> error
+         | Ok buffer ->
+           let mark = { Mark.sym; pos = { row; col } } in
+           Ok (buffer, `Buffer_name buffer_name, mark))
+      | _ -> Or_error.error_string "malformed result from [nvim_get_mark]")
+  ;;
+
+  let delete_mark sym =
+    Nvim_internal.nvim_del_mark ~name:(Char.to_string sym)
+    |> Api_call.of_api_result
+    |> Api_call.map_bind ~f:(function
+      | true -> Ok ()
+      | false -> Or_error.error_s [%message "Failed to delete mark" (sym : char)])
+  ;;
+
+  let eval_statusline_internal
+        ?window
+        ?max_width
+        ?fill_char
+        ~include_highlights
+        ~use_tabline
+        statusline
+    =
+    let opts =
+      [ "winid", `Window window
+      ; "maxwidth", `Integer max_width
+      ; "fillchar", `Character fill_char
+      ; "highlights", `Boolean include_highlights
+      ; "use_tabline", `Boolean use_tabline
+      ]
+      |> List.filter_map ~f:(function
+        | _, (`Window None | `Character None | `Integer None) -> None
+        | label, `Window (Some window) ->
+          Some (Msgpack.String label, Window.to_msgpack window)
+        | label, `Character (Some ch) ->
+          Some (String label, String (Char.to_string ch))
+        | label, `Integer (Some x) -> Some (String label, Integer x)
+        | label, `Boolean flag -> Some (String label, Boolean flag))
+    in
+    Nvim_internal.nvim_eval_statusline ~str:statusline ~opts
+    |> Api_call.of_api_result
+    |> Api_call.map_bind ~f:Extract.map_of_msgpack_alist
+  ;;
+
+  let eval_statusline = eval_statusline_internal ~use_tabline:false
+
+  let eval_tabline ?max_width ?fill_char ~include_highlights statusline =
+    eval_statusline_internal
+      ?max_width
+      ?fill_char
+      ~include_highlights
+      ~use_tabline:true
+      statusline
   ;;
 
   module Expert = struct
-    let execute_lua ~code ~args =
+    let execute_lua code ~args =
       Nvim_internal.nvim_exec_lua ~code ~args |> Api_call.of_api_result
     ;;
 
@@ -604,7 +675,7 @@ module Untested = struct
         |> List.filter_map ~f:(function
           | _, None -> None
           | label, Some callback ->
-            Some (Msgpack.String label, Nvim_internal.Luaref.to_msgpack callback))
+            Some (Msgpack.String label, Luaref.to_msgpack callback))
       in
       Nvim_internal.nvim_set_decoration_provider ~ns_id:(Namespace.id namespace) ~opts
       |> Api_call.of_api_result
@@ -632,6 +703,13 @@ module _ = struct
   (* These functions are not related to Neovim and shouldn't be part of the API. *)
   let (_ : _) = Nvim_internal.nvim_get_proc
   let (_ : _) = Nvim_internal.nvim_get_proc_children
+
+  (* These functions are not exposed in their current form because the semantics of [set]
+     are a bit tricky to reason about properly. In the future we will have a better
+     option-setting API that may use these behind the scenes. If needed on a sooner
+     timeline we can provide them in the [Expert] module. *)
+  let (_ : _) = Nvim_internal.nvim_get_option_value
+  let (_ : _) = Nvim_internal.nvim_set_option_value
 
   module _ = struct
     let _ = Nvim_internal.nvim_select_popupmenu_item

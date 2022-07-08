@@ -6,8 +6,8 @@ open Deferred.Or_error.Let_syntax
 module Time_ns = Time_ns_unix
 
 let kill_buffer_in_window ~window =
-  let%map.Api_call set_win_or_err = Nvim.set_current_win ~window
-  and delete_buf_or_err = Nvim.command ~command:"bd!" in
+  let%map.Api_call set_win_or_err = Nvim.set_current_win window
+  and delete_buf_or_err = Nvim.command "bd!" in
   Or_error.all_unit [ set_win_or_err; delete_buf_or_err ]
 ;;
 
@@ -18,7 +18,7 @@ let check_window_count ~client =
 
 let print_buffer_contents ~client ~buffer =
   let%map contents =
-    Buffer.get_lines ~buffer ~start:0 ~end_:(-1) ~strict_indexing:false
+    Buffer.get_lines (Id buffer) ~start:0 ~end_:(-1) ~strict_indexing:false
     |> run_join [%here] client
   in
   print_s [%message (contents : string list)]

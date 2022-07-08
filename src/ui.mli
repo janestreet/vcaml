@@ -22,7 +22,7 @@ end
 
 module Description : sig
   type t =
-    { channel_id : [ `Tui | `Id of int ]
+    { channel : [ `Tui | `Id of int ]
     ; height : int
     ; width : int
     ; options : Options.t

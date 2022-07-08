@@ -11,8 +11,7 @@ module Buffer_data = struct
     }
 
   let fetch_from_vim client =
-    let%bind buffer = Nvim.get_current_buf |> run_join [%here] client in
-    let%bind filename = Buffer.get_name ~buffer |> run_join [%here] client in
+    let%bind filename = Buffer.get_name Current |> run_join [%here] client in
     let%bind.Deferred file_patterns = File_pattern.list filename in
     let current_file_pattern = File_pattern.of_filename filename in
     let%bind.Deferred is_redundant_mli =
@@ -31,7 +30,7 @@ let swap_vim_in_direction swap_in_direction client ~sink =
   match swap_in_direction ~current_file_pattern ~is_redundant_mli ~file_patterns with
   | None -> return ()
   | Some file_pattern ->
-    Nvim.command ~command:[%string {| %{sink} %{File_pattern.to_filename file_pattern} |}]
+    Nvim.command [%string {| %{sink} %{File_pattern.to_filename file_pattern} |}]
     |> run_join [%here] client
 ;;
 
@@ -43,7 +42,7 @@ let echo_file_patterns client =
   let stringified_file_list =
     List.map ~f:File_pattern.to_short_filename file_patterns |> String.concat ~sep:", "
   in
-  Nvim.out_writeln ~str:stringified_file_list |> run_join [%here] client
+  Nvim.out_writeln stringified_file_list |> run_join [%here] client
 ;;
 
 let list_file_patterns_in_fzf client =

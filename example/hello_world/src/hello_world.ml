@@ -5,9 +5,7 @@ open Vcaml
 (* Simple VCaml plugin to asynchronously echo "Hello world!" in the command line. Source
    hello_world.vim to use it. *)
 
-let echo_hello_world client =
-  Nvim.out_writeln ~str:"Hello, world!" |> run_join [%here] client
-;;
+let echo_hello_world client = Nvim.out_writeln "Hello, world!" |> run_join [%here] client
 
 let main =
   Async.Command.async_or_error

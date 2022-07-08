@@ -54,8 +54,13 @@ let event_loop t ~close_reader_and_writer_on_disconnect =
       (match Hashtbl.find t.callbacks method_name with
        | None ->
          Array
-           [ Integer 1; Integer msgid; String (sprintf "no method %s" method_name); Nil ]
-         |> respond
+           [ Integer 1
+           ; Integer msgid
+           ; String (sprintf "Unknown method %s" method_name)
+           ; Nil
+           ]
+         |> respond;
+         t.on_error (Unknown_method_called msg)
        | Some f ->
          don't_wait_for
            (let%map result = f params in

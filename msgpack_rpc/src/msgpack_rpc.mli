@@ -15,7 +15,7 @@ end
 module Error : sig
 
   (** [Fatal_parse_failure] happens when we receive data that does not conform to the
-      Msgpack specification. The parser stops and if [close_read_and_writer_on_disconnect]
+      Msgpack specification. Parsing stops and if [close_reader_and_writer_on_disconnect]
       was [true] when [connect] was called, [reader] and [writer] will be closed.
 
       [Invalid_rpc_message] happens when we receive valid Msgpack data that does not

@@ -40,7 +40,7 @@ module Notification = struct
   let err_writeln ~str = T (Nvim_internal.nvim_err_writeln ~str)
 
   module Untested = struct
-    let nvim_buf_add_highlight ~buffer ~namespace ~hl_group ~line ~col_start ~col_end =
+    let nvim_buf_add_highlight buffer ~namespace ~hl_group ~line ~col_start ~col_end =
       Nvim_internal.nvim_buf_add_highlight
         ~buffer
         ~ns_id:(Namespace.id namespace)

@@ -6,9 +6,9 @@ open Test_client
 module Notifier = Vcaml.Expert.Notifier
 module Notification = Notifier.Notification
 
-let get_current_chan ~client =
-  let%map.Deferred.Or_error chan_list = Nvim.list_chans |> run_join [%here] client in
-  List.hd_exn chan_list
+let get_current_channel ~client =
+  let%map.Deferred.Or_error channels = Nvim.channels |> run_join [%here] client in
+  List.hd_exn channels
 ;;
 
 let%expect_test "Simple asynchronous notification" =
@@ -17,8 +17,8 @@ let%expect_test "Simple asynchronous notification" =
     with_client (fun client ->
       let open Deferred.Or_error.Let_syntax in
       let%bind channel =
-        let%map channel = get_current_chan ~client in
-        channel.id
+        let%map channel_info = get_current_channel ~client in
+        channel_info.id
       in
       let call_async_func =
         Notification.custom
@@ -35,7 +35,7 @@ let%expect_test "Simple asynchronous notification" =
       Notifier.notify client call_async_func;
       Ivar.read result |> Deferred.ok)
   in
-  let%bind result = with_timeout (Time.Span.of_int_sec 3) result in
+  let%bind result = with_timeout (Time_float.Span.of_int_sec 3) result in
   print_s [%sexp (result : [ `Result of string | `Timeout ])];
   [%expect {| (Result Called!) |}];
   return ()
@@ -54,7 +54,7 @@ let%expect_test "Bad asynchronous notification" =
          Notifier.For_testing.send_raw client ~function_name:"" ~params:[];
          Ivar.read result |> Deferred.ok)
   in
-  let%bind result = with_timeout (Time.Span.of_int_sec 3) result in
+  let%bind result = with_timeout (Time_float.Span.of_int_sec 3) result in
   print_s [%sexp (result : [ `Result of string | `Timeout ])];
   [%expect
     {|

@@ -12,7 +12,7 @@ type t = [ `connected ] Client.t
 
 module Description = struct
   type t =
-    { channel_id : [ `Tui | `Id of int ]
+    { channel : [ `Tui | `Id of int ]
     ; height : int
     ; width : int
     ; options : Options.t
@@ -114,19 +114,19 @@ let describe_attached_uis =
               | String key, Boolean value -> Second (key, value)
               | _ -> failwith "Parse failure")
           in
-          let channel_id, width, height =
+          let channel, width, height =
             let ints = String.Map.of_alist_exn ints in
-            let channel_id =
+            let channel =
               match Map.find ints "chan" with
               | None | Some 0 -> `Tui
               | Some i -> `Id i
             in
             let width = Map.find_exn ints "width" in
             let height = Map.find_exn ints "height" in
-            channel_id, width, height
+            channel, width, height
           in
           let options = make_ui_options (String.Map.of_alist_exn opts) in
-          { Description.channel_id; height; width; options }
+          { Description.channel; height; width; options }
         | _ -> failwith "Parse failure")
       |> Or_error.return
     with

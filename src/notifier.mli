@@ -13,7 +13,7 @@ module Notification : sig
         [nvim_buf_add_highlight] as an asynchronous notification, after first
         (synchronously) requesting a source id. *)
     val nvim_buf_add_highlight
-      :  buffer:Nvim_internal.Buffer.t
+      :  Nvim_internal.Buffer.Or_current.t
       -> namespace:Namespace.t
       -> hl_group:string
       -> line:int

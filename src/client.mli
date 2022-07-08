@@ -25,7 +25,7 @@ module Private : sig
   module State : sig
     module Connected : sig
       type t =
-        { rpc_channel_id : int Set_once.t (* Guaranteed to be set. *)
+        { channel : int Set_once.t (* Guaranteed to be set. *)
         ; call_nvim_api_fn :
             'a 'b. 'a Nvim_internal.Api_result.t -> ('a, 'b) Message_type.t -> 'b
         ; buffers_attached : int Nvim_internal.Buffer.Table.t

@@ -66,7 +66,7 @@ module Persistent = struct
       error
       |> Error.tag ~tag:P.name
       |> Error.to_string_hum
-      |> (fun str -> Nvim.err_writeln ~str)
+      |> Nvim.err_writeln
       |> run_join [%here] client
       (* We can't really do anything interesting with a failure to display an error. *)
       |> (Deferred.ignore_m : unit Deferred.Or_error.t -> unit Deferred.t)
@@ -76,7 +76,7 @@ module Persistent = struct
       let%bind result =
         let open Deferred.Or_error.Let_syntax in
         let shutdown = Ivar.fill_if_empty shutdown in
-        let chan_id = Client.rpc_channel_id client in
+        let channel = Client.channel client in
         let%bind () = P.on_startup client state ~shutdown in
         match P.vimscript_notify_fn with
         | None -> return ()
@@ -85,7 +85,7 @@ module Persistent = struct
              wrap_viml_function
                ~type_:Defun.Vim.(Integer @-> return Object)
                ~function_name
-               chan_id
+               channel
              |> run_join [%here] client
            with
            | Integer 0 -> return ()

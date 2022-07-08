@@ -15,7 +15,7 @@ module Version = struct
 end
 
 let version =
-  { Version.api_compatible = 0; api_level = 7; major = 0; minor = 5; patch = 0 }
+  { Version.api_compatible = 0; api_level = 9; major = 0; minor = 7; patch = 0 }
 ;;
 
 module Ui_options = struct
@@ -249,6 +249,7 @@ module Ui_event = struct
         ; botline : int
         ; curline : int
         ; curcol : int
+        ; line_count : int
         }
     | Popupmenu_show of
         { items : Msgpack.t list
@@ -416,10 +417,12 @@ module Ui_event = struct
                ; Integer botline
                ; Integer curline
                ; Integer curcol
+               ; Integer line_count
                ] ) ->
              let open Or_error.Let_syntax in
              let%bind win = Window.of_msgpack win in
-             return (Win_viewport { grid; win; topline; botline; curline; curcol })
+             return
+               (Win_viewport { grid; win; topline; botline; curline; curcol; line_count })
            | ( "popupmenu_show"
              , [ Array items; Integer selected; Integer row; Integer col; Integer grid ]
              ) -> Ok (Popupmenu_show { items; selected; row; col; grid })
@@ -466,13 +469,56 @@ module Ui_event = struct
   ;;
 end
 
+let nvim_get_autocmds ~opts =
+  let opts = Msgpack.Map (List.map ~f:(fun (s, v) -> s, v) opts) in
+  { Api_result.name = "nvim_get_autocmds"; params = [ opts ]; witness = Array Object }
+;;
+
+let nvim_create_autocmd ~event ~opts =
+  let event = event in
+  let opts = Msgpack.Map (List.map ~f:(fun (s, v) -> s, v) opts) in
+  { Api_result.name = "nvim_create_autocmd"; params = [ event; opts ]; witness = Integer }
+;;
+
+let nvim_del_autocmd ~id =
+  let id = Msgpack.Integer id in
+  { Api_result.name = "nvim_del_autocmd"; params = [ id ]; witness = Nil }
+;;
+
+let nvim_clear_autocmds ~opts =
+  let opts = Msgpack.Map (List.map ~f:(fun (s, v) -> s, v) opts) in
+  { Api_result.name = "nvim_clear_autocmds"; params = [ opts ]; witness = Nil }
+;;
+
+let nvim_create_augroup ~name ~opts =
+  let name = Msgpack.String name in
+  let opts = Msgpack.Map (List.map ~f:(fun (s, v) -> s, v) opts) in
+  { Api_result.name = "nvim_create_augroup"; params = [ name; opts ]; witness = Integer }
+;;
+
+let nvim_del_augroup_by_id ~id =
+  let id = Msgpack.Integer id in
+  { Api_result.name = "nvim_del_augroup_by_id"; params = [ id ]; witness = Nil }
+;;
+
+let nvim_del_augroup_by_name ~name =
+  let name = Msgpack.String name in
+  { Api_result.name = "nvim_del_augroup_by_name"; params = [ name ]; witness = Nil }
+;;
+
+let nvim_exec_autocmds ~event ~opts =
+  let event = event in
+  let opts = Msgpack.Map (List.map ~f:(fun (s, v) -> s, v) opts) in
+  { Api_result.name = "nvim_exec_autocmds"; params = [ event; opts ]; witness = Nil }
+;;
+
 let nvim_buf_line_count ~buffer =
-  let buffer = Buffer.to_msgpack buffer in
+  let buffer = Buffer.Or_current.to_msgpack buffer in
   { Api_result.name = "nvim_buf_line_count"; params = [ buffer ]; witness = Integer }
 ;;
 
 let nvim_buf_attach ~buffer ~send_buffer ~opts =
-  let buffer = Buffer.to_msgpack buffer in
+  let buffer = Buffer.Or_current.to_msgpack buffer in
   let send_buffer = Msgpack.Boolean send_buffer in
   let opts = Msgpack.Map (List.map ~f:(fun (s, v) -> s, v) opts) in
   { Api_result.name = "nvim_buf_attach"
@@ -482,12 +528,12 @@ let nvim_buf_attach ~buffer ~send_buffer ~opts =
 ;;
 
 let nvim_buf_detach ~buffer =
-  let buffer = Buffer.to_msgpack buffer in
+  let buffer = Buffer.Or_current.to_msgpack buffer in
   { Api_result.name = "nvim_buf_detach"; params = [ buffer ]; witness = Boolean }
 ;;
 
 let nvim_buf_get_lines ~buffer ~start ~end_ ~strict_indexing =
-  let buffer = Buffer.to_msgpack buffer in
+  let buffer = Buffer.Or_current.to_msgpack buffer in
   let start = Msgpack.Integer start in
   let end_ = Msgpack.Integer end_ in
   let strict_indexing = Msgpack.Boolean strict_indexing in
@@ -498,7 +544,7 @@ let nvim_buf_get_lines ~buffer ~start ~end_ ~strict_indexing =
 ;;
 
 let nvim_buf_set_lines ~buffer ~start ~end_ ~strict_indexing ~replacement =
-  let buffer = Buffer.to_msgpack buffer in
+  let buffer = Buffer.Or_current.to_msgpack buffer in
   let start = Msgpack.Integer start in
   let end_ = Msgpack.Integer end_ in
   let strict_indexing = Msgpack.Boolean strict_indexing in
@@ -510,7 +556,7 @@ let nvim_buf_set_lines ~buffer ~start ~end_ ~strict_indexing ~replacement =
 ;;
 
 let nvim_buf_set_text ~buffer ~start_row ~start_col ~end_row ~end_col ~replacement =
-  let buffer = Buffer.to_msgpack buffer in
+  let buffer = Buffer.Or_current.to_msgpack buffer in
   let start_row = Msgpack.Integer start_row in
   let start_col = Msgpack.Integer start_col in
   let end_row = Msgpack.Integer end_row in
@@ -522,8 +568,21 @@ let nvim_buf_set_text ~buffer ~start_row ~start_col ~end_row ~end_col ~replaceme
   }
 ;;
 
+let nvim_buf_get_text ~buffer ~start_row ~start_col ~end_row ~end_col ~opts =
+  let buffer = Buffer.Or_current.to_msgpack buffer in
+  let start_row = Msgpack.Integer start_row in
+  let start_col = Msgpack.Integer start_col in
+  let end_row = Msgpack.Integer end_row in
+  let end_col = Msgpack.Integer end_col in
+  let opts = Msgpack.Map (List.map ~f:(fun (s, v) -> s, v) opts) in
+  { Api_result.name = "nvim_buf_get_text"
+  ; params = [ buffer; start_row; start_col; end_row; end_col; opts ]
+  ; witness = Array Object
+  }
+;;
+
 let nvim_buf_get_offset ~buffer ~index =
-  let buffer = Buffer.to_msgpack buffer in
+  let buffer = Buffer.Or_current.to_msgpack buffer in
   let index = Msgpack.Integer index in
   { Api_result.name = "nvim_buf_get_offset"
   ; params = [ buffer; index ]
@@ -532,18 +591,18 @@ let nvim_buf_get_offset ~buffer ~index =
 ;;
 
 let nvim_buf_get_var ~buffer ~name =
-  let buffer = Buffer.to_msgpack buffer in
+  let buffer = Buffer.Or_current.to_msgpack buffer in
   let name = Msgpack.String name in
   { Api_result.name = "nvim_buf_get_var"; params = [ buffer; name ]; witness = Object }
 ;;
 
 let nvim_buf_get_changedtick ~buffer =
-  let buffer = Buffer.to_msgpack buffer in
+  let buffer = Buffer.Or_current.to_msgpack buffer in
   { Api_result.name = "nvim_buf_get_changedtick"; params = [ buffer ]; witness = Integer }
 ;;
 
 let nvim_buf_get_keymap ~buffer ~mode =
-  let buffer = Buffer.to_msgpack buffer in
+  let buffer = Buffer.Or_current.to_msgpack buffer in
   let mode = Msgpack.String mode in
   { Api_result.name = "nvim_buf_get_keymap"
   ; params = [ buffer; mode ]
@@ -552,7 +611,7 @@ let nvim_buf_get_keymap ~buffer ~mode =
 ;;
 
 let nvim_buf_set_keymap ~buffer ~mode ~lhs ~rhs ~opts =
-  let buffer = Buffer.to_msgpack buffer in
+  let buffer = Buffer.Or_current.to_msgpack buffer in
   let mode = Msgpack.String mode in
   let lhs = Msgpack.String lhs in
   let rhs = Msgpack.String rhs in
@@ -564,7 +623,7 @@ let nvim_buf_set_keymap ~buffer ~mode ~lhs ~rhs ~opts =
 ;;
 
 let nvim_buf_del_keymap ~buffer ~mode ~lhs =
-  let buffer = Buffer.to_msgpack buffer in
+  let buffer = Buffer.Or_current.to_msgpack buffer in
   let mode = Msgpack.String mode in
   let lhs = Msgpack.String lhs in
   { Api_result.name = "nvim_buf_del_keymap"
@@ -574,13 +633,13 @@ let nvim_buf_del_keymap ~buffer ~mode ~lhs =
 ;;
 
 let nvim_buf_get_commands ~buffer ~opts =
-  let buffer = Buffer.to_msgpack buffer in
+  let buffer = Buffer.Or_current.to_msgpack buffer in
   let opts = Msgpack.Map (List.map ~f:(fun (s, v) -> s, v) opts) in
   { Api_result.name = "nvim_buf_get_commands"; params = [ buffer; opts ]; witness = Dict }
 ;;
 
 let nvim_buf_set_var ~buffer ~name ~value =
-  let buffer = Buffer.to_msgpack buffer in
+  let buffer = Buffer.Or_current.to_msgpack buffer in
   let name = Msgpack.String name in
   let value = value in
   { Api_result.name = "nvim_buf_set_var"
@@ -590,19 +649,19 @@ let nvim_buf_set_var ~buffer ~name ~value =
 ;;
 
 let nvim_buf_del_var ~buffer ~name =
-  let buffer = Buffer.to_msgpack buffer in
+  let buffer = Buffer.Or_current.to_msgpack buffer in
   let name = Msgpack.String name in
   { Api_result.name = "nvim_buf_del_var"; params = [ buffer; name ]; witness = Nil }
 ;;
 
 let nvim_buf_get_option ~buffer ~name =
-  let buffer = Buffer.to_msgpack buffer in
+  let buffer = Buffer.Or_current.to_msgpack buffer in
   let name = Msgpack.String name in
   { Api_result.name = "nvim_buf_get_option"; params = [ buffer; name ]; witness = Object }
 ;;
 
 let nvim_buf_set_option ~buffer ~name ~value =
-  let buffer = Buffer.to_msgpack buffer in
+  let buffer = Buffer.Or_current.to_msgpack buffer in
   let name = Msgpack.String name in
   let value = value in
   { Api_result.name = "nvim_buf_set_option"
@@ -612,12 +671,12 @@ let nvim_buf_set_option ~buffer ~name ~value =
 ;;
 
 let nvim_buf_get_name ~buffer =
-  let buffer = Buffer.to_msgpack buffer in
+  let buffer = Buffer.Or_current.to_msgpack buffer in
   { Api_result.name = "nvim_buf_get_name"; params = [ buffer ]; witness = String }
 ;;
 
 let nvim_buf_set_name ~buffer ~name =
-  let buffer = Buffer.to_msgpack buffer in
+  let buffer = Buffer.Or_current.to_msgpack buffer in
   let name = Msgpack.String name in
   { Api_result.name = "nvim_buf_set_name"; params = [ buffer; name ]; witness = Nil }
 ;;
@@ -628,7 +687,7 @@ let nvim_buf_is_loaded ~buffer =
 ;;
 
 let nvim_buf_delete ~buffer ~opts =
-  let buffer = Buffer.to_msgpack buffer in
+  let buffer = Buffer.Or_current.to_msgpack buffer in
   let opts = Msgpack.Map (List.map ~f:(fun (s, v) -> s, v) opts) in
   { Api_result.name = "nvim_buf_delete"; params = [ buffer; opts ]; witness = Nil }
 ;;
@@ -638,8 +697,26 @@ let nvim_buf_is_valid ~buffer =
   { Api_result.name = "nvim_buf_is_valid"; params = [ buffer ]; witness = Boolean }
 ;;
 
+let nvim_buf_del_mark ~buffer ~name =
+  let buffer = Buffer.Or_current.to_msgpack buffer in
+  let name = Msgpack.String name in
+  { Api_result.name = "nvim_buf_del_mark"; params = [ buffer; name ]; witness = Boolean }
+;;
+
+let nvim_buf_set_mark ~buffer ~name ~line ~col ~opts =
+  let buffer = Buffer.Or_current.to_msgpack buffer in
+  let name = Msgpack.String name in
+  let line = Msgpack.Integer line in
+  let col = Msgpack.Integer col in
+  let opts = Msgpack.Map (List.map ~f:(fun (s, v) -> s, v) opts) in
+  { Api_result.name = "nvim_buf_set_mark"
+  ; params = [ buffer; name; line; col; opts ]
+  ; witness = Boolean
+  }
+;;
+
 let nvim_buf_get_mark ~buffer ~name =
-  let buffer = Buffer.to_msgpack buffer in
+  let buffer = Buffer.Or_current.to_msgpack buffer in
   let name = Msgpack.String name in
   { Api_result.name = "nvim_buf_get_mark"
   ; params = [ buffer; name ]
@@ -647,91 +724,30 @@ let nvim_buf_get_mark ~buffer ~name =
   }
 ;;
 
-let nvim_buf_get_extmark_by_id ~buffer ~ns_id ~id ~opts =
-  let buffer = Buffer.to_msgpack buffer in
-  let ns_id = Msgpack.Integer ns_id in
-  let id = Msgpack.Integer id in
+let nvim_buf_call ~buffer ~fun_ =
+  let buffer = Buffer.Or_current.to_msgpack buffer in
+  let fun_ = Luaref.to_msgpack fun_ in
+  { Api_result.name = "nvim_buf_call"; params = [ buffer; fun_ ]; witness = Object }
+;;
+
+let nvim_buf_create_user_command ~buffer ~name ~command ~opts =
+  let buffer = Buffer.Or_current.to_msgpack buffer in
+  let name = Msgpack.String name in
+  let command = command in
   let opts = Msgpack.Map (List.map ~f:(fun (s, v) -> s, v) opts) in
-  { Api_result.name = "nvim_buf_get_extmark_by_id"
-  ; params = [ buffer; ns_id; id; opts ]
-  ; witness = Array Object
-  }
-;;
-
-let nvim_buf_get_extmarks ~buffer ~ns_id ~start ~end_ ~opts =
-  let buffer = Buffer.to_msgpack buffer in
-  let ns_id = Msgpack.Integer ns_id in
-  let start = start in
-  let end_ = end_ in
-  let opts = Msgpack.Map (List.map ~f:(fun (s, v) -> s, v) opts) in
-  { Api_result.name = "nvim_buf_get_extmarks"
-  ; params = [ buffer; ns_id; start; end_; opts ]
-  ; witness = Array Object
-  }
-;;
-
-let nvim_buf_set_extmark ~buffer ~ns_id ~line ~col ~opts =
-  let buffer = Buffer.to_msgpack buffer in
-  let ns_id = Msgpack.Integer ns_id in
-  let line = Msgpack.Integer line in
-  let col = Msgpack.Integer col in
-  let opts = Msgpack.Map (List.map ~f:(fun (s, v) -> s, v) opts) in
-  { Api_result.name = "nvim_buf_set_extmark"
-  ; params = [ buffer; ns_id; line; col; opts ]
-  ; witness = Integer
-  }
-;;
-
-let nvim_buf_del_extmark ~buffer ~ns_id ~id =
-  let buffer = Buffer.to_msgpack buffer in
-  let ns_id = Msgpack.Integer ns_id in
-  let id = Msgpack.Integer id in
-  { Api_result.name = "nvim_buf_del_extmark"
-  ; params = [ buffer; ns_id; id ]
-  ; witness = Boolean
-  }
-;;
-
-let nvim_buf_add_highlight ~buffer ~ns_id ~hl_group ~line ~col_start ~col_end =
-  let buffer = Buffer.to_msgpack buffer in
-  let ns_id = Msgpack.Integer ns_id in
-  let hl_group = Msgpack.String hl_group in
-  let line = Msgpack.Integer line in
-  let col_start = Msgpack.Integer col_start in
-  let col_end = Msgpack.Integer col_end in
-  { Api_result.name = "nvim_buf_add_highlight"
-  ; params = [ buffer; ns_id; hl_group; line; col_start; col_end ]
-  ; witness = Integer
-  }
-;;
-
-let nvim_buf_clear_namespace ~buffer ~ns_id ~line_start ~line_end =
-  let buffer = Buffer.to_msgpack buffer in
-  let ns_id = Msgpack.Integer ns_id in
-  let line_start = Msgpack.Integer line_start in
-  let line_end = Msgpack.Integer line_end in
-  { Api_result.name = "nvim_buf_clear_namespace"
-  ; params = [ buffer; ns_id; line_start; line_end ]
+  { Api_result.name = "nvim_buf_create_user_command"
+  ; params = [ buffer; name; command; opts ]
   ; witness = Nil
   }
 ;;
 
-let nvim_buf_set_virtual_text ~buffer ~src_id ~line ~chunks ~opts =
-  let buffer = Buffer.to_msgpack buffer in
-  let src_id = Msgpack.Integer src_id in
-  let line = Msgpack.Integer line in
-  let chunks = Msgpack.Array (List.map ~f:(fun v -> v) chunks) in
-  let opts = Msgpack.Map (List.map ~f:(fun (s, v) -> s, v) opts) in
-  { Api_result.name = "nvim_buf_set_virtual_text"
-  ; params = [ buffer; src_id; line; chunks; opts ]
-  ; witness = Integer
+let nvim_buf_del_user_command ~buffer ~name =
+  let buffer = Buffer.Or_current.to_msgpack buffer in
+  let name = Msgpack.String name in
+  { Api_result.name = "nvim_buf_del_user_command"
+  ; params = [ buffer; name ]
+  ; witness = Nil
   }
-;;
-
-let nvim_buf_call ~buffer ~fun_ =
-  let buffer = Buffer.to_msgpack buffer in
-  let fun_ = Luaref.to_msgpack fun_ in
-  { Api_result.name = "nvim_buf_call"; params = [ buffer; fun_ ]; witness = Object }
 ;;
 
 let nvim_command_output ~command =
@@ -746,12 +762,12 @@ let nvim_execute_lua ~code ~args =
 ;;
 
 let nvim_buf_get_number ~buffer =
-  let buffer = Buffer.to_msgpack buffer in
+  let buffer = Buffer.Or_current.to_msgpack buffer in
   { Api_result.name = "nvim_buf_get_number"; params = [ buffer ]; witness = Integer }
 ;;
 
 let nvim_buf_clear_highlight ~buffer ~ns_id ~line_start ~line_end =
-  let buffer = Buffer.to_msgpack buffer in
+  let buffer = Buffer.Or_current.to_msgpack buffer in
   let ns_id = Msgpack.Integer ns_id in
   let line_start = Msgpack.Integer line_start in
   let line_end = Msgpack.Integer line_end in
@@ -761,34 +777,46 @@ let nvim_buf_clear_highlight ~buffer ~ns_id ~line_start ~line_end =
   }
 ;;
 
+let nvim_buf_set_virtual_text ~buffer ~src_id ~line ~chunks ~opts =
+  let buffer = Buffer.Or_current.to_msgpack buffer in
+  let src_id = Msgpack.Integer src_id in
+  let line = Msgpack.Integer line in
+  let chunks = Msgpack.Array (List.map ~f:(fun v -> v) chunks) in
+  let opts = Msgpack.Map (List.map ~f:(fun (s, v) -> s, v) opts) in
+  { Api_result.name = "nvim_buf_set_virtual_text"
+  ; params = [ buffer; src_id; line; chunks; opts ]
+  ; witness = Integer
+  }
+;;
+
 let buffer_insert ~buffer ~lnum ~lines =
-  let buffer = Buffer.to_msgpack buffer in
+  let buffer = Buffer.Or_current.to_msgpack buffer in
   let lnum = Msgpack.Integer lnum in
   let lines = Msgpack.Array (List.map ~f:(fun v -> v) lines) in
   { Api_result.name = "buffer_insert"; params = [ buffer; lnum; lines ]; witness = Nil }
 ;;
 
 let buffer_get_line ~buffer ~index =
-  let buffer = Buffer.to_msgpack buffer in
+  let buffer = Buffer.Or_current.to_msgpack buffer in
   let index = Msgpack.Integer index in
   { Api_result.name = "buffer_get_line"; params = [ buffer; index ]; witness = String }
 ;;
 
 let buffer_set_line ~buffer ~index ~line =
-  let buffer = Buffer.to_msgpack buffer in
+  let buffer = Buffer.Or_current.to_msgpack buffer in
   let index = Msgpack.Integer index in
   let line = Msgpack.String line in
   { Api_result.name = "buffer_set_line"; params = [ buffer; index; line ]; witness = Nil }
 ;;
 
 let buffer_del_line ~buffer ~index =
-  let buffer = Buffer.to_msgpack buffer in
+  let buffer = Buffer.Or_current.to_msgpack buffer in
   let index = Msgpack.Integer index in
   { Api_result.name = "buffer_del_line"; params = [ buffer; index ]; witness = Nil }
 ;;
 
 let buffer_get_line_slice ~buffer ~start ~end_ ~include_start ~include_end =
-  let buffer = Buffer.to_msgpack buffer in
+  let buffer = Buffer.Or_current.to_msgpack buffer in
   let start = Msgpack.Integer start in
   let end_ = Msgpack.Integer end_ in
   let include_start = Msgpack.Boolean include_start in
@@ -800,7 +828,7 @@ let buffer_get_line_slice ~buffer ~start ~end_ ~include_start ~include_end =
 ;;
 
 let buffer_set_line_slice ~buffer ~start ~end_ ~include_start ~include_end ~replacement =
-  let buffer = Buffer.to_msgpack buffer in
+  let buffer = Buffer.Or_current.to_msgpack buffer in
   let start = Msgpack.Integer start in
   let end_ = Msgpack.Integer end_ in
   let include_start = Msgpack.Boolean include_start in
@@ -813,7 +841,7 @@ let buffer_set_line_slice ~buffer ~start ~end_ ~include_start ~include_end ~repl
 ;;
 
 let buffer_set_var ~buffer ~name ~value =
-  let buffer = Buffer.to_msgpack buffer in
+  let buffer = Buffer.Or_current.to_msgpack buffer in
   let name = Msgpack.String name in
   let value = value in
   { Api_result.name = "buffer_set_var"
@@ -823,13 +851,13 @@ let buffer_set_var ~buffer ~name ~value =
 ;;
 
 let buffer_del_var ~buffer ~name =
-  let buffer = Buffer.to_msgpack buffer in
+  let buffer = Buffer.Or_current.to_msgpack buffer in
   let name = Msgpack.String name in
   { Api_result.name = "buffer_del_var"; params = [ buffer; name ]; witness = Object }
 ;;
 
 let window_set_var ~window ~name ~value =
-  let window = Window.to_msgpack window in
+  let window = Window.Or_current.to_msgpack window in
   let name = Msgpack.String name in
   let value = value in
   { Api_result.name = "window_set_var"
@@ -839,13 +867,13 @@ let window_set_var ~window ~name ~value =
 ;;
 
 let window_del_var ~window ~name =
-  let window = Window.to_msgpack window in
+  let window = Window.Or_current.to_msgpack window in
   let name = Msgpack.String name in
   { Api_result.name = "window_del_var"; params = [ window; name ]; witness = Object }
 ;;
 
 let tabpage_set_var ~tabpage ~name ~value =
-  let tabpage = Tabpage.to_msgpack tabpage in
+  let tabpage = Tabpage.Or_current.to_msgpack tabpage in
   let name = Msgpack.String name in
   let value = value in
   { Api_result.name = "tabpage_set_var"
@@ -855,7 +883,7 @@ let tabpage_set_var ~tabpage ~name ~value =
 ;;
 
 let tabpage_del_var ~tabpage ~name =
-  let tabpage = Tabpage.to_msgpack tabpage in
+  let tabpage = Tabpage.Or_current.to_msgpack tabpage in
   let name = Msgpack.String name in
   { Api_result.name = "tabpage_del_var"; params = [ tabpage; name ]; witness = Object }
 ;;
@@ -871,8 +899,95 @@ let vim_del_var ~name =
   { Api_result.name = "vim_del_var"; params = [ name ]; witness = Object }
 ;;
 
+let nvim_create_namespace ~name =
+  let name = Msgpack.String name in
+  { Api_result.name = "nvim_create_namespace"; params = [ name ]; witness = Integer }
+;;
+
+let nvim_get_namespaces =
+  { Api_result.name = "nvim_get_namespaces"; params = []; witness = Dict }
+;;
+
+let nvim_buf_get_extmark_by_id ~buffer ~ns_id ~id ~opts =
+  let buffer = Buffer.Or_current.to_msgpack buffer in
+  let ns_id = Msgpack.Integer ns_id in
+  let id = Msgpack.Integer id in
+  let opts = Msgpack.Map (List.map ~f:(fun (s, v) -> s, v) opts) in
+  { Api_result.name = "nvim_buf_get_extmark_by_id"
+  ; params = [ buffer; ns_id; id; opts ]
+  ; witness = Array Object
+  }
+;;
+
+let nvim_buf_get_extmarks ~buffer ~ns_id ~start ~end_ ~opts =
+  let buffer = Buffer.Or_current.to_msgpack buffer in
+  let ns_id = Msgpack.Integer ns_id in
+  let start = start in
+  let end_ = end_ in
+  let opts = Msgpack.Map (List.map ~f:(fun (s, v) -> s, v) opts) in
+  { Api_result.name = "nvim_buf_get_extmarks"
+  ; params = [ buffer; ns_id; start; end_; opts ]
+  ; witness = Array Object
+  }
+;;
+
+let nvim_buf_set_extmark ~buffer ~ns_id ~line ~col ~opts =
+  let buffer = Buffer.Or_current.to_msgpack buffer in
+  let ns_id = Msgpack.Integer ns_id in
+  let line = Msgpack.Integer line in
+  let col = Msgpack.Integer col in
+  let opts = Msgpack.Map (List.map ~f:(fun (s, v) -> s, v) opts) in
+  { Api_result.name = "nvim_buf_set_extmark"
+  ; params = [ buffer; ns_id; line; col; opts ]
+  ; witness = Integer
+  }
+;;
+
+let nvim_buf_del_extmark ~buffer ~ns_id ~id =
+  let buffer = Buffer.Or_current.to_msgpack buffer in
+  let ns_id = Msgpack.Integer ns_id in
+  let id = Msgpack.Integer id in
+  { Api_result.name = "nvim_buf_del_extmark"
+  ; params = [ buffer; ns_id; id ]
+  ; witness = Boolean
+  }
+;;
+
+let nvim_buf_add_highlight ~buffer ~ns_id ~hl_group ~line ~col_start ~col_end =
+  let buffer = Buffer.Or_current.to_msgpack buffer in
+  let ns_id = Msgpack.Integer ns_id in
+  let hl_group = Msgpack.String hl_group in
+  let line = Msgpack.Integer line in
+  let col_start = Msgpack.Integer col_start in
+  let col_end = Msgpack.Integer col_end in
+  { Api_result.name = "nvim_buf_add_highlight"
+  ; params = [ buffer; ns_id; hl_group; line; col_start; col_end ]
+  ; witness = Integer
+  }
+;;
+
+let nvim_buf_clear_namespace ~buffer ~ns_id ~line_start ~line_end =
+  let buffer = Buffer.Or_current.to_msgpack buffer in
+  let ns_id = Msgpack.Integer ns_id in
+  let line_start = Msgpack.Integer line_start in
+  let line_end = Msgpack.Integer line_end in
+  { Api_result.name = "nvim_buf_clear_namespace"
+  ; params = [ buffer; ns_id; line_start; line_end ]
+  ; witness = Nil
+  }
+;;
+
+let nvim_set_decoration_provider ~ns_id ~opts =
+  let ns_id = Msgpack.Integer ns_id in
+  let opts = Msgpack.Map (List.map ~f:(fun (s, v) -> s, v) opts) in
+  { Api_result.name = "nvim_set_decoration_provider"
+  ; params = [ ns_id; opts ]
+  ; witness = Nil
+  }
+;;
+
 let nvim_tabpage_list_wins ~tabpage =
-  let tabpage = Tabpage.to_msgpack tabpage in
+  let tabpage = Tabpage.Or_current.to_msgpack tabpage in
   { Api_result.name = "nvim_tabpage_list_wins"
   ; params = [ tabpage ]
   ; witness = Array Object
@@ -880,7 +995,7 @@ let nvim_tabpage_list_wins ~tabpage =
 ;;
 
 let nvim_tabpage_get_var ~tabpage ~name =
-  let tabpage = Tabpage.to_msgpack tabpage in
+  let tabpage = Tabpage.Or_current.to_msgpack tabpage in
   let name = Msgpack.String name in
   { Api_result.name = "nvim_tabpage_get_var"
   ; params = [ tabpage; name ]
@@ -889,7 +1004,7 @@ let nvim_tabpage_get_var ~tabpage ~name =
 ;;
 
 let nvim_tabpage_set_var ~tabpage ~name ~value =
-  let tabpage = Tabpage.to_msgpack tabpage in
+  let tabpage = Tabpage.Or_current.to_msgpack tabpage in
   let name = Msgpack.String name in
   let value = value in
   { Api_result.name = "nvim_tabpage_set_var"
@@ -899,18 +1014,18 @@ let nvim_tabpage_set_var ~tabpage ~name ~value =
 ;;
 
 let nvim_tabpage_del_var ~tabpage ~name =
-  let tabpage = Tabpage.to_msgpack tabpage in
+  let tabpage = Tabpage.Or_current.to_msgpack tabpage in
   let name = Msgpack.String name in
   { Api_result.name = "nvim_tabpage_del_var"; params = [ tabpage; name ]; witness = Nil }
 ;;
 
 let nvim_tabpage_get_win ~tabpage =
-  let tabpage = Tabpage.to_msgpack tabpage in
+  let tabpage = Tabpage.Or_current.to_msgpack tabpage in
   { Api_result.name = "nvim_tabpage_get_win"; params = [ tabpage ]; witness = Window }
 ;;
 
 let nvim_tabpage_get_number ~tabpage =
-  let tabpage = Tabpage.to_msgpack tabpage in
+  let tabpage = Tabpage.Or_current.to_msgpack tabpage in
   { Api_result.name = "nvim_tabpage_get_number"; params = [ tabpage ]; witness = Integer }
 ;;
 
@@ -976,17 +1091,6 @@ let nvim_ui_pum_set_bounds ~width ~height ~row ~col =
   }
 ;;
 
-let nvim_exec ~src ~output =
-  let src = Msgpack.String src in
-  let output = Msgpack.Boolean output in
-  { Api_result.name = "nvim_exec"; params = [ src; output ]; witness = String }
-;;
-
-let nvim_command ~command =
-  let command = Msgpack.String command in
-  { Api_result.name = "nvim_command"; params = [ command ]; witness = Nil }
-;;
-
 let nvim_get_hl_by_name ~name ~rgb =
   let name = Msgpack.String name in
   let rgb = Msgpack.Boolean rgb in
@@ -1011,14 +1115,11 @@ let nvim_set_hl ~ns_id ~name ~val_ =
   { Api_result.name = "nvim_set_hl"; params = [ ns_id; name; val_ ]; witness = Nil }
 ;;
 
-let nvim_feedkeys ~keys ~mode ~escape_csi =
+let nvim_feedkeys ~keys ~mode ~escape_ks =
   let keys = Msgpack.String keys in
   let mode = Msgpack.String mode in
-  let escape_csi = Msgpack.Boolean escape_csi in
-  { Api_result.name = "nvim_feedkeys"
-  ; params = [ keys; mode; escape_csi ]
-  ; witness = Nil
-  }
+  let escape_ks = Msgpack.Boolean escape_ks in
+  { Api_result.name = "nvim_feedkeys"; params = [ keys; mode; escape_ks ]; witness = Nil }
 ;;
 
 let nvim_input ~keys =
@@ -1050,11 +1151,6 @@ let nvim_replace_termcodes ~str ~from_part ~do_lt ~special =
   }
 ;;
 
-let nvim_eval ~expr =
-  let expr = Msgpack.String expr in
-  { Api_result.name = "nvim_eval"; params = [ expr ]; witness = Object }
-;;
-
 let nvim_exec_lua ~code ~args =
   let code = Msgpack.String code in
   let args = Msgpack.Array (List.map ~f:(fun v -> v) args) in
@@ -1066,22 +1162,6 @@ let nvim_notify ~msg ~log_level ~opts =
   let log_level = Msgpack.Integer log_level in
   let opts = Msgpack.Map (List.map ~f:(fun (s, v) -> s, v) opts) in
   { Api_result.name = "nvim_notify"; params = [ msg; log_level; opts ]; witness = Object }
-;;
-
-let nvim_call_function ~fn ~args =
-  let fn = Msgpack.String fn in
-  let args = Msgpack.Array (List.map ~f:(fun v -> v) args) in
-  { Api_result.name = "nvim_call_function"; params = [ fn; args ]; witness = Object }
-;;
-
-let nvim_call_dict_function ~dict ~fn ~args =
-  let dict = dict in
-  let fn = Msgpack.String fn in
-  let args = Msgpack.Array (List.map ~f:(fun v -> v) args) in
-  { Api_result.name = "nvim_call_dict_function"
-  ; params = [ dict; fn; args ]
-  ; witness = Object
-  }
 ;;
 
 let nvim_strwidth ~text =
@@ -1150,6 +1230,22 @@ let nvim_set_vvar ~name ~value =
 let nvim_get_option ~name =
   let name = Msgpack.String name in
   { Api_result.name = "nvim_get_option"; params = [ name ]; witness = Object }
+;;
+
+let nvim_get_option_value ~name ~opts =
+  let name = Msgpack.String name in
+  let opts = Msgpack.Map (List.map ~f:(fun (s, v) -> s, v) opts) in
+  { Api_result.name = "nvim_get_option_value"; params = [ name; opts ]; witness = Object }
+;;
+
+let nvim_set_option_value ~name ~value ~opts =
+  let name = Msgpack.String name in
+  let value = value in
+  let opts = Msgpack.Map (List.map ~f:(fun (s, v) -> s, v) opts) in
+  { Api_result.name = "nvim_set_option_value"
+  ; params = [ name; value; opts ]
+  ; witness = Nil
+  }
 ;;
 
 let nvim_get_all_options_info =
@@ -1222,7 +1318,7 @@ let nvim_create_buf ~listed ~scratch =
 ;;
 
 let nvim_open_term ~buffer ~opts =
-  let buffer = Buffer.to_msgpack buffer in
+  let buffer = Buffer.Or_current.to_msgpack buffer in
   let opts = Msgpack.Map (List.map ~f:(fun (s, v) -> s, v) opts) in
   { Api_result.name = "nvim_open_term"; params = [ buffer; opts ]; witness = Integer }
 ;;
@@ -1231,16 +1327,6 @@ let nvim_chan_send ~chan ~data =
   let chan = Msgpack.Integer chan in
   let data = Msgpack.String data in
   { Api_result.name = "nvim_chan_send"; params = [ chan; data ]; witness = Nil }
-;;
-
-let nvim_open_win ~buffer ~enter ~config =
-  let buffer = Buffer.to_msgpack buffer in
-  let enter = Msgpack.Boolean enter in
-  let config = Msgpack.Map (List.map ~f:(fun (s, v) -> s, v) config) in
-  { Api_result.name = "nvim_open_win"
-  ; params = [ buffer; enter; config ]
-  ; witness = Window
-  }
 ;;
 
 let nvim_list_tabpages =
@@ -1254,15 +1340,6 @@ let nvim_get_current_tabpage =
 let nvim_set_current_tabpage ~tabpage =
   let tabpage = Tabpage.to_msgpack tabpage in
   { Api_result.name = "nvim_set_current_tabpage"; params = [ tabpage ]; witness = Nil }
-;;
-
-let nvim_create_namespace ~name =
-  let name = Msgpack.String name in
-  { Api_result.name = "nvim_create_namespace"; params = [ name ]; witness = Integer }
-;;
-
-let nvim_get_namespaces =
-  { Api_result.name = "nvim_get_namespaces"; params = []; witness = Dict }
 ;;
 
 let nvim_paste ~data ~crlf ~phase =
@@ -1371,16 +1448,6 @@ let nvim_call_atomic ~calls =
   { Api_result.name = "nvim_call_atomic"; params = [ calls ]; witness = Array Object }
 ;;
 
-let nvim_parse_expression ~expr ~flags ~highlight =
-  let expr = Msgpack.String expr in
-  let flags = Msgpack.String flags in
-  let highlight = Msgpack.Boolean highlight in
-  { Api_result.name = "nvim_parse_expression"
-  ; params = [ expr; flags; highlight ]
-  ; witness = Dict
-  }
-;;
-
 let nvim_list_uis =
   { Api_result.name = "nvim_list_uis"; params = []; witness = Array Object }
 ;;
@@ -1406,67 +1473,153 @@ let nvim_select_popupmenu_item ~item ~insert ~finish ~opts =
   }
 ;;
 
-let nvim_set_decoration_provider ~ns_id ~opts =
-  let ns_id = Msgpack.Integer ns_id in
+let nvim_del_mark ~name =
+  let name = Msgpack.String name in
+  { Api_result.name = "nvim_del_mark"; params = [ name ]; witness = Boolean }
+;;
+
+let nvim_get_mark ~name ~opts =
+  let name = Msgpack.String name in
   let opts = Msgpack.Map (List.map ~f:(fun (s, v) -> s, v) opts) in
-  { Api_result.name = "nvim_set_decoration_provider"
-  ; params = [ ns_id; opts ]
+  { Api_result.name = "nvim_get_mark"; params = [ name; opts ]; witness = Array Object }
+;;
+
+let nvim_eval_statusline ~str ~opts =
+  let str = Msgpack.String str in
+  let opts = Msgpack.Map (List.map ~f:(fun (s, v) -> s, v) opts) in
+  { Api_result.name = "nvim_eval_statusline"; params = [ str; opts ]; witness = Dict }
+;;
+
+let nvim_create_user_command ~name ~command ~opts =
+  let name = Msgpack.String name in
+  let command = command in
+  let opts = Msgpack.Map (List.map ~f:(fun (s, v) -> s, v) opts) in
+  { Api_result.name = "nvim_create_user_command"
+  ; params = [ name; command; opts ]
   ; witness = Nil
   }
 ;;
 
+let nvim_del_user_command ~name =
+  let name = Msgpack.String name in
+  { Api_result.name = "nvim_del_user_command"; params = [ name ]; witness = Nil }
+;;
+
+let nvim_exec ~src ~output =
+  let src = Msgpack.String src in
+  let output = Msgpack.Boolean output in
+  { Api_result.name = "nvim_exec"; params = [ src; output ]; witness = String }
+;;
+
+let nvim_command ~command =
+  let command = Msgpack.String command in
+  { Api_result.name = "nvim_command"; params = [ command ]; witness = Nil }
+;;
+
+let nvim_eval ~expr =
+  let expr = Msgpack.String expr in
+  { Api_result.name = "nvim_eval"; params = [ expr ]; witness = Object }
+;;
+
+let nvim_call_function ~fn ~args =
+  let fn = Msgpack.String fn in
+  let args = Msgpack.Array (List.map ~f:(fun v -> v) args) in
+  { Api_result.name = "nvim_call_function"; params = [ fn; args ]; witness = Object }
+;;
+
+let nvim_call_dict_function ~dict ~fn ~args =
+  let dict = dict in
+  let fn = Msgpack.String fn in
+  let args = Msgpack.Array (List.map ~f:(fun v -> v) args) in
+  { Api_result.name = "nvim_call_dict_function"
+  ; params = [ dict; fn; args ]
+  ; witness = Object
+  }
+;;
+
+let nvim_parse_expression ~expr ~flags ~highlight =
+  let expr = Msgpack.String expr in
+  let flags = Msgpack.String flags in
+  let highlight = Msgpack.Boolean highlight in
+  { Api_result.name = "nvim_parse_expression"
+  ; params = [ expr; flags; highlight ]
+  ; witness = Dict
+  }
+;;
+
+let nvim_open_win ~buffer ~enter ~config =
+  let buffer = Buffer.Or_current.to_msgpack buffer in
+  let enter = Msgpack.Boolean enter in
+  let config = Msgpack.Map (List.map ~f:(fun (s, v) -> s, v) config) in
+  { Api_result.name = "nvim_open_win"
+  ; params = [ buffer; enter; config ]
+  ; witness = Window
+  }
+;;
+
+let nvim_win_set_config ~window ~config =
+  let window = Window.Or_current.to_msgpack window in
+  let config = Msgpack.Map (List.map ~f:(fun (s, v) -> s, v) config) in
+  { Api_result.name = "nvim_win_set_config"; params = [ window; config ]; witness = Nil }
+;;
+
+let nvim_win_get_config ~window =
+  let window = Window.Or_current.to_msgpack window in
+  { Api_result.name = "nvim_win_get_config"; params = [ window ]; witness = Dict }
+;;
+
 let nvim_win_get_buf ~window =
-  let window = Window.to_msgpack window in
+  let window = Window.Or_current.to_msgpack window in
   { Api_result.name = "nvim_win_get_buf"; params = [ window ]; witness = Buffer }
 ;;
 
 let nvim_win_set_buf ~window ~buffer =
-  let window = Window.to_msgpack window in
-  let buffer = Buffer.to_msgpack buffer in
+  let window = Window.Or_current.to_msgpack window in
+  let buffer = Buffer.Or_current.to_msgpack buffer in
   { Api_result.name = "nvim_win_set_buf"; params = [ window; buffer ]; witness = Nil }
 ;;
 
 let nvim_win_get_cursor ~window =
-  let window = Window.to_msgpack window in
+  let window = Window.Or_current.to_msgpack window in
   { Api_result.name = "nvim_win_get_cursor"; params = [ window ]; witness = Array Object }
 ;;
 
 let nvim_win_set_cursor ~window ~pos =
-  let window = Window.to_msgpack window in
+  let window = Window.Or_current.to_msgpack window in
   let pos = Msgpack.Array (List.map ~f:(fun v -> v) pos) in
   { Api_result.name = "nvim_win_set_cursor"; params = [ window; pos ]; witness = Nil }
 ;;
 
 let nvim_win_get_height ~window =
-  let window = Window.to_msgpack window in
+  let window = Window.Or_current.to_msgpack window in
   { Api_result.name = "nvim_win_get_height"; params = [ window ]; witness = Integer }
 ;;
 
 let nvim_win_set_height ~window ~height =
-  let window = Window.to_msgpack window in
+  let window = Window.Or_current.to_msgpack window in
   let height = Msgpack.Integer height in
   { Api_result.name = "nvim_win_set_height"; params = [ window; height ]; witness = Nil }
 ;;
 
 let nvim_win_get_width ~window =
-  let window = Window.to_msgpack window in
+  let window = Window.Or_current.to_msgpack window in
   { Api_result.name = "nvim_win_get_width"; params = [ window ]; witness = Integer }
 ;;
 
 let nvim_win_set_width ~window ~width =
-  let window = Window.to_msgpack window in
+  let window = Window.Or_current.to_msgpack window in
   let width = Msgpack.Integer width in
   { Api_result.name = "nvim_win_set_width"; params = [ window; width ]; witness = Nil }
 ;;
 
 let nvim_win_get_var ~window ~name =
-  let window = Window.to_msgpack window in
+  let window = Window.Or_current.to_msgpack window in
   let name = Msgpack.String name in
   { Api_result.name = "nvim_win_get_var"; params = [ window; name ]; witness = Object }
 ;;
 
 let nvim_win_set_var ~window ~name ~value =
-  let window = Window.to_msgpack window in
+  let window = Window.Or_current.to_msgpack window in
   let name = Msgpack.String name in
   let value = value in
   { Api_result.name = "nvim_win_set_var"
@@ -1476,19 +1629,19 @@ let nvim_win_set_var ~window ~name ~value =
 ;;
 
 let nvim_win_del_var ~window ~name =
-  let window = Window.to_msgpack window in
+  let window = Window.Or_current.to_msgpack window in
   let name = Msgpack.String name in
   { Api_result.name = "nvim_win_del_var"; params = [ window; name ]; witness = Nil }
 ;;
 
 let nvim_win_get_option ~window ~name =
-  let window = Window.to_msgpack window in
+  let window = Window.Or_current.to_msgpack window in
   let name = Msgpack.String name in
   { Api_result.name = "nvim_win_get_option"; params = [ window; name ]; witness = Object }
 ;;
 
 let nvim_win_set_option ~window ~name ~value =
-  let window = Window.to_msgpack window in
+  let window = Window.Or_current.to_msgpack window in
   let name = Msgpack.String name in
   let value = value in
   { Api_result.name = "nvim_win_set_option"
@@ -1498,7 +1651,7 @@ let nvim_win_set_option ~window ~name ~value =
 ;;
 
 let nvim_win_get_position ~window =
-  let window = Window.to_msgpack window in
+  let window = Window.Or_current.to_msgpack window in
   { Api_result.name = "nvim_win_get_position"
   ; params = [ window ]
   ; witness = Array Object
@@ -1506,12 +1659,12 @@ let nvim_win_get_position ~window =
 ;;
 
 let nvim_win_get_tabpage ~window =
-  let window = Window.to_msgpack window in
+  let window = Window.Or_current.to_msgpack window in
   { Api_result.name = "nvim_win_get_tabpage"; params = [ window ]; witness = Tabpage }
 ;;
 
 let nvim_win_get_number ~window =
-  let window = Window.to_msgpack window in
+  let window = Window.Or_current.to_msgpack window in
   { Api_result.name = "nvim_win_get_number"; params = [ window ]; witness = Integer }
 ;;
 
@@ -1520,41 +1673,30 @@ let nvim_win_is_valid ~window =
   { Api_result.name = "nvim_win_is_valid"; params = [ window ]; witness = Boolean }
 ;;
 
-let nvim_win_set_config ~window ~config =
-  let window = Window.to_msgpack window in
-  let config = Msgpack.Map (List.map ~f:(fun (s, v) -> s, v) config) in
-  { Api_result.name = "nvim_win_set_config"; params = [ window; config ]; witness = Nil }
-;;
-
-let nvim_win_get_config ~window =
-  let window = Window.to_msgpack window in
-  { Api_result.name = "nvim_win_get_config"; params = [ window ]; witness = Dict }
-;;
-
 let nvim_win_hide ~window =
-  let window = Window.to_msgpack window in
+  let window = Window.Or_current.to_msgpack window in
   { Api_result.name = "nvim_win_hide"; params = [ window ]; witness = Nil }
 ;;
 
 let nvim_win_close ~window ~force =
-  let window = Window.to_msgpack window in
+  let window = Window.Or_current.to_msgpack window in
   let force = Msgpack.Boolean force in
   { Api_result.name = "nvim_win_close"; params = [ window; force ]; witness = Nil }
 ;;
 
 let nvim_win_call ~window ~fun_ =
-  let window = Window.to_msgpack window in
+  let window = Window.Or_current.to_msgpack window in
   let fun_ = Luaref.to_msgpack fun_ in
   { Api_result.name = "nvim_win_call"; params = [ window; fun_ ]; witness = Object }
 ;;
 
 let buffer_line_count ~buffer =
-  let buffer = Buffer.to_msgpack buffer in
+  let buffer = Buffer.Or_current.to_msgpack buffer in
   { Api_result.name = "buffer_line_count"; params = [ buffer ]; witness = Integer }
 ;;
 
 let buffer_get_lines ~buffer ~start ~end_ ~strict_indexing =
-  let buffer = Buffer.to_msgpack buffer in
+  let buffer = Buffer.Or_current.to_msgpack buffer in
   let start = Msgpack.Integer start in
   let end_ = Msgpack.Integer end_ in
   let strict_indexing = Msgpack.Boolean strict_indexing in
@@ -1565,7 +1707,7 @@ let buffer_get_lines ~buffer ~start ~end_ ~strict_indexing =
 ;;
 
 let buffer_set_lines ~buffer ~start ~end_ ~strict_indexing ~replacement =
-  let buffer = Buffer.to_msgpack buffer in
+  let buffer = Buffer.Or_current.to_msgpack buffer in
   let start = Msgpack.Integer start in
   let end_ = Msgpack.Integer end_ in
   let strict_indexing = Msgpack.Boolean strict_indexing in
@@ -1577,19 +1719,19 @@ let buffer_set_lines ~buffer ~start ~end_ ~strict_indexing ~replacement =
 ;;
 
 let buffer_get_var ~buffer ~name =
-  let buffer = Buffer.to_msgpack buffer in
+  let buffer = Buffer.Or_current.to_msgpack buffer in
   let name = Msgpack.String name in
   { Api_result.name = "buffer_get_var"; params = [ buffer; name ]; witness = Object }
 ;;
 
 let buffer_get_option ~buffer ~name =
-  let buffer = Buffer.to_msgpack buffer in
+  let buffer = Buffer.Or_current.to_msgpack buffer in
   let name = Msgpack.String name in
   { Api_result.name = "buffer_get_option"; params = [ buffer; name ]; witness = Object }
 ;;
 
 let buffer_set_option ~buffer ~name ~value =
-  let buffer = Buffer.to_msgpack buffer in
+  let buffer = Buffer.Or_current.to_msgpack buffer in
   let name = Msgpack.String name in
   let value = value in
   { Api_result.name = "buffer_set_option"
@@ -1599,23 +1741,23 @@ let buffer_set_option ~buffer ~name ~value =
 ;;
 
 let buffer_get_name ~buffer =
-  let buffer = Buffer.to_msgpack buffer in
+  let buffer = Buffer.Or_current.to_msgpack buffer in
   { Api_result.name = "buffer_get_name"; params = [ buffer ]; witness = String }
 ;;
 
 let buffer_set_name ~buffer ~name =
-  let buffer = Buffer.to_msgpack buffer in
+  let buffer = Buffer.Or_current.to_msgpack buffer in
   let name = Msgpack.String name in
   { Api_result.name = "buffer_set_name"; params = [ buffer; name ]; witness = Nil }
 ;;
 
 let buffer_is_valid ~buffer =
-  let buffer = Buffer.to_msgpack buffer in
+  let buffer = Buffer.Or_current.to_msgpack buffer in
   { Api_result.name = "buffer_is_valid"; params = [ buffer ]; witness = Boolean }
 ;;
 
 let buffer_get_mark ~buffer ~name =
-  let buffer = Buffer.to_msgpack buffer in
+  let buffer = Buffer.Or_current.to_msgpack buffer in
   let name = Msgpack.String name in
   { Api_result.name = "buffer_get_mark"
   ; params = [ buffer; name ]
@@ -1623,8 +1765,29 @@ let buffer_get_mark ~buffer ~name =
   }
 ;;
 
+let vim_command_output ~command =
+  let command = Msgpack.String command in
+  { Api_result.name = "vim_command_output"; params = [ command ]; witness = String }
+;;
+
+let buffer_get_number ~buffer =
+  let buffer = Buffer.Or_current.to_msgpack buffer in
+  { Api_result.name = "buffer_get_number"; params = [ buffer ]; witness = Integer }
+;;
+
+let buffer_clear_highlight ~buffer ~ns_id ~line_start ~line_end =
+  let buffer = Buffer.Or_current.to_msgpack buffer in
+  let ns_id = Msgpack.Integer ns_id in
+  let line_start = Msgpack.Integer line_start in
+  let line_end = Msgpack.Integer line_end in
+  { Api_result.name = "buffer_clear_highlight"
+  ; params = [ buffer; ns_id; line_start; line_end ]
+  ; witness = Nil
+  }
+;;
+
 let buffer_add_highlight ~buffer ~ns_id ~hl_group ~line ~col_start ~col_end =
-  let buffer = Buffer.to_msgpack buffer in
+  let buffer = Buffer.Or_current.to_msgpack buffer in
   let ns_id = Msgpack.Integer ns_id in
   let hl_group = Msgpack.String hl_group in
   let line = Msgpack.Integer line in
@@ -1636,29 +1799,8 @@ let buffer_add_highlight ~buffer ~ns_id ~hl_group ~line ~col_start ~col_end =
   }
 ;;
 
-let vim_command_output ~command =
-  let command = Msgpack.String command in
-  { Api_result.name = "vim_command_output"; params = [ command ]; witness = String }
-;;
-
-let buffer_get_number ~buffer =
-  let buffer = Buffer.to_msgpack buffer in
-  { Api_result.name = "buffer_get_number"; params = [ buffer ]; witness = Integer }
-;;
-
-let buffer_clear_highlight ~buffer ~ns_id ~line_start ~line_end =
-  let buffer = Buffer.to_msgpack buffer in
-  let ns_id = Msgpack.Integer ns_id in
-  let line_start = Msgpack.Integer line_start in
-  let line_end = Msgpack.Integer line_end in
-  { Api_result.name = "buffer_clear_highlight"
-  ; params = [ buffer; ns_id; line_start; line_end ]
-  ; witness = Nil
-  }
-;;
-
 let tabpage_get_windows ~tabpage =
-  let tabpage = Tabpage.to_msgpack tabpage in
+  let tabpage = Tabpage.Or_current.to_msgpack tabpage in
   { Api_result.name = "tabpage_get_windows"
   ; params = [ tabpage ]
   ; witness = Array Object
@@ -1666,18 +1808,18 @@ let tabpage_get_windows ~tabpage =
 ;;
 
 let tabpage_get_var ~tabpage ~name =
-  let tabpage = Tabpage.to_msgpack tabpage in
+  let tabpage = Tabpage.Or_current.to_msgpack tabpage in
   let name = Msgpack.String name in
   { Api_result.name = "tabpage_get_var"; params = [ tabpage; name ]; witness = Object }
 ;;
 
 let tabpage_get_window ~tabpage =
-  let tabpage = Tabpage.to_msgpack tabpage in
+  let tabpage = Tabpage.Or_current.to_msgpack tabpage in
   { Api_result.name = "tabpage_get_window"; params = [ tabpage ]; witness = Window }
 ;;
 
 let tabpage_is_valid ~tabpage =
-  let tabpage = Tabpage.to_msgpack tabpage in
+  let tabpage = Tabpage.Or_current.to_msgpack tabpage in
   { Api_result.name = "tabpage_is_valid"; params = [ tabpage ]; witness = Boolean }
 ;;
 
@@ -1689,16 +1831,11 @@ let ui_try_resize ~width ~height =
   { Api_result.name = "ui_try_resize"; params = [ width; height ]; witness = Object }
 ;;
 
-let vim_command ~command =
-  let command = Msgpack.String command in
-  { Api_result.name = "vim_command"; params = [ command ]; witness = Nil }
-;;
-
-let vim_feedkeys ~keys ~mode ~escape_csi =
+let vim_feedkeys ~keys ~mode ~escape_ks =
   let keys = Msgpack.String keys in
   let mode = Msgpack.String mode in
-  let escape_csi = Msgpack.Boolean escape_csi in
-  { Api_result.name = "vim_feedkeys"; params = [ keys; mode; escape_csi ]; witness = Nil }
+  let escape_ks = Msgpack.Boolean escape_ks in
+  { Api_result.name = "vim_feedkeys"; params = [ keys; mode; escape_ks ]; witness = Nil }
 ;;
 
 let vim_input ~keys =
@@ -1715,17 +1852,6 @@ let vim_replace_termcodes ~str ~from_part ~do_lt ~special =
   ; params = [ str; from_part; do_lt; special ]
   ; witness = String
   }
-;;
-
-let vim_eval ~expr =
-  let expr = Msgpack.String expr in
-  { Api_result.name = "vim_eval"; params = [ expr ]; witness = Object }
-;;
-
-let vim_call_function ~fn ~args =
-  let fn = Msgpack.String fn in
-  let args = Msgpack.Array (List.map ~f:(fun v -> v) args) in
-  { Api_result.name = "vim_call_function"; params = [ fn; args ]; witness = Object }
 ;;
 
 let vim_strwidth ~text =
@@ -1800,7 +1926,7 @@ let vim_get_current_buffer =
 ;;
 
 let vim_set_current_buffer ~buffer =
-  let buffer = Buffer.to_msgpack buffer in
+  let buffer = Buffer.Or_current.to_msgpack buffer in
   { Api_result.name = "vim_set_current_buffer"; params = [ buffer ]; witness = Nil }
 ;;
 
@@ -1813,7 +1939,7 @@ let vim_get_current_window =
 ;;
 
 let vim_set_current_window ~window =
-  let window = Window.to_msgpack window in
+  let window = Window.Or_current.to_msgpack window in
   { Api_result.name = "vim_set_current_window"; params = [ window ]; witness = Nil }
 ;;
 
@@ -1826,7 +1952,7 @@ let vim_get_current_tabpage =
 ;;
 
 let vim_set_current_tabpage ~tabpage =
-  let tabpage = Tabpage.to_msgpack tabpage in
+  let tabpage = Tabpage.Or_current.to_msgpack tabpage in
   { Api_result.name = "vim_set_current_tabpage"; params = [ tabpage ]; witness = Nil }
 ;;
 
@@ -1853,58 +1979,74 @@ let vim_get_api_info =
   { Api_result.name = "vim_get_api_info"; params = []; witness = Array Object }
 ;;
 
+let vim_command ~command =
+  let command = Msgpack.String command in
+  { Api_result.name = "vim_command"; params = [ command ]; witness = Nil }
+;;
+
+let vim_eval ~expr =
+  let expr = Msgpack.String expr in
+  { Api_result.name = "vim_eval"; params = [ expr ]; witness = Object }
+;;
+
+let vim_call_function ~fn ~args =
+  let fn = Msgpack.String fn in
+  let args = Msgpack.Array (List.map ~f:(fun v -> v) args) in
+  { Api_result.name = "vim_call_function"; params = [ fn; args ]; witness = Object }
+;;
+
 let window_get_buffer ~window =
-  let window = Window.to_msgpack window in
+  let window = Window.Or_current.to_msgpack window in
   { Api_result.name = "window_get_buffer"; params = [ window ]; witness = Buffer }
 ;;
 
 let window_get_cursor ~window =
-  let window = Window.to_msgpack window in
+  let window = Window.Or_current.to_msgpack window in
   { Api_result.name = "window_get_cursor"; params = [ window ]; witness = Array Object }
 ;;
 
 let window_set_cursor ~window ~pos =
-  let window = Window.to_msgpack window in
+  let window = Window.Or_current.to_msgpack window in
   let pos = Msgpack.Array (List.map ~f:(fun v -> v) pos) in
   { Api_result.name = "window_set_cursor"; params = [ window; pos ]; witness = Nil }
 ;;
 
 let window_get_height ~window =
-  let window = Window.to_msgpack window in
+  let window = Window.Or_current.to_msgpack window in
   { Api_result.name = "window_get_height"; params = [ window ]; witness = Integer }
 ;;
 
 let window_set_height ~window ~height =
-  let window = Window.to_msgpack window in
+  let window = Window.Or_current.to_msgpack window in
   let height = Msgpack.Integer height in
   { Api_result.name = "window_set_height"; params = [ window; height ]; witness = Nil }
 ;;
 
 let window_get_width ~window =
-  let window = Window.to_msgpack window in
+  let window = Window.Or_current.to_msgpack window in
   { Api_result.name = "window_get_width"; params = [ window ]; witness = Integer }
 ;;
 
 let window_set_width ~window ~width =
-  let window = Window.to_msgpack window in
+  let window = Window.Or_current.to_msgpack window in
   let width = Msgpack.Integer width in
   { Api_result.name = "window_set_width"; params = [ window; width ]; witness = Nil }
 ;;
 
 let window_get_var ~window ~name =
-  let window = Window.to_msgpack window in
+  let window = Window.Or_current.to_msgpack window in
   let name = Msgpack.String name in
   { Api_result.name = "window_get_var"; params = [ window; name ]; witness = Object }
 ;;
 
 let window_get_option ~window ~name =
-  let window = Window.to_msgpack window in
+  let window = Window.Or_current.to_msgpack window in
   let name = Msgpack.String name in
   { Api_result.name = "window_get_option"; params = [ window; name ]; witness = Object }
 ;;
 
 let window_set_option ~window ~name ~value =
-  let window = Window.to_msgpack window in
+  let window = Window.Or_current.to_msgpack window in
   let name = Msgpack.String name in
   let value = value in
   { Api_result.name = "window_set_option"
@@ -1914,16 +2056,16 @@ let window_set_option ~window ~name ~value =
 ;;
 
 let window_get_position ~window =
-  let window = Window.to_msgpack window in
+  let window = Window.Or_current.to_msgpack window in
   { Api_result.name = "window_get_position"; params = [ window ]; witness = Array Object }
 ;;
 
 let window_get_tabpage ~window =
-  let window = Window.to_msgpack window in
+  let window = Window.Or_current.to_msgpack window in
   { Api_result.name = "window_get_tabpage"; params = [ window ]; witness = Tabpage }
 ;;
 
 let window_is_valid ~window =
-  let window = Window.to_msgpack window in
+  let window = Window.Or_current.to_msgpack window in
   { Api_result.name = "window_is_valid"; params = [ window ]; witness = Boolean }
 ;;

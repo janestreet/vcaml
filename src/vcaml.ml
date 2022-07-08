@@ -97,10 +97,10 @@ module Client = struct
     state.close ()
   ;;
 
-  let rpc_channel_id client =
+  let channel client =
     let client = Type_equal.conv Private.eq client in
     let (Connected state) = client.state in
-    Set_once.get_exn state.rpc_channel_id [%here]
+    Set_once.get_exn state.channel [%here]
   ;;
 end
 

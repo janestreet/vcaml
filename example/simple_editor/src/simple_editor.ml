@@ -42,48 +42,47 @@ include Vcaml_plugin.Persistent.Make (struct
     let init_state () = { State.buffer = Set_once.create (); window = Set_once.create () }
 
     let set_modifiable buffer value =
-      Buffer.set_option ~buffer ~scope:`Local ~name:"modifiable" ~type_:Boolean ~value
+      Buffer.set_option (Id buffer) ~scope:`Local ~name:"modifiable" ~type_:Boolean ~value
     ;;
 
     let get_split_window =
-      let%map.Api_call.Or_error () = Nvim.command ~command:"split"
+      let%map.Api_call.Or_error () = Nvim.command "split"
       and window = Nvim.get_current_win in
       window
     ;;
 
-    let shutdown_plugin_when_buffer_is_closed ~window ~buffer ~chan_id =
+    let shutdown_plugin_when_buffer_is_closed ~window ~buffer ~channel =
       let shutdown_on_leave =
         Printf.sprintf
           "autocmd BufWinLeave <buffer> silent! call rpcrequest(%d, 'shutdown')"
-          chan_id
+          channel
       in
       Api_call.Or_error.all_unit
-        [ Nvim.set_current_win ~window
-        ; Nvim.set_current_buf ~buffer
-        ; Nvim.command ~command:shutdown_on_leave
+        [ Nvim.set_current_win window
+        ; Nvim.set_current_buf buffer
+        ; Nvim.command shutdown_on_leave
         ]
     ;;
 
-    let add_vim_binding ~chan_id ~key_bind ~rpc_name =
+    let add_vim_binding ~channel ~key_bind ~rpc_name =
       Nvim.command
-        ~command:
-          (Printf.sprintf
-             "nnoremap <silent> <nowait> <buffer> %s <Cmd>call rpcrequest(%d, \"%s\")<CR>"
-             key_bind
-             chan_id
-             rpc_name)
+        (Printf.sprintf
+           "nnoremap <silent> <nowait> <buffer> %s <Cmd>call rpcrequest(%d, \"%s\")<CR>"
+           key_bind
+           channel
+           rpc_name)
     ;;
 
-    let add_key_listener ~chan_id key = add_vim_binding ~chan_id ~key_bind:key ~rpc_name:key
+    let add_key_listener ~channel key = add_vim_binding ~channel ~key_bind:key ~rpc_name:key
 
-    let add_special_character_listener ~chan_id key =
-      add_vim_binding ~chan_id ~key_bind:(Printf.sprintf "<%s>" key) ~rpc_name:key
+    let add_special_character_listener ~channel key =
+      add_vim_binding ~channel ~key_bind:(Printf.sprintf "<%s>" key) ~rpc_name:key
     ;;
 
-    let add_key_listeners_api_call chan_id =
-      let typable_api_call = alphabet |> List.map ~f:(add_key_listener ~chan_id) in
+    let add_key_listeners_api_call channel =
+      let typable_api_call = alphabet |> List.map ~f:(add_key_listener ~channel) in
       let special_api_call =
-        Special_characters.all |> List.map ~f:(add_special_character_listener ~chan_id)
+        Special_characters.all |> List.map ~f:(add_special_character_listener ~channel)
       in
       typable_api_call @ special_api_call |> Api_call.Or_error.all_unit
     ;;
@@ -100,32 +99,32 @@ include Vcaml_plugin.Persistent.Make (struct
            let b:saved_virtualedit = &virtualedit
            set virtualedit=onemore |}
       in
-      Nvim.source ~code |> Api_call.Or_error.ignore_m
+      Nvim.source code |> Api_call.Or_error.ignore_m
     ;;
 
     let on_startup client state ~shutdown:_ =
-      let chan_id = Client.rpc_channel_id client in
+      let channel = Client.channel client in
       let%bind buffer =
         Buffer.find_by_name_or_create ~name:"simple-editor" |> run_join [%here] client
       in
       let%bind window = run_join [%here] client get_split_window in
       let%bind () =
-        shutdown_plugin_when_buffer_is_closed ~window ~buffer ~chan_id
+        shutdown_plugin_when_buffer_is_closed ~window ~buffer ~channel
         |> run_join [%here] client
       in
-      let%bind () = add_key_listeners_api_call chan_id |> run_join [%here] client in
+      let%bind () = add_key_listeners_api_call channel |> run_join [%here] client in
       let%bind () = set_virtualedit_inside_buffer |> run_join [%here] client in
       let%bind () =
         [ set_modifiable buffer false
         ; Buffer.set_option
-            ~buffer
+            (Id buffer)
             ~scope:`Local
             ~name:"buftype"
             ~type_:String
             ~value:"nofile"
         ;
           Window.Untested.set_option
-            ~window
+            (Id window)
             ~scope:`Local
             ~name:"list"
             ~type_:Boolean
@@ -144,7 +143,7 @@ include Vcaml_plugin.Persistent.Make (struct
     let on_shutdown _client _state = return ()
 
     let get_nth_line ~client ~buffer n =
-      Buffer.get_lines ~buffer ~start:(n - 1) ~end_:n ~strict_indexing:true
+      Buffer.get_lines (Id buffer) ~start:(n - 1) ~end_:n ~strict_indexing:true
       |> run_join [%here] client
     ;;
 
@@ -161,7 +160,7 @@ include Vcaml_plugin.Persistent.Make (struct
         ~buffer
         ~api_call:
           (Buffer.set_lines
-             ~buffer
+             (Id buffer)
              ~start:start_at
              ~end_:(start_at + num_lines)
              ~replacement:content
@@ -174,7 +173,7 @@ include Vcaml_plugin.Persistent.Make (struct
     ;;
 
     let set_cursor ~client ~window ~row ~col =
-      Window.set_cursor ~window { row; col } |> run_join [%here] client
+      Window.set_cursor (Id window) { row; col } |> run_join [%here] client
     ;;
 
     let split_string_at st i =
@@ -244,7 +243,7 @@ include Vcaml_plugin.Persistent.Make (struct
     let handle_edit_request ~f client { State.buffer; window } ~shutdown:_ =
       let buffer = Set_once.get_exn buffer [%here] in
       let window = Set_once.get_exn window [%here] in
-      let%bind mark = Window.get_cursor ~window |> run_join [%here] client in
+      let%bind mark = Window.get_cursor (Id window) |> run_join [%here] client in
       f client buffer window mark
     ;;
 

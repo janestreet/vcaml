@@ -96,11 +96,11 @@ module Client : sig
       multiple times. *)
   val close : [ `connected ] t -> unit Deferred.t
 
-  (** Returns neovim's id for the channel over which neovim and the client communicate.
-      This can be useful when you want to register an RPC event to fire upon a certain
-      event happening in vim (e.g. keypress or autocmd), since registering events require
-      the channel id. *)
-  val rpc_channel_id : [ `connected ] t -> int
+  (** Returns Neovim's id for the channel over which Neovim and the client communicate.
+      This can be useful when you want to set an autocmd or key mapping that issues an
+      [rcprequest] or [rpcnotify] when triggered, since these functions requre the channel
+      id as an argument. *)
+  val channel : [ `connected ] t -> int
 end
 
 (** A ['a Api_call.t] is a thunked call to neovim returning a Msgpack-encoded ['a]. No RPC

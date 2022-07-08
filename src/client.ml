@@ -22,7 +22,7 @@ module Private = struct
   and State : sig
     module Connected : sig
       type t =
-        { rpc_channel_id : int Set_once.t
+        { channel : int Set_once.t
         ; call_nvim_api_fn :
             'a 'b. 'a Nvim_internal.Api_result.t -> ('a, 'b) Message_type.t -> 'b
         ; buffers_attached : int Nvim_internal.Buffer.Table.t
@@ -74,7 +74,7 @@ let call_nvim_api_fn (type a b) ~on_keyboard_interrupt ~rpc ~message_type f : b 
     >>| Or_error.bind ~f:(Extract.value witness)
 ;;
 
-let get_rpc_channel_id ~rpc =
+let get_channel ~rpc =
   let open Deferred.Or_error.Let_syntax in
   let name = Uuid.to_string (Uuid_unix.create ()) in
   let request (type a) (api_result : a Nvim_internal.Api_result.t) =
@@ -95,7 +95,7 @@ let get_rpc_channel_id ~rpc =
     >>| Or_error.combine_errors
     |> Deferred.map ~f:Or_error.join
   in
-  let channel_id =
+  let channel =
     List.find_map channels ~f:(fun channel ->
       let open Option.Let_syntax in
       let%bind client = channel.client in
@@ -104,8 +104,8 @@ let get_rpc_channel_id ~rpc =
       | true -> Some channel.id
       | false -> None)
   in
-  match channel_id with
-  | Some channel_id -> return channel_id
+  match channel with
+  | Some channel -> return channel
   | None ->
     Deferred.Or_error.error_string "Failed to find find current client in channel list"
 ;;
@@ -197,7 +197,7 @@ let connect t reader writer ~close_reader_and_writer_on_disconnect ~time_source 
     and () = Reader.close (Msgpack_rpc.reader rpc) in
     ()
   in
-  let rpc_channel_id = Set_once.create () in
+  let channel = Set_once.create () in
   let async_rpcs = String.Hash_set.create () in
   let rec t =
     { keyboard_interrupts
@@ -207,7 +207,7 @@ let connect t reader writer ~close_reader_and_writer_on_disconnect ~time_source 
     ; on_error
     ; state =
         Connected
-          { rpc_channel_id
+          { channel
           ; call_nvim_api_fn
           ; buffers_attached = Nvim_internal.Buffer.Table.create ()
           ; attach_sequencer = Throttle.Sequencer.create ~continue_on_error:false ()
@@ -236,7 +236,7 @@ let connect t reader writer ~close_reader_and_writer_on_disconnect ~time_source 
         [ choice result Fn.id
         ; choice keyboard_interrupted (fun () ->
             call_nvim_api_fn
-              (Nvim_internal.nvim_feedkeys ~keys:":\x08" ~mode:"n" ~escape_csi:true)
+              (Nvim_internal.nvim_feedkeys ~keys:":\x08" ~mode:"n" ~escape_ks:false)
               Notification;
             Ok Msgpack.Nil)
         ])
@@ -246,9 +246,9 @@ let connect t reader writer ~close_reader_and_writer_on_disconnect ~time_source 
     register_request_async ~name ~f);
   Hashtbl.iteri blocking_callbacks ~f:(fun ~key:name ~data:f ->
     register_request_blocking ~name ~f);
-  match%map get_rpc_channel_id ~rpc with
+  match%map get_channel ~rpc with
   | Error _ as error -> error
-  | Ok channel ->
-    Set_once.set_exn rpc_channel_id [%here] channel;
+  | Ok channel_id ->
+    Set_once.set_exn channel [%here] channel_id;
     Ok t
 ;;

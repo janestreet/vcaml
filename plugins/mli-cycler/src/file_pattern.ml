@@ -7,12 +7,16 @@ type t =
   | Mli of string
   | Intf of string
   | Number of int * t
+  | Mll of string
+  | Mly of string
 [@@deriving compare, equal]
 
 let regex_endings =
   [ (Re_jane.create_exn "_intf\\.ml", fun x -> Intf x)
   ; (Re_jane.create_exn "\\.ml", fun x -> Ml x)
   ; (Re_jane.create_exn "\\.mli", fun x -> Mli x)
+  ; (Re_jane.create_exn "\\.mll", fun x -> Mll x)
+  ; (Re_jane.create_exn "\\.mly", fun x -> Mly x)
   ]
 ;;
 
@@ -54,14 +58,12 @@ let of_filename filename =
 ;;
 
 let rec get_root = function
-  | Ml root -> root
-  | Mli root -> root
-  | Intf root -> root
   | Number (_, t) -> get_root t
+  | Ml root | Mli root | Intf root | Mll root | Mly root -> root
 ;;
 
 let get_middle = function
-  | Ml _ | Mli _ | Intf _ -> ""
+  | Ml _ | Mli _ | Intf _ | Mll _ | Mly _ -> ""
   | Number (x, _) -> Int.to_string x
 ;;
 
@@ -70,10 +72,19 @@ let rec get_ending = function
   | Mli _ -> ".mli"
   | Intf _ -> "_intf.ml"
   | Number (_, t) -> get_ending t
+  | Mll _ -> ".mll"
+  | Mly _ -> ".mly"
 ;;
 
 let to_filename t = get_root t ^ get_middle t ^ get_ending t
 let to_short_filename t = Filename.basename (to_filename t)
+
+let rec to_intf t =
+  match t with
+  | Intf _ -> t
+  | Ml root | Mli root | Mll root | Mly root -> Intf root
+  | Number (n, t) -> Number (n, to_intf t)
+;;
 
 let to_intf_name t =
   Printf.sprintf "%s%s_intf" (Filename.basename (get_root t)) (get_middle t)
@@ -88,7 +99,7 @@ let is_include_line ~intf_name line =
 
 let rec is_mli t =
   match t with
-  | Ml _ | Intf _ -> false
+  | Ml _ | Intf _ | Mll _ | Mly _ -> false
   | Mli _ -> true
   | Number (_, t') -> is_mli t'
 ;;
@@ -102,6 +113,12 @@ let is_redundant_line_in_mli ~intf_name line =
   || is_include_line ~intf_name line
 ;;
 
+let intf_exists t =
+  match%map Sys.is_file (to_filename (to_intf t)) with
+  | `Yes -> true
+  | `No | `Unknown -> false
+;;
+
 let are_all_lines_redundant t =
   let intf_name = to_intf_name t in
   let%map.Deferred lines = Reader.file_lines (to_filename t) in
@@ -111,18 +128,24 @@ let are_all_lines_redundant t =
 
 let is_redundant_mli t =
   match t with
-  | Ml _ | Intf _ -> return false
+  | Ml _ | Intf _ | Mll _ | Mly _ -> return false
   | Number _ as number ->
     (match is_mli number with
      | false -> return false
-     | true -> are_all_lines_redundant number)
-  | Mli _ as mli -> are_all_lines_redundant mli
+     | true ->
+       (match%bind intf_exists t with
+        | false -> return false
+        | true -> are_all_lines_redundant number))
+  | Mli _ as mli ->
+    (match%bind intf_exists t with
+     | false -> return false
+     | true -> are_all_lines_redundant mli)
 ;;
 
 let rec to_intf t =
   match t with
   | Intf _ -> t
-  | Ml s | Mli s -> Intf s
+  | Ml s | Mli s | Mll s | Mly s -> Intf s
   | Number (n, t) -> Number (n, to_intf t)
 ;;
 

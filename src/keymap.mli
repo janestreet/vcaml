@@ -45,7 +45,7 @@ type t =
    in any of the constituent modes. Queries for [Language] mode return only language
    mappings. *)
 val get
-  :  scope:[ `Global | `Buffer_local of Nvim_internal.Buffer.t ]
+  :  scope:[ `Global | `Buffer_local of Nvim_internal.Buffer.Or_current.t ]
   -> mode:Mode.t
   -> t list Api_call.Or_error.t
 
@@ -57,7 +57,7 @@ val set
   -> ?expr:bool (** default: [false] *)
   -> ?nowait:bool (** default: [false] *)
   -> ?silent:bool (** default: [false] *)
-  -> scope:[ `Global | `Buffer_local of Nvim_internal.Buffer.t ]
+  -> scope:[ `Global | `Buffer_local of Nvim_internal.Buffer.Or_current.t ]
   -> lhs:string
   -> rhs:string
   -> mode:Mode.t
@@ -66,7 +66,7 @@ val set
 
 (** Unset a keymapping. *)
 val unset
-  :  scope:[ `Global | `Buffer_local of Nvim_internal.Buffer.t ]
+  :  scope:[ `Global | `Buffer_local of Nvim_internal.Buffer.Or_current.t ]
   -> lhs:string
   -> mode:Mode.t
   -> unit Api_call.Or_error.t

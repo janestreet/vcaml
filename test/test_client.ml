@@ -32,7 +32,11 @@ let with_client
     let%bind working_dir = Sys.getcwd () in
     let env =
       let env =
-        let base = Core_unix.Env.expand (`Extend [ "NVIM_LOG_FILE", nvim_log_file ]) in
+        let base =
+          Core_unix.Env.expand
+            (`Extend
+               [ "NVIM_LOG_FILE", nvim_log_file; "NVIM_RPLUGIN_MANIFEST", "rplugin.vim" ])
+        in
         match env with
         | None -> base
         | Some getenv ->
@@ -42,7 +46,7 @@ let with_client
     in
     let client = Vcaml.Client.create ~on_error in
     before_connecting client;
-    let%bind client, _process =
+    let%bind client, process =
       Vcaml.Client.attach
         client
         (Embed { prog = neovim_path; args; working_dir; env })
@@ -51,7 +55,16 @@ let with_client
     in
     let%bind result = f client >>| ok_exn in
     let%bind () = Vcaml.Client.close client in
-    let%bind () = Reader.file_contents nvim_log_file >>| print_string in
+    let%bind () =
+      (* Because the client is embedded, stdin and stdout are used for Msgpack RPC.
+         However, there still may be errors reported on stderr that we should capture. *)
+      let%map stderr = Reader.contents (Process.stderr process)
+      and low_level_log = Reader.file_contents nvim_log_file in
+      [ stderr; low_level_log ]
+      |> List.filter ~f:(Fn.non String.is_empty)
+      |> String.concat ~sep:"\n"
+      |> print_string
+    in
     return result)
 ;;
 
@@ -153,7 +166,7 @@ module Test_ui = struct
           if x < width && y < height then new_array.(y).(x) <- c));
       t.buffer <- new_array
     | Grid_scroll { grid = 1; top; bot; left = _; right = _; rows; cols = 0 } ->
-      (* In Neovim 0.5.0, [cols] is fixed at [0] so we never need [left] or [right]. *)
+      (* In Neovim 0.7.0, [cols] is fixed at [0] so we never need [left] or [right]. *)
       unflush t;
       (* Establish our understanding of grid scrolling. If this is violated we are
          probably misinterpreting this event. *)

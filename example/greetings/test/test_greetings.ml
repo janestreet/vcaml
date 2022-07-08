@@ -11,9 +11,7 @@ let%expect_test "Plugin responds to RPC request" =
         {| function! OnGreetingsPluginStart(channel)
            endfunction |}
       in
-      let%bind (_ : string) =
-        run_join [%here] client (Nvim.source ~code:define_on_start)
-      in
+      let%bind (_ : string) = run_join [%here] client (Nvim.source define_on_start) in
       let%bind { plugin_state = (); shutdown; wait_for_shutdown } =
         Greetings.For_testing.start ~client
       in
@@ -21,7 +19,7 @@ let%expect_test "Plugin responds to RPC request" =
         wrap_viml_function
           ~function_name:"rpcrequest"
           ~type_:Defun.Vim.(Integer @-> String @-> String @-> return String)
-          (Client.rpc_channel_id client)
+          (Client.channel client)
           "greeting"
       in
       let%bind greeting = run_join [%here] client (greeting "Jane") in

@@ -15,12 +15,12 @@ end
    buffer_clock.vim to use it. *)
 
 let win_update_api_call ~new_win ~buffer =
-  let%map.Api_call set_height_or_err = Window.set_height ~window:new_win ~height:1
+  let%map.Api_call set_height_or_err = Window.set_height (Id new_win) ~height:1
   (* Executing multiple api calls separately is not atomic, so we should
      restore focus our new window before setting the buffer in case there's
      a race condition that arises. *)
-  and set_win_or_err = Nvim.set_current_win ~window:new_win
-  and set_buf_or_err = Nvim.set_current_buf ~buffer in
+  and set_win_or_err = Nvim.set_current_win new_win
+  and set_buf_or_err = Nvim.set_current_buf buffer in
   Or_error.all_unit [ set_height_or_err; set_win_or_err; set_buf_or_err ]
 ;;
 
@@ -28,7 +28,7 @@ let wins_api_call =
   (* We want to preserve the original window so that we can restore focus
      after we create the clock window *)
   let%map.Api_call orig_win_or_err = Nvim.get_current_win
-  and split_or_err = Nvim.command ~command:"split"
+  and split_or_err = Nvim.command "split"
   and new_win_or_err = Nvim.get_current_win in
   let open Or_error.Let_syntax in
   let%bind orig_win = orig_win_or_err in
@@ -40,7 +40,7 @@ let wins_api_call =
 let update_buffer_with_current_time ~client ~buffer ~time_source () =
   let%bind res_or_err =
     Buffer.set_lines
-      ~buffer
+      (Id buffer)
       ~start:0
       ~end_:1
       ~strict_indexing:true
@@ -68,7 +68,7 @@ let start_plugin ~time_source ~client ~buffer ~shutdown =
   let%bind orig_win, new_win = run_join [%here] client wins_api_call in
   let%bind () = win_update_api_call ~new_win ~buffer |> run_join [%here] client in
   (* Restore the user to their original window *)
-  let%bind () = Nvim.set_current_win ~window:orig_win |> run_join [%here] client in
+  let%bind () = Nvim.set_current_win orig_win |> run_join [%here] client in
   Async.don't_wait_for (start_buffer_updates ~time_source ~client ~buffer ~shutdown);
   return new_win
 ;;
@@ -103,7 +103,7 @@ let create_plugin ~time_source =
         Buffer.Subscriber.subscribe
           subscriber
           [%here]
-          ~buffer:(`Numbered buffer)
+          ~buffer:(Id buffer)
           ~send_buffer:true
       in
       don't_wait_for

@@ -18,7 +18,7 @@ let%expect_test "Oneshot" =
   in
   let%map output =
     Vcaml_test.with_client ~links (fun client ->
-      run_join [%here] client (Nvim.source ~code))
+      run_join [%here] client (Nvim.source code))
   in
   print_endline output;
   [%expect {|
@@ -188,11 +188,12 @@ let%expect_test "Persistent plugin shows errors when they occur during \
        endfunction |}
   in
   let (module Plugin) = make_plugin ~vimscript_notify_fn:"OnStartup" () in
+  Backtrace.elide := true;
   let%bind screen =
     Vcaml_test.with_ui_client ~width:84 (fun client ui ->
       let%bind () =
-        [ Nvim.source ~code:vimscript_fn |> Api_call.Or_error.map ~f:ignore
-        ; Nvim.command ~command:"set cmdheight=3"
+        [ Nvim.source vimscript_fn |> Api_call.Or_error.map ~f:ignore
+        ; Nvim.command "set cmdheight=3"
         ]
         |> Api_call.Or_error.all_unit
         |> run_join [%here] client
@@ -239,7 +240,7 @@ let%expect_test "Persistent plugin shows errors when they occur during \
     │~                                                                                   │
     │[No Name]                                                         0,0-1          All│
     │(vcaml-test-persistent-plugin                                                       │
-    │ (("Called from" lib/vcaml/plugin/src/vcaml_plugin.ml:89:25)                        │
+    │ (("Called from" lib/vcaml/plugin/src/vcaml_plugin.ml:LINE:COL)                     │
     │  ("Vim returned error" "Vim(echoerr):Failure" (error_type Exception))))            │
     ╰────────────────────────────────────────────────────────────────────────────────────╯ |}];
   return ()
@@ -312,7 +313,7 @@ let%expect_test "Persistent plugin shows errors when they occur during async RPC
         wrap_viml_function
           ~function_name:"rpcnotify"
           ~type_:Defun.Vim.(Integer @-> String @-> return Integer)
-          (Client.rpc_channel_id client)
+          (Client.channel client)
           "async-rpc"
         |> Api_call.Or_error.map ~f:ignore
       in
@@ -370,17 +371,16 @@ let%expect_test "Persistent plugin shows errors when they occur during blocking 
       let%bind (_ : Plugin.For_testing.State.t Or_error.t) =
         Plugin.For_testing.start ~client
       in
-      let channel = Client.rpc_channel_id client in
+      let channel = Client.channel client in
       let rpcrequest =
         Nvim.command
-          ~command:
-            [%string
-              "call timer_start(0, { _ -> rpcrequest(%{channel#Int}, 'blocking-rpc') })"]
+          [%string
+            "call timer_start(0, { _ -> rpcrequest(%{channel#Int}, 'blocking-rpc') })"]
       in
       let request =
         let%map.Api_call.Or_error () = rpcrequest
-        and () = Nvim.command ~command:"set cmdheight=4"
-        and channel_info = Nvim.get_chan_info ~chan:channel in
+        and () = Nvim.command "set cmdheight=4"
+        and channel_info = Nvim.get_channel_info channel in
         channel_info
       in
       let%bind channel_info = run_join [%here] client request >>| ok_exn in

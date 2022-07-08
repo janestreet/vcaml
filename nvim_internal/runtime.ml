@@ -7,18 +7,19 @@ module type Nvim_id = sig
   include Hashable.S_plain with type t := t
   include Msgpack.Msgpackable with type t := t
 
-  module Unsafe : sig
-    val of_int : int -> t
+  module Or_current : sig
+    type nonrec t =
+      | Current
+      | Id of t
+    [@@deriving sexp_of]
+
+    include Msgpack.Msgpackable with type t := t
   end
 end
 
 let make_nvim_id ~type_id ~name =
   (module struct
     include Int
-
-    module Unsafe = struct
-      let of_int = of_int
-    end
 
     let rec of_msgpack =
       let expected_type_id = type_id in
@@ -39,5 +40,24 @@ let make_nvim_id ~type_id ~name =
     ;;
 
     let to_msgpack t = Msgpack.Integer t
+
+    module Or_current = struct
+      type nonrec t =
+        | Current
+        | Id of t
+      [@@deriving sexp_of]
+
+      let of_msgpack msgpack =
+        match%map.Or_error of_msgpack msgpack with
+        | 0 -> Current
+        | id -> Id id
+      ;;
+
+      let to_msgpack t =
+        match t with
+        | Current -> to_msgpack 0
+        | Id id -> to_msgpack id
+      ;;
+    end
   end : Nvim_id)
 ;;

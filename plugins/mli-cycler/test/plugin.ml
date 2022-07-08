@@ -23,8 +23,7 @@ let setup_files_for_testing ~empty_files ~files_with_includes ~temp_dir =
 
 let print_current_file client =
   let open Deferred.Or_error.Let_syntax in
-  let%bind buf = run_join [%here] client Nvim.get_current_buf in
-  let%bind name = run_join [%here] client (Buffer.get_name ~buffer:buf) in
+  let%bind name = run_join [%here] client (Buffer.get_name Current) in
   let _dir, current_file = Core.Filename.split name in
   print_s [%message (current_file : string)];
   return ()
@@ -35,7 +34,7 @@ let setup_client ~empty_files ~files_with_includes ~entry_point ~client =
   let temp_dir = Filename_unix.temp_dir "mli_plugin" "test" in
   let%bind () = setup_files_for_testing ~empty_files ~files_with_includes ~temp_dir in
   let entry_file_full_path = Core.( ^/ ) temp_dir entry_point in
-  run_join [%here] client (Nvim.command ~command:(":e " ^ entry_file_full_path))
+  run_join [%here] client (Nvim.command (":e " ^ entry_file_full_path))
 ;;
 
 let rec repeat_n_times times ~f =
@@ -60,7 +59,7 @@ let cycle_forward client =
 
 let print_file_list client =
   let open Deferred.Or_error.Let_syntax in
-  let%bind file_list = run_join [%here] client (Nvim.source ~code:"1 message") in
+  let%bind file_list = run_join [%here] client (Nvim.source "1 message") in
   print_s [%message (file_list : string)];
   return ()
 ;;
@@ -103,6 +102,8 @@ let%expect_test "cycles forwards and backwards in the long list, wrapping around
     ; "foo0.ml"
     ; "foo0.mli"
     ; "foo0_intf.ml"
+    ; "foo.mly"
+    ; "foo.mll"
     ; "bar.ml"
     ; "bar.mli"
     ; "bar_intf.ml"
@@ -115,8 +116,8 @@ let%expect_test "cycles forwards and backwards in the long list, wrapping around
         setup_client ~empty_files ~files_with_includes:[] ~entry_point:"foo.ml" ~client
       in
       let%bind () = print_current_file client in
-      let%bind () = repeat_n_times 6 ~f:(fun () -> cycle_forward client) in
-      repeat_n_times 6 ~f:(fun () -> cycle_backward client))
+      let%bind () = repeat_n_times 8 ~f:(fun () -> cycle_forward client) in
+      repeat_n_times 8 ~f:(fun () -> cycle_backward client))
   in
   [%expect
     {|
@@ -132,7 +133,15 @@ let%expect_test "cycles forwards and backwards in the long list, wrapping around
     "Cycling forward..."
     (current_file foo0_intf.ml)
     "Cycling forward..."
+    (current_file foo.mll)
+    "Cycling forward..."
+    (current_file foo.mly)
+    "Cycling forward..."
     (current_file foo.ml)
+    "Cycling backward..."
+    (current_file foo.mly)
+    "Cycling backward..."
+    (current_file foo.mll)
     "Cycling backward..."
     (current_file foo0_intf.ml)
     "Cycling backward..."
@@ -203,6 +212,40 @@ let%expect_test "ignores redundant mlis in lists and cycling" =
     (current_file foo.ml)
     "Cycling backward..."
     (current_file foo_intf.ml)
+    "Cycling backward..."
+    (current_file foo.ml) |}];
+  return ()
+;;
+
+let%expect_test "mlis without corresponding intf files are not treated as redundant" =
+  let empty_files = [ "foo.ml" ] in
+  let files_with_includes = [ "foo.mli", "Foo_intf.My_awesome_module" ] in
+  let%bind () =
+    Vcaml_test.with_client (fun client ->
+      let open Deferred.Or_error.Let_syntax in
+      let%bind () =
+        setup_client ~empty_files ~files_with_includes ~entry_point:"foo.ml" ~client
+      in
+      let%bind () = For_testing.echo_file_patterns client in
+      let%bind () = print_file_list client in
+      let%bind () = print_current_file client in
+      let%bind () = repeat_n_times 3 ~f:(fun () -> cycle_forward client) in
+      repeat_n_times 3 ~f:(fun () -> cycle_backward client))
+  in
+  [%expect
+    {|
+    (file_list "foo.ml, foo.mli")
+    (current_file foo.ml)
+    "Cycling forward..."
+    (current_file foo.mli)
+    "Cycling forward..."
+    (current_file foo.ml)
+    "Cycling forward..."
+    (current_file foo.mli)
+    "Cycling backward..."
+    (current_file foo.ml)
+    "Cycling backward..."
+    (current_file foo.mli)
     "Cycling backward..."
     (current_file foo.ml) |}];
   return ()
@@ -323,8 +366,7 @@ let%expect_test "files numbered with leading zeroes are treated as their own gro
 let%expect_test "listing files in fzf attempts a call to MliCyclerFzf" =
   let%bind result =
     try_with
-      ~run:
-        `Schedule
+      ~run:`Schedule
       ~rest:`Log
       (fun () ->
          Vcaml_test.with_client (fun client ->

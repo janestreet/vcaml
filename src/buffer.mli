@@ -25,11 +25,11 @@ module Event : sig
   [@@deriving sexp_of]
 end
 
-val get_name : buffer:t -> string Api_call.Or_error.t
-val set_name : buffer:t -> name:string -> unit Api_call.Or_error.t
+val get_name : Or_current.t -> string Api_call.Or_error.t
+val set_name : Or_current.t -> name:string -> unit Api_call.Or_error.t
 
 val get_lines
-  :  buffer:t
+  :  Or_current.t
   -> start:int
   -> end_:int
   -> strict_indexing:bool
@@ -39,7 +39,7 @@ val get_lines
     preserve marks. If you want to preserve marks and/or want characterwise replacement,
     prefer [set_text]. *)
 val set_lines
-  :  buffer:t
+  :  Or_current.t
   -> start:int
   -> end_:int
   -> strict_indexing:bool
@@ -97,15 +97,15 @@ module Subscriber : sig
     -> ?preview:bool
     -> t
     -> Source_code_position.t
-    -> buffer:[ `Current | `Numbered of buffer ]
+    -> buffer:Or_current.t
     -> send_buffer:bool
     -> Event.t Async.Pipe.Reader.t Async.Deferred.Or_error.t
 end
 
-val get_option : buffer:t -> name:string -> type_:'a Type.t -> 'a Api_call.Or_error.t
+val get_option : Or_current.t -> name:string -> type_:'a Type.t -> 'a Api_call.Or_error.t
 
 val set_option
-  :  buffer:t
+  :  Or_current.t
   -> scope:[ `Local | `Global ]
   -> name:string
   -> type_:'a Type.t
@@ -114,32 +114,32 @@ val set_option
 
 (** Get a native nvim mark. To create a mark that will only be controlled by your
     plugin, use an [Extmark.t]. *)
-val get_mark : buffer:t -> sym:char -> Mark.t Api_call.Or_error.t
+val get_mark : Or_current.t -> sym:char -> Mark.t Api_call.Or_error.t
 
 module Untested : sig
-  val line_count : buffer:t -> int Api_call.Or_error.t
-  val get_var : buffer:t -> name:string -> type_:'a Type.t -> 'a Api_call.Or_error.t
-  val get_changedtick : buffer:t -> int Api_call.Or_error.t
+  val line_count : Or_current.t -> int Api_call.Or_error.t
+  val get_var : Or_current.t -> name:string -> type_:'a Type.t -> 'a Api_call.Or_error.t
+  val get_changedtick : Or_current.t -> int Api_call.Or_error.t
 
   (** Gets a map of buffer-local user-commands. *)
-  val get_commands : buffer:t -> Command.t String.Map.t Api_call.Or_error.t
+  val get_commands : Or_current.t -> Command.t String.Map.t Api_call.Or_error.t
 
   val set_var
-    :  buffer:t
+    :  Or_current.t
     -> name:string
     -> type_:'a Type.t
     -> value:'a
     -> unit Api_call.Or_error.t
 
-  val del_var : buffer:t -> name:string -> unit Api_call.Or_error.t
-  val is_loaded : buffer:t -> bool Api_call.Or_error.t
-  val is_valid : buffer:t -> bool Api_call.Or_error.t
-  val unload : buffer:t -> even_if_modified:bool -> unit Api_call.Or_error.t
-  val wipeout : buffer:t -> even_if_modified:bool -> unit Api_call.Or_error.t
-  val get_byte_offset_of_line : buffer:t -> line:int -> int Api_call.Or_error.t
+  val delete_var : Or_current.t -> name:string -> unit Api_call.Or_error.t
+  val is_loaded : t -> bool Api_call.Or_error.t
+  val is_valid : t -> bool Api_call.Or_error.t
+  val unload : Or_current.t -> even_if_modified:bool -> unit Api_call.Or_error.t
+  val wipeout : Or_current.t -> even_if_modified:bool -> unit Api_call.Or_error.t
+  val get_byte_offset_of_line : Or_current.t -> line:int -> int Api_call.Or_error.t
 
   val add_highlight
-    :  buffer:t
+    :  Or_current.t
     -> namespace:Namespace.t
     -> hl_group:string
     -> line:int
@@ -148,14 +148,14 @@ module Untested : sig
     -> int Api_call.Or_error.t
 
   val clear_namespace
-    :  buffer:t
+    :  Or_current.t
     -> namespace:Namespace.t
     -> line_start:int
     -> line_end:int
     -> unit Api_call.Or_error.t
 
   val set_text
-    :  buffer:t
+    :  Or_current.t
     -> start_row:int
     -> start_col:int
     -> end_row:int
@@ -163,13 +163,8 @@ module Untested : sig
     -> replacement:string list
     -> unit Or_error.t Api_call.t
 
-  (** You may want to use an [Extmark.t] with virtual text instead. *)
-  val set_virtual_text
-    :  buffer:t
-    -> namespace:Namespace.t
-    -> line:int
-    -> text:Highlighted_text.t
-    -> unit Api_call.Or_error.t
+  val set_mark : Or_current.t -> Mark.t -> unit Api_call.Or_error.t
+  val delete_mark : Or_current.t -> char -> unit Api_call.Or_error.t
 
   module Extmark : sig
     (** An [Extmark.t] represents a logical location in a buffer. It can be used to
@@ -189,14 +184,14 @@ module Untested : sig
     include Hashable.S_plain with type t := t
   end
 
-  val get_extmark : extmark:Extmark.t -> Position.t option Api_call.Or_error.t
+  val get_extmark : Extmark.t -> Position.t option Api_call.Or_error.t
 
   val get_extmark_with_details
-    :  extmark:Extmark.t
+    :  Extmark.t
     -> (Position.t * Msgpack.t String.Map.t) option Api_call.Or_error.t
 
   val all_extmarks
-    :  buffer:t
+    :  Or_current.t
     -> namespace:Namespace.t
     -> ?start_inclusive:Position.t
     -> ?end_inclusive:Position.t
@@ -204,49 +199,63 @@ module Untested : sig
     -> (Extmark.t * Position.t) list Api_call.Or_error.t
 
   val all_extmarks_with_details
-    :  buffer:t
+    :  Or_current.t
     -> namespace:Namespace.t
     -> ?start_inclusive:Position.t
     -> ?end_inclusive:Position.t
     -> unit
     -> (Extmark.t * Position.t * Msgpack.t String.Map.t) list Api_call.Or_error.t
 
+  (* See [:h nvim_buf_set_extmark] for differences in treatment of [virt_text] and
+     [virt_lines]. *)
   type 'a with_extmark_options :=
     ?end_exclusive:Position.t
     -> ?hl_group:string
     -> ?virtual_text:Highlighted_text.t
     -> ?virtual_text_pos:[ `Eol | `Overlay | `Right_align | `At_column of int ]
     -> ?hide_virtual_text_when_overlaying_selection:unit
+    -> ?virtual_lines:Highlighted_text.t list
+    -> ?virtual_lines_pos:[ `Above | `Below ]
+    -> ?bypass_sign_and_number_columns:bool
     -> ?when_underlying_highlight_conflicts:[ `Override | `Combine_with_bg | `Blend ]
     -> ?extend_highlight_across_screen:unit
     -> ?ephemeral:unit (* For use with [Nvim.Untested.Expert.set_decoration_provider] *)
     -> ?start_gravity:[ `Right | `Left ]
     -> ?end_gravity:[ `Right | `Left ]
     -> ?priority:int (* Higher numbers take precedence. *)
+    -> ?strict:bool
+    -> ?sign_text:string
+    -> ?sign_hl_group:string
+    -> ?number_hl_group:string
+    -> ?line_hl_group:string
+    -> ?cursorline_hl_group:string
+    -> ?conceal:[ `With_default | `With of char ]
     -> unit
     -> 'a
 
   val create_extmark
-    :  buffer:t
+    :  Or_current.t
     -> namespace:Namespace.t
     -> start_inclusive:Position.t
     -> Extmark.t Api_call.Or_error.t with_extmark_options
 
   val update_extmark
-    :  extmark:Extmark.t
+    :  Extmark.t
     -> start_inclusive:Position.t
     -> unit Api_call.Or_error.t with_extmark_options
 
-  (** Returns [true] if the extmark was found, [false] otherwise. *)
-  val delete_extmark : extmark:Extmark.t -> bool Api_call.Or_error.t
+  val delete_extmark : Extmark.t -> unit Api_call.Or_error.t
 
   (** Open a terminal not connected to a process in this buffer. Useful for displaying
-      ANSI-coded text. Returns the channel id for use with [Nvim.Untested.chan_send].
+      ANSI-coded text. Returns the channel for use with [Nvim.Untested.send_to_channel].
 
       NOTE: The buffer is expected to be empty and unmodified, but this is not enforced.
       As far as I can tell there is no way to recover modifications once the buffer is
       converted. The file cannot be reopened until the terminal buffer is closed. *)
-  val open_term : buffer:t -> int Api_call.Or_error.t
+  val open_term
+    :  ?on_input:Nvim_internal.Luaref.t
+    -> Or_current.t
+    -> int Api_call.Or_error.t
 
   module Expert : sig
 
@@ -255,7 +264,7 @@ module Untested : sig
         actually useful we can create a wrapper similar to [wrap_viml_function] and expose
         it in a more type-safe way. *)
     val buf_call
-      :  buffer:t
+      :  Or_current.t
       -> lua_callback:Nvim_internal.Luaref.t
       -> Msgpack.t Api_call.Or_error.t
   end

@@ -12,17 +12,17 @@ let print_window_count ~client =
 
 let escape_and_feedkeys ~client ~keys =
   let%bind escaped_keys =
-    Nvim.replace_termcodes ~str:keys ~replace_keycodes:true |> run_join [%here] client
+    Nvim.replace_termcodes_and_keycodes keys |> run_join [%here] client
   in
-  Nvim.feedkeys ~keys:escaped_keys ~mode:"mx" ~escape_csi:true |> run_join [%here] client
+  Nvim.feedkeys (`Already_escaped escaped_keys) ~mode:"mx" |> run_join [%here] client
 ;;
 
 let get_contents ~client ~buffer =
-  Buffer.get_lines ~buffer ~start:0 ~end_:(-1) ~strict_indexing:true
+  Buffer.get_lines (Id buffer) ~start:0 ~end_:(-1) ~strict_indexing:true
   |> run_join [%here] client
 ;;
 
-let kill_plugin ~client = Nvim.command ~command:"q!" |> run_join [%here] client
+let kill_plugin ~client = Nvim.command "q!" |> run_join [%here] client
 
 let%expect_test "splits open a new window and allows the user to send keys" =
   let%map.Deferred () =
@@ -67,7 +67,7 @@ let%expect_test "backspace" =
       let key_sequence = "<BS>this<BS><CR><BS> a drink with jam and bread" in
       let%bind () = escape_and_feedkeys ~client ~keys:key_sequence in
       let%bind () =
-        Window.set_cursor ~window { row = 1; col = 2 } |> run_join [%here] client
+        Window.set_cursor (Id window) { row = 1; col = 2 } |> run_join [%here] client
       in
       let%bind () = escape_and_feedkeys ~client ~keys:"<BS>" in
       let%bind contents = get_contents ~client ~buffer in
@@ -89,7 +89,7 @@ let%expect_test "enter" =
       let key_sequence = "<CR>second linethird line<CR>fourth line" in
       let%bind () = escape_and_feedkeys ~client ~keys:key_sequence in
       let%bind () =
-        Window.set_cursor ~window { row = 2; col = 11 } |> run_join [%here] client
+        Window.set_cursor (Id window) { row = 2; col = 11 } |> run_join [%here] client
       in
       let%bind () = escape_and_feedkeys ~client ~keys:"<CR>" in
       let%bind contents = get_contents ~client ~buffer in
