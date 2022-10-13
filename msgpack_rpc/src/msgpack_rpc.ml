@@ -131,7 +131,7 @@ let connect t reader writer ~close_reader_and_writer_on_disconnect =
 
 let create ~on_error =
   let notifications =
-    Bus.create
+    Bus.create_exn
       [%here]
       Arity1
       ~on_subscription_after_first_write:Allow

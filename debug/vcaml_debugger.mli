@@ -21,7 +21,7 @@ val notify : t -> string -> Msgpack.t list -> unit
 val respond : t -> msgid:int -> (Msgpack.t, Msgpack.t) Result.t -> unit
 
 (** Receive a message from Neovim. *)
-val receive : t -> [ `Waiting_for_neovim | `Message of Msgpack.t ]
+val receive : t -> [ `Connection_closed | `Waiting_for_neovim | `Message of Msgpack.t ]
 
 (** Read all available messages from Neovim. Useful for cases where you expect many
     messages, e.g., for event subscriptions. *)

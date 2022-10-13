@@ -70,7 +70,8 @@ module Client = struct
       let socket =
         match socket with
         | `Socket socket -> socket
-        | `Child -> Sys.getenv_exn "NVIM_LISTEN_ADDRESS"
+        | `Child ->
+          Sys.getenv_exn "NVIM_LISTEN_ADDRESS"
       in
       let socket = Tcp.Where_to_connect.of_file socket in
       let%bind _addr, reader, writer = Tcp.connect socket in

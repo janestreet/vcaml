@@ -9,20 +9,28 @@ type t =
   ; bytes : Bytes.t
   ; mutable state : Msgpack.t Angstrom.Buffered.state
   ; mutable channel : int
+  ; mutable closed : bool
   }
 
-let close t = Unix.close t.socket
+let close t =
+  Unix.close t.socket;
+  t.closed <- true
+;;
+
 let channel t = t.channel
 let debug = ref true
 let print_s sexp = if !debug then print_s sexp
 
 let send t message =
-  let buf = Msgpack.string_of_t_exn message in
-  let len = String.length buf in
-  let bytes_written = Unix.single_write_substring ~pos:0 ~len t.socket ~buf in
-  match bytes_written = len with
-  | false -> failwith "Failed to send message"
-  | true -> print_s [%message "Sent" ~_:(message : Msgpack.t)]
+  match t.closed with
+  | true -> failwith "Failed to send message - connection is closed"
+  | false ->
+    let buf = Msgpack.string_of_t_exn message in
+    let len = String.length buf in
+    let bytes_written = Unix.single_write_substring ~pos:0 ~len t.socket ~buf in
+    (match bytes_written = len with
+     | false -> failwith "Failed to send message"
+     | true -> print_s [%message "Sent" ~_:(message : Msgpack.t)])
 ;;
 
 let request t method_name params =
@@ -48,38 +56,52 @@ let respond t ~msgid response =
 ;;
 
 let rec receive t =
-  match t.state with
-  | Fail (_, _, msg) ->
-    close t;
-    raise_s [%message "Failed to parse message" msg]
-  | Partial _ as state ->
-    (match
-       (Unix.select ~read:[ t.socket ] ~write:[] ~except:[] ~timeout:`Immediately ()).read
-     with
-     | [] -> `Waiting_for_neovim
-     | _ :: _ ->
-       let input =
-         match Unix.read ~pos:0 ~len:(Bytes.length t.bytes) t.socket ~buf:t.bytes with
-         | 0 -> `Eof
-         | bytes_read -> `String (Bytes.To_string.sub ~pos:0 ~len:bytes_read t.bytes)
-       in
-       t.state <- Parser.feed state input;
-       receive t)
-  | Done ({ buf; off; len }, message) ->
-    print_s [%message "Received" ~_:(message : Msgpack.t)];
-    let remaining_input = Bigstring.sub buf ~pos:off ~len in
-    t.state
-    <- Parser.feed
-         (Parser.parse Msgpack.Internal.Parser.msg)
-         (`Bigstring remaining_input);
-    `Message message
+  match t.closed with
+  | true -> `Connection_closed
+  | false ->
+    (match t.state with
+     | Fail ({ buf; off; len }, marks, msg) ->
+       (match off = len with
+        | true ->
+          close t;
+          `Connection_closed
+        | false ->
+          let unconsumed = Bigstringaf.substring buf ~off ~len in
+          raise_s
+            [%message
+              "Failed to parse message"
+                msg
+                (marks : string list)
+                (unconsumed : String.Hexdump.Pretty.t)])
+     | Partial _ as state ->
+       (match
+          (Unix.select ~read:[ t.socket ] ~write:[] ~except:[] ~timeout:`Immediately ())
+          .read
+        with
+        | [] -> `Waiting_for_neovim
+        | _ :: _ ->
+          let input =
+            match Unix.read ~pos:0 ~len:(Bytes.length t.bytes) t.socket ~buf:t.bytes with
+            | 0 -> `Eof
+            | bytes_read -> `String (Bytes.To_string.sub ~pos:0 ~len:bytes_read t.bytes)
+          in
+          t.state <- Parser.feed state input;
+          receive t)
+     | Done ({ buf; off; len }, message) ->
+       print_s [%message "Received" ~_:(message : Msgpack.t)];
+       let remaining_input = Bigstring.sub buf ~pos:off ~len in
+       t.state
+       <- Parser.feed
+            (Parser.parse Msgpack.Internal.Parser.msg)
+            (`Bigstring remaining_input);
+       `Message message)
 ;;
 
 let receive_all_available t =
   let open Reversed_list in
   let rec aux t ~messages =
     match receive t with
-    | `Waiting_for_neovim -> rev messages
+    | `Connection_closed | `Waiting_for_neovim -> rev messages
     | `Message message -> aux t ~messages:(message :: messages)
   in
   aux t ~messages:[]
@@ -94,6 +116,7 @@ let open_ socketname =
     ; bytes = Bytes.create 4096
     ; state = Parser.parse Msgpack.Internal.Parser.msg
     ; channel = -1
+    ; closed = false
     }
   in
   let name = Uuid.to_string (Uuid_unix.create ()) in
@@ -103,6 +126,7 @@ let open_ socketname =
     | 0 -> failwith "Timed out waiting for Neovim to respond"
     | n ->
       (match receive t with
+       | `Connection_closed -> failwith "Connection to Neovim closed"
        | `Message message -> message
        | `Waiting_for_neovim ->
          ignore (Unix.nanosleep 0.1 : float);

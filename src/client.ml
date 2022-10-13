@@ -141,11 +141,11 @@ let create ~on_error =
   let async_callbacks = String.Table.create () in
   let blocking_callbacks = String.Table.create () in
   let register_request_async ~name ~f =
-    String.Table.add async_callbacks ~key:name ~data:f
+    Hashtbl.add async_callbacks ~key:name ~data:f
     |> asynchronous_rpcs_must_be_unique ~name
   in
   let register_request_blocking ~name ~f =
-    String.Table.add blocking_callbacks ~key:name ~data:f
+    Hashtbl.add blocking_callbacks ~key:name ~data:f
     |> synchronous_rpcs_must_be_unique ~name
   in
   let not_connected = { State.Not_connected.rpc; async_callbacks; blocking_callbacks } in
