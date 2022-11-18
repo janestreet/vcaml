@@ -1,5 +1,6 @@
-open! Core
-open! Async
+open Core
+open Async
+open Vcaml
 
 let neovim_path = Core.Sys.getenv "NEOVIM_PATH" |> Option.value ~default:"nvim"
 let hundred_ms = Time_ns.Span.create ~ms:100 ()
@@ -44,17 +45,17 @@ let with_client
       in
       `Replace_raw env
     in
-    let client = Vcaml.Client.create ~on_error in
+    let client = Client.create ~on_error in
     before_connecting client;
     let%bind client, process =
-      Vcaml.Client.attach
+      Client.attach
         client
         (Embed { prog = neovim_path; args; working_dir; env })
         ~time_source
       >>| ok_exn
     in
     let%bind result = f client >>| ok_exn in
-    let%bind () = Vcaml.Client.close client in
+    let%bind () = Client.close client in
     let%bind () =
       (* Because the client is embedded, stdin and stdout are used for Msgpack RPC.
          However, there still may be errors reported on stderr that we should capture. *)
@@ -83,7 +84,7 @@ let print_s ?mach sexp =
 
 let simple here k to_sexp =
   with_client (fun client ->
-    let%map.Deferred.Or_error result = Vcaml.run_join here client k in
+    let%map.Deferred.Or_error result = run_join here client k in
     print_s (to_sexp result))
 ;;
 
@@ -93,8 +94,8 @@ module Test_ui = struct
     ; mutable cursor_col : int
     ; mutable cursor_row : int
     ; flushed : [ `Awaiting_first_flush | `Flush of string | `Detached ] Mvar.Read_write.t
-    ; ui : Vcaml.Ui.t Set_once.t
-    ; client : [ `connected ] Vcaml.Client.t
+    ; ui : Ui.t Set_once.t
+    ; client : [ `connected ] Client.t
     }
 
   let ui_to_string t =
@@ -124,7 +125,7 @@ module Test_ui = struct
   ;;
 
   (* Applies a message from the neovim "redraw" ui message sequence. *)
-  let apply t (event : Vcaml.Ui.Event.t) =
+  let apply t (event : Ui.Event.t) =
     let unflush t =
       match Mvar.peek t.flushed with
       | None | Some (`Awaiting_first_flush | `Detached) -> ()
@@ -197,7 +198,7 @@ module Test_ui = struct
     | Update_bg _
     | Update_fg _
     | Update_sp _ -> ()
-    | _ -> raise_s [%message "Ignored UI event" (event : Vcaml.Ui.Event.t)]
+    | _ -> raise_s [%message "Ignored UI event" (event : Ui.Event.t)]
   ;;
 
   let attach ?(width = 80) ?(height = 30) here client =
@@ -213,12 +214,12 @@ module Test_ui = struct
     in
     Mvar.set t.flushed `Awaiting_first_flush;
     let%bind ui =
-      Vcaml.Ui.attach
+      Ui.attach
         here
         client
         ~width
         ~height
-        ~options:Vcaml.Ui.Options.default
+        ~options:Ui.Options.default
         ~on_event:(apply t)
         ~on_parse_error:`Raise
     in
@@ -228,7 +229,7 @@ module Test_ui = struct
 
   let detach t here =
     Mvar.set t.flushed `Detached;
-    Vcaml.Ui.detach (Set_once.get_exn t.ui [%here]) here
+    Ui.detach (Set_once.get_exn t.ui [%here]) here
   ;;
 
   let with_ui ?width ?height here client f =
@@ -313,9 +314,9 @@ let socket_client
       ?(before_connecting = ignore)
       socket
   =
-  let client = Vcaml.Client.create ~on_error in
+  let client = Client.create ~on_error in
   before_connecting client;
-  Vcaml.Client.attach client ~time_source (Unix (`Socket socket))
+  Client.attach client ~time_source (Unix (`Socket socket))
 ;;
 
 module For_debugging = struct
@@ -327,13 +328,11 @@ module For_debugging = struct
         f
     =
     let%bind client =
-      let client = Vcaml.Client.create ~on_error in
+      let client = Client.create ~on_error in
       before_connecting client;
-      Vcaml.Client.attach client ~time_source (Unix (`Socket socket)) >>| ok_exn
+      Client.attach client ~time_source (Unix (`Socket socket)) >>| ok_exn
     in
-    let%bind attached_uis =
-      Vcaml.run_join [%here] client Vcaml.Ui.describe_attached_uis >>| ok_exn
-    in
+    let%bind attached_uis = run_join [%here] client Ui.describe_attached_uis >>| ok_exn in
     let width, height =
       attached_uis
       |> List.map ~f:(fun { width; height; _ } -> width, height)
@@ -344,15 +343,14 @@ module For_debugging = struct
     let%bind result =
       Test_ui.with_ui [%here] ~width ~height client (fun ui -> f client ui) >>| ok_exn
     in
-    let%map () = Vcaml.Client.close client in
+    let%map () = Client.close client in
     result
   ;;
 end
 
 let%expect_test "We cannot have two blocking RPCs with the same name" =
-  let open Vcaml in
   let register_dummy_rpc_handler ~name client =
-    Vcaml.register_request_blocking
+    register_request_blocking
       client
       ~name
       ~type_:Defun.Ocaml.Sync.(Nil @-> return Nil)
@@ -369,9 +367,8 @@ let%expect_test "We cannot have two blocking RPCs with the same name" =
 ;;
 
 let%expect_test "We cannot have two async RPCs with the same name" =
-  let open Vcaml in
   let register_dummy_rpc_handler ~name client =
-    Vcaml.register_request_async
+    register_request_async
       client
       ~name
       ~type_:Defun.Ocaml.Async.(Nil @-> unit)
@@ -390,16 +387,15 @@ let%expect_test "We cannot have two async RPCs with the same name" =
 (* We allow this in case a plugin wants to implement slightly different semantics based
    on whether it is called with [rpcrequest] or [rpcnotify]. *)
 let%expect_test "We can have an async RPC and a blocking RPC with the same name" =
-  let open Vcaml in
   let%map () =
     with_client (fun client ->
       let name = "test" in
-      Vcaml.register_request_blocking
+      register_request_blocking
         client
         ~name
         ~type_:Defun.Ocaml.Sync.(Nil @-> return Nil)
         ~f:(fun ~keyboard_interrupted:_ ~client:_ () -> Deferred.Or_error.return ());
-      Vcaml.register_request_async
+      register_request_async
         client
         ~name
         ~type_:Defun.Ocaml.Async.(Nil @-> unit)
@@ -412,9 +408,8 @@ let%expect_test "We can have an async RPC and a blocking RPC with the same name"
 let%expect_test "We can have two separate Embedded connections with RPC handlers sharing \
                  names without error (no bleeding state)"
   =
-  let open Vcaml in
   let register_dummy_rpc_handler ~name client =
-    Vcaml.register_request_blocking
+    register_request_blocking
       client
       ~name
       ~type_:Defun.Ocaml.Sync.(Nil @-> return Nil)

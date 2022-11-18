@@ -78,7 +78,7 @@ let%expect_test "lists the files and ignores ones which don't match" =
     ]
   in
   let%bind () =
-    Vcaml_test.with_client (fun client ->
+    Vcaml_test_helpers.with_client (fun client ->
       let open Deferred.Or_error.Let_syntax in
       let%bind () =
         setup_client ~empty_files ~files_with_includes:[] ~entry_point:"foo.ml" ~client
@@ -110,7 +110,7 @@ let%expect_test "cycles forwards and backwards in the long list, wrapping around
     ]
   in
   let%bind () =
-    Vcaml_test.with_client (fun client ->
+    Vcaml_test_helpers.with_client (fun client ->
       let open Deferred.Or_error.Let_syntax in
       let%bind () =
         setup_client ~empty_files ~files_with_includes:[] ~entry_point:"foo.ml" ~client
@@ -160,7 +160,7 @@ let%expect_test "cycles forwards and backwards in the long list, wrapping around
 let%expect_test "does nothing if interaction is attempted from a non-ml file" =
   let empty_files = [ "foo.ml"; "foo.mli"; "foo_intf.ml"; "bar.baz" ] in
   let%bind () =
-    Vcaml_test.with_client (fun client ->
+    Vcaml_test_helpers.with_client (fun client ->
       let open Deferred.Or_error.Let_syntax in
       let%bind () =
         setup_client ~empty_files ~files_with_includes:[] ~entry_point:"bar.baz" ~client
@@ -187,7 +187,7 @@ let%expect_test "ignores redundant mlis in lists and cycling" =
   let empty_files = [ "foo.ml"; "foo_intf.ml" ] in
   let files_with_includes = [ "foo.mli", "Foo_intf.My_awesome_module" ] in
   let%bind () =
-    Vcaml_test.with_client (fun client ->
+    Vcaml_test_helpers.with_client (fun client ->
       let open Deferred.Or_error.Let_syntax in
       let%bind () =
         setup_client ~empty_files ~files_with_includes ~entry_point:"foo.ml" ~client
@@ -221,7 +221,7 @@ let%expect_test "mlis without corresponding intf files are not treated as redund
   let empty_files = [ "foo.ml" ] in
   let files_with_includes = [ "foo.mli", "Foo_intf.My_awesome_module" ] in
   let%bind () =
-    Vcaml_test.with_client (fun client ->
+    Vcaml_test_helpers.with_client (fun client ->
       let open Deferred.Or_error.Let_syntax in
       let%bind () =
         setup_client ~empty_files ~files_with_includes ~entry_point:"foo.ml" ~client
@@ -255,7 +255,7 @@ let%expect_test "still lists files when on a redundant mli" =
   let empty_files = [ "foo.ml"; "foo_intf.ml" ] in
   let files_with_includes = [ "foo.mli", "Foo_intf.My_awesome_module" ] in
   let%bind () =
-    Vcaml_test.with_client (fun client ->
+    Vcaml_test_helpers.with_client (fun client ->
       let open Deferred.Or_error.Let_syntax in
       let%bind () =
         setup_client ~empty_files ~files_with_includes ~entry_point:"foo.mli" ~client
@@ -271,7 +271,7 @@ let%expect_test "cycling forward from a redundant mli puts us in the intf we inc
   let empty_files = [ "foo.ml"; "foo_intf.ml" ] in
   let files_with_includes = [ "foo.mli", "Foo_intf.My_awesome_module" ] in
   let%bind () =
-    Vcaml_test.with_client (fun client ->
+    Vcaml_test_helpers.with_client (fun client ->
       let open Deferred.Or_error.Let_syntax in
       let%bind () =
         setup_client ~empty_files ~files_with_includes ~entry_point:"foo.mli" ~client
@@ -291,7 +291,7 @@ let%expect_test "cycling backward from a redundant mli puts us in the intf we in
   let empty_files = [ "foo.ml"; "foo_intf.ml" ] in
   let files_with_includes = [ "foo.mli", "Foo_intf.My_awesome_module" ] in
   let%bind () =
-    Vcaml_test.with_client (fun client ->
+    Vcaml_test_helpers.with_client (fun client ->
       let open Deferred.Or_error.Let_syntax in
       let%bind () =
         setup_client ~empty_files ~files_with_includes ~entry_point:"foo.mli" ~client
@@ -310,7 +310,7 @@ let%expect_test "cycling backward from a redundant mli puts us in the intf we in
 let%expect_test "cycling forward within numbered files switches between them" =
   let empty_files = [ "foo1.ml"; "foo1.mli"; "foo2.ml"; "foo2.mli" ] in
   let%bind () =
-    Vcaml_test.with_client (fun client ->
+    Vcaml_test_helpers.with_client (fun client ->
       let open Deferred.Or_error.Let_syntax in
       let%bind () =
         setup_client ~empty_files ~files_with_includes:[] ~entry_point:"foo1.ml" ~client
@@ -337,7 +337,7 @@ let%expect_test "files numbered with leading zeroes are treated as their own gro
   =
   let empty_files = [ "foo_01.ml"; "foo_01.mli"; "foo_02.ml"; "foo_02.mli" ] in
   let%bind () =
-    Vcaml_test.with_client (fun client ->
+    Vcaml_test_helpers.with_client (fun client ->
       let open Deferred.Or_error.Let_syntax in
       let%bind () =
         setup_client
@@ -369,7 +369,7 @@ let%expect_test "listing files in fzf attempts a call to MliCyclerFzf" =
       ~run:`Schedule
       ~rest:`Log
       (fun () ->
-         Vcaml_test.with_client (fun client ->
+         Vcaml_test_helpers.with_client (fun client ->
            let%bind.Deferred.Or_error () =
              setup_client
                ~empty_files:[ "foo.ml"; "foo.mli" ]

@@ -1,8 +1,7 @@
-open! Core
-open! Async
-open! Import
+open Core
+open Async
 open Vcaml
-open Test_client
+open Vcaml_test_helpers
 
 let clear_mappings =
   [ "mapclear"; "mapclear!"; "vmapclear"; "lmapclear"; "tmapclear" ]
@@ -17,7 +16,14 @@ let%expect_test "Test keymaps" =
     let query =
       let open Api_call.Or_error.Let_syntax in
       let%map () = clear_mappings
-      and () = Keymap.set ~lhs:"a" ~rhs:"a" ~mode ~scope:`Global ()
+      and () =
+        Keymap.set
+          ~lhs:"a"
+          ~rhs:"a"
+          ~mode
+          ~scope:`Global
+          ~description:"Test description"
+          ()
       and () =
         Keymap.set ~lhs:"b" ~rhs:"a" ~mode ~scope:`Global ~recursive:true ~silent:true ()
       and () =
@@ -37,73 +43,81 @@ let%expect_test "Test keymaps" =
     {|
     (Test (mode Normal)
      (keymaps
-      (((lhs a) (rhs a) (mode Normal) (scope Global) (expr false) (nowait false)
-        (silent false) (recursive false) (sid -9))
+      (((description "Test description") (lhs a) (rhs a) (mode Normal)
+        (scope Global) (expr false) (nowait false) (silent false)
+        (recursive false) (sid -9))
        ((lhs b) (rhs a) (mode Normal) (scope Global) (expr false) (nowait false)
         (silent true) (recursive true) (sid -9))
        ((lhs c) (rhs c) (mode Normal) (scope (Buffer_local 1)) (expr false)
         (nowait true) (silent false) (recursive false) (sid -9)))))
     (Test (mode Operator_pending)
      (keymaps
-      (((lhs a) (rhs a) (mode Operator_pending) (scope Global) (expr false)
-        (nowait false) (silent false) (recursive false) (sid -9))
+      (((description "Test description") (lhs a) (rhs a) (mode Operator_pending)
+        (scope Global) (expr false) (nowait false) (silent false)
+        (recursive false) (sid -9))
        ((lhs b) (rhs a) (mode Operator_pending) (scope Global) (expr false)
         (nowait false) (silent true) (recursive true) (sid -9))
        ((lhs c) (rhs c) (mode Operator_pending) (scope (Buffer_local 1))
         (expr false) (nowait true) (silent false) (recursive false) (sid -9)))))
     (Test (mode Insert)
      (keymaps
-      (((lhs a) (rhs a) (mode Insert) (scope Global) (expr false) (nowait false)
-        (silent false) (recursive false) (sid -9))
+      (((description "Test description") (lhs a) (rhs a) (mode Insert)
+        (scope Global) (expr false) (nowait false) (silent false)
+        (recursive false) (sid -9))
        ((lhs b) (rhs a) (mode Insert) (scope Global) (expr false) (nowait false)
         (silent true) (recursive true) (sid -9))
        ((lhs c) (rhs c) (mode Insert) (scope (Buffer_local 1)) (expr false)
         (nowait true) (silent false) (recursive false) (sid -9)))))
     (Test (mode Cmd_line)
      (keymaps
-      (((lhs a) (rhs a) (mode Cmd_line) (scope Global) (expr false)
-        (nowait false) (silent false) (recursive false) (sid -9))
+      (((description "Test description") (lhs a) (rhs a) (mode Cmd_line)
+        (scope Global) (expr false) (nowait false) (silent false)
+        (recursive false) (sid -9))
        ((lhs b) (rhs a) (mode Cmd_line) (scope Global) (expr false)
         (nowait false) (silent true) (recursive true) (sid -9))
        ((lhs c) (rhs c) (mode Cmd_line) (scope (Buffer_local 1)) (expr false)
         (nowait true) (silent false) (recursive false) (sid -9)))))
     (Test (mode Select)
      (keymaps
-      (((lhs a) (rhs a) (mode Select) (scope Global) (expr false) (nowait false)
-        (silent false) (recursive false) (sid -9))
+      (((description "Test description") (lhs a) (rhs a) (mode Select)
+        (scope Global) (expr false) (nowait false) (silent false)
+        (recursive false) (sid -9))
        ((lhs b) (rhs a) (mode Select) (scope Global) (expr false) (nowait false)
         (silent true) (recursive true) (sid -9))
        ((lhs c) (rhs c) (mode Select) (scope (Buffer_local 1)) (expr false)
         (nowait true) (silent false) (recursive false) (sid -9)))))
     (Test (mode Visual)
      (keymaps
-      (((lhs a) (rhs a) (mode Visual) (scope Global) (expr false) (nowait false)
-        (silent false) (recursive false) (sid -9))
+      (((description "Test description") (lhs a) (rhs a) (mode Visual)
+        (scope Global) (expr false) (nowait false) (silent false)
+        (recursive false) (sid -9))
        ((lhs b) (rhs a) (mode Visual) (scope Global) (expr false) (nowait false)
         (silent true) (recursive true) (sid -9))
        ((lhs c) (rhs c) (mode Visual) (scope (Buffer_local 1)) (expr false)
         (nowait true) (silent false) (recursive false) (sid -9)))))
     (Test (mode Terminal)
      (keymaps
-      (((lhs a) (rhs a) (mode Terminal) (scope Global) (expr false)
-        (nowait false) (silent false) (recursive false) (sid -9))
+      (((description "Test description") (lhs a) (rhs a) (mode Terminal)
+        (scope Global) (expr false) (nowait false) (silent false)
+        (recursive false) (sid -9))
        ((lhs b) (rhs a) (mode Terminal) (scope Global) (expr false)
         (nowait false) (silent true) (recursive true) (sid -9))
        ((lhs c) (rhs c) (mode Terminal) (scope (Buffer_local 1)) (expr false)
         (nowait true) (silent false) (recursive false) (sid -9)))))
     (Test (mode Visual_and_select)
      (keymaps
-      (((lhs a) (rhs a) (mode Visual_and_select) (scope Global) (expr false)
-        (nowait false) (silent false) (recursive false) (sid -9))
+      (((description "Test description") (lhs a) (rhs a) (mode Visual_and_select)
+        (scope Global) (expr false) (nowait false) (silent false)
+        (recursive false) (sid -9))
        ((lhs b) (rhs a) (mode Visual_and_select) (scope Global) (expr false)
         (nowait false) (silent true) (recursive true) (sid -9))
        ((lhs c) (rhs c) (mode Visual_and_select) (scope (Buffer_local 1))
         (expr false) (nowait true) (silent false) (recursive false) (sid -9)))))
     (Test (mode Normal_and_visual_and_operator_pending)
      (keymaps
-      (((lhs a) (rhs a) (mode Normal_and_visual_and_operator_pending)
-        (scope Global) (expr false) (nowait false) (silent false)
-        (recursive false) (sid -9))
+      (((description "Test description") (lhs a) (rhs a)
+        (mode Normal_and_visual_and_operator_pending) (scope Global) (expr false)
+        (nowait false) (silent false) (recursive false) (sid -9))
        ((lhs b) (rhs a) (mode Normal_and_visual_and_operator_pending)
         (scope Global) (expr false) (nowait false) (silent true) (recursive true)
         (sid -9))
@@ -112,16 +126,18 @@ let%expect_test "Test keymaps" =
         (recursive false) (sid -9)))))
     (Test (mode Insert_and_command_line)
      (keymaps
-      (((lhs a) (rhs a) (mode Insert_and_command_line) (scope Global)
-        (expr false) (nowait false) (silent false) (recursive false) (sid -9))
+      (((description "Test description") (lhs a) (rhs a)
+        (mode Insert_and_command_line) (scope Global) (expr false) (nowait false)
+        (silent false) (recursive false) (sid -9))
        ((lhs b) (rhs a) (mode Insert_and_command_line) (scope Global)
         (expr false) (nowait false) (silent true) (recursive true) (sid -9))
        ((lhs c) (rhs c) (mode Insert_and_command_line) (scope (Buffer_local 1))
         (expr false) (nowait true) (silent false) (recursive false) (sid -9)))))
     (Test (mode Language)
      (keymaps
-      (((lhs a) (rhs a) (mode Language) (scope Global) (expr false)
-        (nowait false) (silent false) (recursive false) (sid -9))
+      (((description "Test description") (lhs a) (rhs a) (mode Language)
+        (scope Global) (expr false) (nowait false) (silent false)
+        (recursive false) (sid -9))
        ((lhs b) (rhs a) (mode Language) (scope Global) (expr false)
         (nowait false) (silent true) (recursive true) (sid -9))
        ((lhs c) (rhs c) (mode Language) (scope (Buffer_local 1)) (expr false)

@@ -1,3 +1,4 @@
 (library (name vcaml_plugin_test)
- (libraries async core core_kernel.uuid vcaml vcaml_plugin vcaml_test)
+ (libraries async core core_kernel.uuid vcaml vcaml_plugin
+  vcaml_test_helpers)
  (preprocess (pps ppx_jane)))

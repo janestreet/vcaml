@@ -1,5 +1,5 @@
-open! Core
-open! Async
+open Core
+open Async
 open Vcaml
 
 (* Simple VCaml plugin to listen for and respond to RPC messages. Source greetings.vim to

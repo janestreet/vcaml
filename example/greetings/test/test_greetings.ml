@@ -1,11 +1,12 @@
 open! Core
-open! Async
-open! Vcaml
-open! Vcaml_greetings
+open Async
+open Vcaml
+open Vcaml_greetings
+open Vcaml_test_helpers
 
 let%expect_test "Plugin responds to RPC request" =
   let%map greeting =
-    Vcaml_test.with_client (fun client ->
+    with_client (fun client ->
       let open Deferred.Or_error.Let_syntax in
       let define_on_start =
         {| function! OnGreetingsPluginStart(channel)

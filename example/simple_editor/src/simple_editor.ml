@@ -1,7 +1,6 @@
-open! Core
-open! Async
-open! Vcaml
-open! Vcaml_plugin
+open Core
+open Async
+open Vcaml
 open Deferred.Or_error.Let_syntax
 
 (* Simple Vcaml plugin to create a new buffer/window which the user can use as a

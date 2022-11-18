@@ -6,6 +6,7 @@ end
 open Core
 open Async
 module Api_call = Api_call
+module Api_version = Nvim_internal.Api_version
 module Buffer = Unshadow.Buffer
 module Channel_info = Channel_info
 module Client_info = Client_info
@@ -23,10 +24,15 @@ module Tabpage = Tabpage
 module Type = Nvim_internal.Phantom
 module Ui = Ui
 module Vcaml_error = Vcaml_error
-module Version = Nvim_internal.Version
 module Window = Window
 
-let version = Nvim_internal.version
+let api_version = Nvim_internal.api_version
+
+module Nvim_version = struct
+  include Semantic_version.Make ()
+
+  let vcaml = of_string "0.7.0"
+end
 
 module Client = struct
   include Client

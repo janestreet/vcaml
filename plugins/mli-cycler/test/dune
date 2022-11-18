@@ -1,3 +1,4 @@
 (library (name mli_plugin_test)
- (libraries async core core_unix.filename_unix mli_plugin vcaml vcaml_test)
+ (libraries async core core_unix.filename_unix mli_plugin vcaml
+  vcaml_test_helpers)
  (preprocess (pps ppx_jane)))

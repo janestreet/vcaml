@@ -1,7 +1,8 @@
-open! Core
-open! Async
+open Core
+open Async
 open Vcaml
 open Vcaml_simple_editor
+open Vcaml_test_helpers
 open Deferred.Or_error.Let_syntax
 
 let print_window_count ~client =
@@ -26,7 +27,7 @@ let kill_plugin ~client = Nvim.command "q!" |> run_join [%here] client
 
 let%expect_test "splits open a new window and allows the user to send keys" =
   let%map.Deferred () =
-    Vcaml_test.with_client (fun client ->
+    with_client (fun client ->
       let%bind () = print_window_count ~client in
       let%bind { plugin_state = { buffer; window = _ }
                ; shutdown = _
@@ -58,7 +59,7 @@ let%expect_test "splits open a new window and allows the user to send keys" =
 
 let%expect_test "backspace" =
   let%map.Deferred () =
-    Vcaml_test.with_client (fun client ->
+    with_client (fun client ->
       let%bind { plugin_state = { buffer; window }; shutdown = _; wait_for_shutdown } =
         Simple_editor.For_testing.start ~client
       in
@@ -80,7 +81,7 @@ let%expect_test "backspace" =
 
 let%expect_test "enter" =
   let%map.Deferred () =
-    Vcaml_test.with_client (fun client ->
+    with_client (fun client ->
       let%bind { plugin_state = { buffer; window }; shutdown = _; wait_for_shutdown } =
         Simple_editor.For_testing.start ~client
       in

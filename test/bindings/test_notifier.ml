@@ -1,8 +1,7 @@
-open! Core
-open! Async
-open! Import
+open Core
+open Async
 open Vcaml
-open Test_client
+open Vcaml_test_helpers
 module Notifier = Vcaml.Expert.Notifier
 module Notification = Notifier.Notification
 

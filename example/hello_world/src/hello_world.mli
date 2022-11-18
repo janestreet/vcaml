@@ -1,5 +1,4 @@
-open! Core
-open! Async
+open Async
 open Vcaml
 
 val main : Core.Command.t

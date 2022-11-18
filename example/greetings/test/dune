@@ -1,3 +1,3 @@
 (library (name vcaml_greetings_test)
- (libraries async core vcaml vcaml_greetings vcaml_test)
+ (libraries async core vcaml vcaml_greetings vcaml_test_helpers)
  (preprocess (pps ppx_jane)))

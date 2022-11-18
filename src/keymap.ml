@@ -61,7 +61,8 @@ let scope_of_msgpack msg =
 ;;
 
 type t =
-  { lhs : string
+  { description : string option [@sexp.option]
+  ; lhs : string
   ; rhs : string
   ; mode : Mode.t
   ; scope : [ `Global | `Buffer_local of Nvim_internal.Buffer.t ]
@@ -80,26 +81,33 @@ let of_msgpack msg =
     | None -> Or_error.error_string "malformed keycommand message"
   in
   let%bind result = Extract.map_of_msgpack_map msg in
-  let lookup key extract = Map.find result key |> to_or_error >>= extract in
+  let lookup_exn key extract = Map.find result key |> to_or_error >>= extract in
   let%bind modes =
-    lookup "mode" (fun msg ->
+    lookup_exn "mode" (fun msg ->
       let%bind modes = Extract.string msg in
       List.map (String.to_list modes) ~f:(fun mode ->
         Mode.of_string_or_error (Char.to_string mode))
       |> Or_error.combine_errors)
   in
-  let%bind silent = lookup "silent" Extract.bool in
-  let%bind noremap = lookup "noremap" Extract.bool in
-  let%bind nowait = lookup "nowait" Extract.bool in
-  let%bind expr = lookup "expr" Extract.bool in
-  let%bind sid = lookup "sid" Extract.int in
-  let%bind lhs = lookup "lhs" Extract.string in
-  let%bind rhs = lookup "rhs" Extract.string in
-  let%bind scope = lookup "buffer" scope_of_msgpack in
+  let%bind silent = lookup_exn "silent" Extract.bool in
+  let%bind noremap = lookup_exn "noremap" Extract.bool in
+  let%bind nowait = lookup_exn "nowait" Extract.bool in
+  let%bind expr = lookup_exn "expr" Extract.bool in
+  let%bind sid = lookup_exn "sid" Extract.int in
+  let%bind lhs = lookup_exn "lhs" Extract.string in
+  let%bind rhs = lookup_exn "rhs" Extract.string in
+  let%bind description =
+    match Map.find result "desc" with
+    | None -> Ok None
+    | Some description ->
+      let%map description = Extract.string description in
+      Some description
+  in
+  let%bind scope = lookup_exn "buffer" scope_of_msgpack in
   let recursive = not noremap in
   let keymaps =
     List.map modes ~f:(fun mode ->
-      { lhs; rhs; mode; scope; expr; nowait; silent; recursive; sid })
+      { description; lhs; rhs; mode; scope; expr; nowait; silent; recursive; sid })
   in
   return keymaps
 ;;
@@ -154,8 +162,10 @@ let get ~scope ~mode =
 let set
       ?(recursive = false)
       ?(expr = false)
+      ?(unique = false)
       ?(nowait = false)
       ?(silent = false)
+      ?(description = "")
       ~scope
       ~lhs
       ~rhs
@@ -169,8 +179,18 @@ let set
   in
   let mode = Mode.to_string mode in
   let opts =
-    [ "noremap", not recursive; "expr", expr; "nowait", nowait; "silent", silent ]
-    |> List.map ~f:(fun (key, value) -> Msgpack.String key, Msgpack.Boolean value)
+    let boolean_opts =
+      [ "noremap", not recursive
+      ; "expr", expr
+      ; "unique", unique
+      ; "nowait", nowait
+      ; "silent", silent
+      ]
+      |> List.map ~f:(fun (key, value) -> Msgpack.String key, Msgpack.Boolean value)
+    in
+    match description with
+    | "" -> boolean_opts
+    | _ -> (String "desc", String description) :: boolean_opts
   in
   query ~mode ~lhs ~rhs ~opts |> Api_call.of_api_result
 ;;

@@ -1,5 +1,5 @@
-open! Core
-open! Async
+open Core
+open Async
 open Vcaml
 open Vcaml_plugin_intf
 
@@ -119,13 +119,10 @@ module Persistent = struct
            let open Deferred.Or_error.Let_syntax in
            let state = P.init_state () in
            let shutdown = Ivar.create () in
-           let client = Vcaml.Client.create ~on_error:P.on_error in
+           let client = Client.create ~on_error:P.on_error in
            register_handlers ~client ~state ~shutdown;
            let%bind client =
-             Vcaml.Client.attach
-               client
-               (Unix `Child)
-               ~time_source:(Time_source.wall_clock ())
+             Client.attach client (Unix `Child) ~time_source:(Time_source.wall_clock ())
            in
            let%bind () = start ~client ~state ~shutdown in
            let%bind () = Ivar.read shutdown |> Deferred.ok in

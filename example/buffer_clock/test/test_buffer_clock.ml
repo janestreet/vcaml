@@ -1,7 +1,8 @@
-open! Core
-open! Async
-open! Vcaml
-open! Vcaml_buffer_clock
+open Core
+open Async
+open Vcaml
+open Vcaml_buffer_clock
+open Vcaml_test_helpers
 open Deferred.Or_error.Let_syntax
 module Time_ns = Time_ns_unix
 
@@ -31,7 +32,7 @@ let print_window_count client =
 
 let%expect_test "plugin opens a new buffer/window which updates until buffer deletion" =
   let%map.Deferred () =
-    Vcaml_test.with_client (fun client ->
+    with_client (fun client ->
       let now_str = "2020-01-01 00:00:00.000000000Z" in
       let time_source = Time_source.create ~now:(Time_ns.of_string now_str) () in
       let (module Plugin) =

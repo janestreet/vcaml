@@ -1,8 +1,7 @@
-open! Core
-open! Async
-open! Import
+open Core
+open Async
 open Vcaml
-open Test_client
+open Vcaml_test_helpers
 
 let with_event_printing ~f =
   (* These tests may be fragile; the nvim docs don't specify exactly how
@@ -35,7 +34,7 @@ let%expect_test "events for some edits" =
     with_event_printing ~f:(fun client ->
       let open Async.Deferred.Or_error.Let_syntax in
       let feedkeys_call =
-        Vcaml.Nvim.feedkeys (`Escape_k_special_bytes "ohello, world!") ~mode:"nx"
+        Nvim.feedkeys (`Escape_k_special_bytes "ohello, world!") ~mode:"nx"
       in
       let%bind () = feedkeys_call |> run_join [%here] client in
       return ())
@@ -59,11 +58,11 @@ let%expect_test "feedkeys, get_lines, events for those edits" =
     with_event_printing ~f:(fun client ->
       let open Deferred.Or_error.Let_syntax in
       let%bind () =
-        Vcaml.Nvim.feedkeys (`Escape_k_special_bytes "ihello") ~mode:"nx"
+        Nvim.feedkeys (`Escape_k_special_bytes "ihello") ~mode:"nx"
         |> run_join [%here] client
       in
       let%bind () =
-        Vcaml.Nvim.feedkeys (`Escape_k_special_bytes "oworld") ~mode:"nx"
+        Nvim.feedkeys (`Escape_k_special_bytes "oworld") ~mode:"nx"
         |> run_join [%here] client
       in
       let%map lines =
@@ -128,12 +127,12 @@ let%expect_test "create, set_name, get_name" =
     with_client (fun client ->
       let open Deferred.Or_error.Let_syntax in
       let%bind buffer =
-        Vcaml.Buffer.create ~listed:true ~scratch:false |> run_join [%here] client
+        Buffer.create ~listed:true ~scratch:false |> run_join [%here] client
       in
       let%bind () =
-        Vcaml.Buffer.set_name (Id buffer) ~name:"foobar" |> run_join [%here] client
+        Buffer.set_name (Id buffer) ~name:"foobar" |> run_join [%here] client
       in
-      let%bind name = Vcaml.Buffer.get_name (Id buffer) |> run_join [%here] client in
+      let%bind name = Buffer.get_name (Id buffer) |> run_join [%here] client in
       print_s [%message (buffer : Buffer.t) (name : string)];
       return ())
   in
@@ -145,7 +144,7 @@ let%expect_test "find_by_name_or_create no name prefixes" =
   let%bind () =
     with_client (fun client ->
       let open Deferred.Or_error.Let_syntax in
-      let%bind original_buf = Vcaml.Nvim.get_current_buf |> run_join [%here] client in
+      let%bind original_buf = Nvim.get_current_buf |> run_join [%here] client in
       let original_buf_name = "original_buffer_name" in
       let%bind () =
         Buffer.set_name (Id original_buf) ~name:original_buf_name
@@ -259,7 +258,7 @@ let%expect_test "get_option and set_option" =
     (modifiable false)
     (modify_error
      (Error
-      (("Called from" lib/vcaml/test/buffer.ml:LINE:COL)
+      (("Called from" lib/vcaml/test/bindings/test_buffer.ml:LINE:COL)
        ("Vim returned error" "Buffer is not 'modifiable'" (error_type Exception))))) |}];
   return ()
 ;;
@@ -269,11 +268,11 @@ let%expect_test "get_mark" =
     with_client (fun client ->
       let open Deferred.Or_error.Let_syntax in
       let%bind escaped_keys =
-        Vcaml.Nvim.replace_termcodes_and_keycodes "ihello<Esc>mma\nworld!<Esc>"
+        Nvim.replace_termcodes_and_keycodes "ihello<Esc>mma\nworld!<Esc>"
         |> run_join [%here] client
       in
       let%bind () =
-        Vcaml.Nvim.feedkeys (`Already_escaped escaped_keys) ~mode:"n"
+        Nvim.feedkeys (`Already_escaped escaped_keys) ~mode:"n"
         |> run_join [%here] client
       in
       let%bind mark = Buffer.get_mark Current ~sym:'m' |> run_join [%here] client in
@@ -289,16 +288,15 @@ let%expect_test "Extmark indexing" =
   with_client (fun client ->
     let open Deferred.Or_error.Let_syntax in
     let%bind () =
-      Vcaml.Nvim.Untested.set_option "syntax" ~type_:String ~value:"on"
+      Nvim.Untested.set_option "syntax" ~type_:String ~value:"on"
       |> run_join [%here] client
     in
     let%bind escaped_keys =
-      Vcaml.Nvim.replace_termcodes_and_keycodes "ihello\nworld!<Esc>"
+      Nvim.replace_termcodes_and_keycodes "ihello\nworld!<Esc>"
       |> run_join [%here] client
     in
     let%bind () =
-      Vcaml.Nvim.feedkeys (`Already_escaped escaped_keys) ~mode:"n"
-      |> run_join [%here] client
+      Nvim.feedkeys (`Already_escaped escaped_keys) ~mode:"n" |> run_join [%here] client
     in
     let%bind namespace = Namespace.Untested.create () |> run_join [%here] client in
     let%bind extmark =

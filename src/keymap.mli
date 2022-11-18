@@ -28,7 +28,8 @@ end
 
 (** A representation of a keybinding. *)
 type t =
-  { lhs : string
+  { description : string option
+  ; lhs : string
   ; rhs : string
   ; mode : Mode.t
   ; scope : [ `Global | `Buffer_local of Nvim_internal.Buffer.t ]
@@ -55,8 +56,10 @@ val get
 val set
   :  ?recursive:bool (** default: [false]. *)
   -> ?expr:bool (** default: [false] *)
+  -> ?unique:bool (** default: [false] *)
   -> ?nowait:bool (** default: [false] *)
   -> ?silent:bool (** default: [false] *)
+  -> ?description:string
   -> scope:[ `Global | `Buffer_local of Nvim_internal.Buffer.Or_current.t ]
   -> lhs:string
   -> rhs:string

@@ -1,7 +1,7 @@
 open! Core
 open Runtime
 
-module Version : sig
+module Api_version : sig
   type t =
     { api_compatible : int
     ; api_level : int
@@ -14,7 +14,7 @@ module Version : sig
   val to_string : t -> string
 end
 
-val version : Version.t
+val api_version : Api_version.t
 
 module Ui_options : sig
   type t =

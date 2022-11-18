@@ -1,7 +1,8 @@
 module Unshadow_buffer := Buffer
 module Unshadow_command := Command
-open! Core
+open Core
 open Async
+module Api_version = Nvim_internal.Api_version
 module Buffer = Unshadow_buffer
 module Channel_info = Channel_info
 module Client_info = Client_info
@@ -19,11 +20,16 @@ module Tabpage = Tabpage
 module Type = Nvim_internal.Phantom
 module Ui = Ui
 module Vcaml_error = Vcaml_error
-module Version = Nvim_internal.Version
 module Window = Window
 
 (** API version for which this library is built (not the same as the Neovim version). *)
-val version : Version.t
+val api_version : Api_version.t
+
+module Nvim_version : sig
+  include Semantic_version.S
+
+  val vcaml : t
+end
 
 module Client : sig
   type 'state t = 'state Client.t

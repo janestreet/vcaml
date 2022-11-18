@@ -18,6 +18,7 @@ depends: [
   "core_unix"
   "expect_test_helpers_async"
   "ppx_jane"
+  "semantic_version"
   "textutils"
   "angstrom"                  {>= "0.15.0"}
   "angstrom-async"            {>= "0.15.0"}

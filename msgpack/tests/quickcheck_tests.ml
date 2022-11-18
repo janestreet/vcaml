@@ -1,5 +1,5 @@
-open! Core
-open! Msgpack
+open Core
+open Msgpack
 
 let%test_unit "parse . serialize == id" =
   Quickcheck.test (Util.generate ()) ~sexp_of:[%sexp_of: t] ~f:(fun msg ->

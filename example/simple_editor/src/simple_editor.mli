@@ -1,4 +1,4 @@
-open! Core
+open Core
 open Vcaml
 
 module State : sig

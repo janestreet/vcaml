@@ -1,4 +1,4 @@
-open! Base
+open Base
 open Faraday
 open Message
 

@@ -1,5 +1,5 @@
 open! Core
-open! Async
+open Async
 open Vcaml
 
 (* Simple VCaml plugin to asynchronously echo "Hello world!" in the command line. Source

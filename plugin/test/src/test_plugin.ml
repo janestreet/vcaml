@@ -1,6 +1,7 @@
-open! Core
-open! Async
-open! Vcaml
+open Core
+open Async
+open Vcaml
+open Vcaml_test_helpers
 
 let%expect_test "Oneshot" =
   let links = [ "../bin/main.exe", `In_temp_as, "main.exe" ] in
@@ -17,8 +18,7 @@ let%expect_test "Oneshot" =
      |}
   in
   let%map output =
-    Vcaml_test.with_client ~links (fun client ->
-      run_join [%here] client (Nvim.source code))
+    with_client ~links (fun client -> run_join [%here] client (Nvim.source code))
   in
   print_endline output;
   [%expect {|
@@ -61,7 +61,7 @@ let%expect_test "Persistent plugin calls [on_startup] on startup and [on_shutdow
                  shutdown."
   =
   let%map () =
-    Vcaml_test.with_client (fun client ->
+    with_client (fun client ->
       let open Deferred.Or_error.Let_syntax in
       let%bind { plugin_state = (); shutdown = _; wait_for_shutdown } =
         Plugin.For_testing.start ~client
@@ -131,14 +131,11 @@ let%expect_test "Persistent plugin shows errors when they occur during [on_start
   let on_startup _client ~shutdown:_ = Deferred.Or_error.error_string "Failure" in
   let (module Plugin) = make_plugin ~on_startup () in
   let%bind screen =
-    Vcaml_test.with_ui_client (fun client ui ->
+    with_ui_client (fun client ui ->
       let%bind (_ : Plugin.For_testing.State.t Or_error.t) =
         Plugin.For_testing.start ~client
       in
-      Vcaml_test.wait_until_text
-        [%here]
-        ui
-        ~f:(String.is_substring ~substring:"Failure"))
+      wait_until_text [%here] ui ~f:(String.is_substring ~substring:"Failure"))
   in
   print_endline screen;
   [%expect
@@ -190,7 +187,7 @@ let%expect_test "Persistent plugin shows errors when they occur during \
   let (module Plugin) = make_plugin ~vimscript_notify_fn:"OnStartup" () in
   Backtrace.elide := true;
   let%bind screen =
-    Vcaml_test.with_ui_client ~width:84 (fun client ui ->
+    with_ui_client ~width:84 (fun client ui ->
       let%bind () =
         [ Nvim.source vimscript_fn |> Api_call.Or_error.map ~f:ignore
         ; Nvim.command "set cmdheight=3"
@@ -202,10 +199,7 @@ let%expect_test "Persistent plugin shows errors when they occur during \
       let%bind (_ : Plugin.For_testing.State.t Or_error.t) =
         Plugin.For_testing.start ~client
       in
-      Vcaml_test.wait_until_text
-        [%here]
-        ui
-        ~f:(String.is_substring ~substring:"Failure"))
+      wait_until_text [%here] ui ~f:(String.is_substring ~substring:"Failure"))
   in
   print_endline screen;
   [%expect
@@ -250,16 +244,13 @@ let%expect_test "Persistent plugin shows errors when they occur during [on_shutd
   let on_shutdown _client = Deferred.Or_error.error_string "Failure" in
   let (module Plugin) = make_plugin ~on_shutdown () in
   let%bind screen =
-    Vcaml_test.with_ui_client (fun client ui ->
+    with_ui_client (fun client ui ->
       let%bind { plugin_state = (); shutdown; wait_for_shutdown } =
         Plugin.For_testing.start ~client >>| ok_exn
       in
       shutdown ();
       let%bind (_ : unit Or_error.t) = wait_for_shutdown in
-      Vcaml_test.wait_until_text
-        [%here]
-        ui
-        ~f:(String.is_substring ~substring:"Failure"))
+      wait_until_text [%here] ui ~f:(String.is_substring ~substring:"Failure"))
   in
   print_endline screen;
   [%expect
@@ -305,7 +296,7 @@ let%expect_test "Persistent plugin shows errors when they occur during async RPC
   let async_rpc ~shutdown:_ ~client:_ = Deferred.Or_error.error_string "Failure" in
   let (module Plugin) = make_plugin ~async_rpc () in
   let%bind screen =
-    Vcaml_test.with_ui_client (fun client ui ->
+    with_ui_client (fun client ui ->
       let%bind (_ : Plugin.For_testing.State.t Or_error.t) =
         Plugin.For_testing.start ~client
       in
@@ -318,10 +309,7 @@ let%expect_test "Persistent plugin shows errors when they occur during async RPC
         |> Api_call.Or_error.map ~f:ignore
       in
       let%bind () = run_join [%here] client rpcnotify >>| ok_exn in
-      Vcaml_test.wait_until_text
-        [%here]
-        ui
-        ~f:(String.is_substring ~substring:"Failure"))
+      wait_until_text [%here] ui ~f:(String.is_substring ~substring:"Failure"))
   in
   print_endline screen;
   [%expect
@@ -367,7 +355,7 @@ let%expect_test "Persistent plugin shows errors when they occur during blocking 
   let blocking_rpc ~shutdown:_ ~client:_ = Deferred.Or_error.error_string "Failure" in
   let (module Plugin) = make_plugin ~blocking_rpc () in
   let%bind screen =
-    Vcaml_test.with_ui_client ~width:83 (fun client ui ->
+    with_ui_client ~width:83 (fun client ui ->
       let%bind (_ : Plugin.For_testing.State.t Or_error.t) =
         Plugin.For_testing.start ~client
       in
@@ -387,10 +375,7 @@ let%expect_test "Persistent plugin shows errors when they occur during blocking 
       let client_info = Option.value_exn channel_info.client in
       let client_name = Option.value_exn client_info.name in
       let%map screen =
-        Vcaml_test.wait_until_text
-          [%here]
-          ui
-          ~f:(String.is_substring ~substring:"Failure")
+        wait_until_text [%here] ui ~f:(String.is_substring ~substring:"Failure")
       in
       Or_error.map screen ~f:(fun screen ->
         String.substr_replace_all

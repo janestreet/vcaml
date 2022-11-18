@@ -1,7 +1,7 @@
 open! Core
 open Runtime
 
-module Version = struct
+module Api_version = struct
   type t =
     { api_compatible : int
     ; api_level : int
@@ -14,8 +14,8 @@ module Version = struct
   let to_string t = sprintf "%d.%d.%d" t.major t.minor t.patch
 end
 
-let version =
-  { Version.api_compatible = 0; api_level = 9; major = 0; minor = 7; patch = 0 }
+let api_version =
+  { Api_version.api_compatible = 0; api_level = 9; major = 0; minor = 7; patch = 0 }
 ;;
 
 module Ui_options = struct

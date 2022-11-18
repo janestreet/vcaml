@@ -1,0 +1,7 @@
+(library (name vcaml_semantics_test) (public_name vcaml.semantics_test)
+ (libraries async core expect_test_helpers_async
+  core_unix.unix_pseudo_terminal vcaml vcaml_test_helpers)
+ (preprocessor_deps config_ext.h) (preprocess (pps ppx_jane)))
+
+(rule (targets config_ext.h) (deps)
+ (action (bash "cp %{lib:core_unix.unix_pseudo_terminal:config_ext.h} .")))

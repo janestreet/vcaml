@@ -1,4 +1,4 @@
-open! Core
+open Core
 module Buffer = Nvim_internal.Buffer
 
 type t =

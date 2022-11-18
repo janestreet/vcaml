@@ -1,8 +1,7 @@
-open! Core
-open! Async
-open! Import
-open! Vcaml
-open Test_client
+open Core
+open Async
+open Vcaml
+open Vcaml_test_helpers
 
 let%expect_test "Simple test of attach, detach, describe_attached_uis" =
   let%bind () =
@@ -102,7 +101,7 @@ let%expect_test "get screen contents multiple times" =
       let%bind screen = get_screen_contents [%here] ui in
       print_endline screen;
       let%bind () =
-        Vcaml.Nvim.feedkeys (`Escape_k_special_bytes "ihello world") ~mode:"n"
+        Nvim.feedkeys (`Escape_k_special_bytes "ihello world") ~mode:"n"
         |> run_join [%here] client
       in
       let%bind screen = get_screen_contents [%here] ui in
@@ -183,11 +182,11 @@ let%expect_test "screen contents after typing hello world" =
     let open Deferred.Or_error.Let_syntax in
     with_ui_client (fun client ui ->
       let%bind () =
-        Vcaml.Nvim.feedkeys (`Escape_k_special_bytes "ihello world") ~mode:"n"
+        Nvim.feedkeys (`Escape_k_special_bytes "ihello world") ~mode:"n"
         |> run_join [%here] client
       in
-      let%bind () = Vcaml.Nvim.command "vsplit" |> run_join [%here] client in
-      let%bind () = Vcaml.Nvim.command "split" |> run_join [%here] client in
+      let%bind () = Nvim.command "vsplit" |> run_join [%here] client in
+      let%bind () = Nvim.command "split" |> run_join [%here] client in
       let%bind screen = get_screen_contents [%here] ui in
       print_endline screen;
       return ())
@@ -234,10 +233,8 @@ let%expect_test "timeout occurs" =
     Expect_test_helpers_async.require_does_raise_async [%here] (fun () ->
       let open Deferred.Or_error.Let_syntax in
       with_ui_client (fun client ui ->
-        let%bind () = Vcaml.Nvim.command "e term://sh" |> run_join [%here] client in
-        let%bind () =
-          Vcaml.Nvim.command "file my-terminal" |> run_join [%here] client
-        in
+        let%bind () = Nvim.command "e term://sh" |> run_join [%here] client in
+        let%bind () = Nvim.command "file my-terminal" |> run_join [%here] client in
         let%bind (_ : string) =
           wait_until_text [%here] ui ~f:(String.is_substring ~substring:"sh-4.2$")
         in
@@ -292,8 +289,8 @@ let%expect_test "open up sh" =
   let%bind () =
     let open Deferred.Or_error.Let_syntax in
     with_ui_client (fun client ui ->
-      let%bind () = Vcaml.Nvim.command "e term://sh" |> run_join [%here] client in
-      let%bind () = Vcaml.Nvim.command "file my-terminal" |> run_join [%here] client in
+      let%bind () = Nvim.command "e term://sh" |> run_join [%here] client in
+      let%bind () = Nvim.command "file my-terminal" |> run_join [%here] client in
       let%bind screen =
         wait_until_text [%here] ui ~f:(String.is_substring ~substring:"sh-4.2$")
       in
