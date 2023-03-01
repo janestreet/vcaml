@@ -27,6 +27,7 @@ module Vcaml_error = Vcaml_error
 module Window = Window
 
 let api_version = Nvim_internal.api_version
+let pp = Nvim_internal.pp
 
 module Nvim_version = struct
   include Semantic_version.Make ()

@@ -1,0 +1,80 @@
+* main.exe
+
+: Capture Msgpack RPC traffic
+: 
+:   main.exe SUBCOMMAND
+: 
+: === subcommands ===
+: 
+:   convert                    . Convert Msgpack messages
+:   stdio                      . Capture Msgpack RPC traffic over stdio
+:   unix                       . Capture Msgpack RPC traffic over unix domain
+:                                sockets
+:   version                    . print version information
+:   help                       . explain a given subcommand (perhaps recursively)
+
+** version
+
+: print version information
+: 
+:   main.exe version 
+: 
+: === flags ===
+: 
+:   [-build-info]              . print build info for this build
+:   [-version]                 . print the version of this build
+:   [-help], -?                . print this help text and exit
+
+** convert
+
+: Convert Msgpack messages
+: 
+:   main.exe convert 
+: 
+: === flags ===
+: 
+:   -from FORMAT               . Input format (can be: Bytes, Hex, Json)
+:   -to FORMAT                 . Output format (can be: Bytes, Hex, Json)
+:   [-help], -?                . print this help text and exit
+
+** stdio
+
+: Capture Msgpack RPC traffic over stdio
+: 
+:   main.exe stdio 
+: 
+: Run an embedded program that expects to communicate Msgpack RPC over stdio and write the
+: communication to a file. Stderr from the child is passed through.
+: 
+: === flags ===
+: 
+:   -child-name STRING         . Name to use for child in log
+:   -log FILENAME              . Where to log the communication
+:   -parent-name STRING        . Name to use for parent in log
+:   [-- PROG]                  . Child program to run
+:   [-color BOOL]              . Color names in the log (default: false)
+:   [-help], -?                . print this help text and exit
+
+** unix
+
+: Capture Msgpack RPC traffic over unix domain sockets
+: 
+:   main.exe unix 
+: 
+: Each endpoint uses a different socket and the debugger ferries messages between them. The
+: server program should be listening on [server-socket] and the client program should try
+: connecting to [client-socket]. The debugger acts as a server to the client and a client
+: to the server.
+: 
+: First start the server program, then start this debugger specifying the [server-socket]
+: where that server program is listening and a new [client-socket] where the debugger will
+: start listening. Finally, start the client program and have it connect to [client-socket].
+: 
+: === flags ===
+: 
+:   -client-name STRING        . Name to use for client in log
+:   -client-socket SOCKET      . Where the client will connect
+:   -server-name STRING        . Name to use for server in log
+:   -server-socket SOCKET      . Where the server is listening
+:   [-color (always|never)]    . Color names in the log
+:   [-help], -?                . print this help text and exit

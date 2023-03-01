@@ -39,6 +39,9 @@ module Buffer : Nvim_id
 module Window : Nvim_id
 module Tabpage : Nvim_id
 
+(** Pretty-print MessagePack messages with Neovim extensions. *)
+val pp : Formatter.t -> Msgpack.t -> unit
+
 module Phantom : sig
   (** For use in pattern matching. For example, if you have a ['a Phantom.t * 'a], if a
       pattern match on the phantom succeeds on [Integer], then ['a] unifies with [int].

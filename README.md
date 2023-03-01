@@ -1,4 +1,4 @@
-# VCaml 
+# VCaml
 
 A library for building Neovim plugins in OCaml.
 
@@ -17,8 +17,8 @@ top of the auto-generated functions produced by `lib/neovim_api_wrapper`
 Those that have not been tested are in `Untested` submodules.
 
 ### `VCaml`
-- Library entrypoint 
-- API type definitions 
+- Library entrypoint
+- API type definitions
   -  OCaml -> Neovim: `Defun.Vim.t`
   -  Neovim -> OCaml: `Defun.Ocaml.t`
   -  These types can't be unified for deep GADT reasons.
@@ -67,7 +67,7 @@ Those that have not been tested are in `Untested` submodules.
 - A type for representing a mode (e.g. "Normal")
 
 ### `Transport`
-- Generic code for setting up communication between OCaml 
+- Generic code for setting up communication between OCaml
   and Neovim
 
 ### `Extract`

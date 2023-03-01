@@ -1,6 +1,0 @@
-(library (name vcaml_debugger)
- (libraries angstrom core_unix msgpack core_kernel.reversed_list
-  core_unix.uuid vcaml)
- (preprocess (pps ppx_jane)))
-
-(alias (name DEFAULT) (deps ./utop))

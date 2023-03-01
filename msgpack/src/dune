@@ -1,2 +1,0 @@
-(library (name msgpack) (public_name vcaml.msgpack)
- (libraries base angstrom faraday) (preprocess (pps ppx_jane)))

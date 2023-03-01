@@ -1,6 +1,5 @@
 open! Core
 open! Async
-module Re_jane = Re_jane.Easy_mode
 
 type t =
   | Ml of string
@@ -11,24 +10,18 @@ type t =
   | Mly of string
 [@@deriving compare, equal]
 
-let regex_endings =
-  [ (Re_jane.create_exn "_intf\\.ml", fun x -> Intf x)
-  ; (Re_jane.create_exn "\\.ml", fun x -> Ml x)
-  ; (Re_jane.create_exn "\\.mli", fun x -> Mli x)
-  ; (Re_jane.create_exn "\\.mll", fun x -> Mll x)
-  ; (Re_jane.create_exn "\\.mly", fun x -> Mly x)
+let file_endings =
+  [ ("_intf.ml", fun x -> Intf x)
+  ; (".ml", fun x -> Ml x)
+  ; (".mli", fun x -> Mli x)
+  ; (".mll", fun x -> Mll x)
+  ; (".mly", fun x -> Mly x)
   ]
 ;;
 
-let extract_before_first_group st ~regex =
-  match Re_jane.split regex st with
-  | [ x; "" ] -> Some x
-  | _ -> None
-;;
-
 let get_root_with_digits_and_constructor ~filename =
-  List.map regex_endings ~f:(fun (regex, constructor) ->
-    let%map.Option root = extract_before_first_group filename ~regex in
+  List.map file_endings ~f:(fun (ending, constructor) ->
+    let%map.Option root = String.chop_suffix filename ~suffix:ending in
     root, constructor)
   (* Find first Some *)
   |> List.fold ~init:None ~f:Option.first_some
@@ -159,7 +152,7 @@ let list filename =
     |> List.filter_opt
     |> List.filter ~f:(fun t' -> String.equal (get_root t) (get_root t'))
     |> List.sort ~compare
-    |> Deferred.List.filter ~f:(fun t -> is_redundant_mli t >>| not)
+    |> Deferred.List.filter ~how:`Sequential ~f:(fun t -> is_redundant_mli t >>| not)
 ;;
 
 let find_file_pattern_at_offset ~offset ~current_file_pattern ~file_patterns =

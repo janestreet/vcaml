@@ -40,6 +40,7 @@ module Oneshot = struct
              Client.attach client Stdio ~time_source:(Time_source.wall_clock ())
            in
            Ivar.read shutdown |> Deferred.ok))
+        ~behave_nicely_in_pipeline:false
     ;;
   end
 end
@@ -127,7 +128,9 @@ module Persistent = struct
            let%bind () = start ~client ~state ~shutdown in
            let%bind () = Ivar.read shutdown |> Deferred.ok in
            on_shutdown client state))
+        ~behave_nicely_in_pipeline:false
     ;;
+
 
     module For_testing = struct
       type plugin_state = P.state [@@deriving sexp_of]

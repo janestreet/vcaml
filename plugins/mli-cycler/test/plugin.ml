@@ -11,12 +11,13 @@ let setup_files_for_testing ~empty_files ~files_with_includes ~temp_dir =
   let%bind () =
     empty_files
     |> List.map ~f:(Core.( ^/ ) temp_dir)
-    |> Deferred.List.iter ~f:create_empty
+    |> Deferred.List.iter ~how:`Sequential ~f:create_empty
   in
   let%map () =
     files_with_includes
     |> List.map ~f:(fun (file, incl) -> Core.( ^/ ) temp_dir file, incl)
-    |> Deferred.List.iter ~f:(fun (file, incl) -> create_with_include file incl)
+    |> Deferred.List.iter ~how:`Sequential ~f:(fun (file, incl) ->
+      create_with_include file incl)
   in
   Ok ()
 ;;

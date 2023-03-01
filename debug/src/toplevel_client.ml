@@ -2,13 +2,24 @@ open Core
 module Unix = Core_unix
 module Parser = Angstrom.Buffered
 
-let msgid = ref 0
+module Vcaml = struct
+  open Vcaml
+
+  (** We only use Vcaml for pretty-printing Neovim's Msgpack extensions. We don't use it
+      anywhere else because the purpose of this tool is to see if a problem lies outside
+      Vcaml. *)
+  let pp = pp
+end
+
+include Vcaml
 
 type t =
   { socket : Unix.File_descr.t
   ; bytes : Bytes.t
   ; mutable state : Msgpack.t Angstrom.Buffered.state
   ; mutable channel : int
+  ; mutable msgid : int
+  ; mutable verbose : bool
   ; mutable closed : bool
   }
 
@@ -18,25 +29,37 @@ let close t =
 ;;
 
 let channel t = t.channel
-let debug = ref true
-let print_s sexp = if !debug then print_s sexp
+let verbose t value = t.verbose <- value
+
+let debug_send, debug_receive =
+  let `Peer_1_to_2 send, `Peer_2_to_1 receive =
+    Msgpack_debug.create_debug_printers
+      ~pp
+      ~color:true
+      ~peer1:"OCaml"
+      ~peer2:"Nvim"
+      stdout
+  in
+  let send t msg = if t.verbose then send msg in
+  let receive t msg = if t.verbose then receive msg in
+  send, receive
+;;
 
 let send t message =
+  debug_send t message;
+  let buf = Msgpack.string_of_t_exn message in
+  let len = String.length buf in
   match t.closed with
-  | true -> failwith "Failed to send message - connection is closed"
+  | true -> failwith "Failed to send message (connection is closed)"
   | false ->
-    let buf = Msgpack.string_of_t_exn message in
-    let len = String.length buf in
     let bytes_written = Unix.single_write_substring ~pos:0 ~len t.socket ~buf in
-    (match bytes_written = len with
-     | false -> failwith "Failed to send message"
-     | true -> print_s [%message "Sent" ~_:(message : Msgpack.t)])
+    if bytes_written < len then failwith "Failed to send message"
 ;;
 
 let request t method_name params =
-  incr msgid;
+  t.msgid <- t.msgid + 1;
   let message =
-    Msgpack.Array [ Integer 0; Integer !msgid; String method_name; Array params ]
+    Msgpack.Array [ Integer 0; Integer t.msgid; String method_name; Array params ]
   in
   send t message
 ;;
@@ -88,7 +111,7 @@ let rec receive t =
           t.state <- Parser.feed state input;
           receive t)
      | Done ({ buf; off; len }, message) ->
-       print_s [%message "Received" ~_:(message : Msgpack.t)];
+       debug_receive t message;
        let remaining_input = Bigstring.sub buf ~pos:off ~len in
        t.state
        <- Parser.feed
@@ -108,7 +131,6 @@ let receive_all_available t =
 ;;
 
 let open_ socketname =
-  debug := false;
   let socket = Unix.socket ~domain:PF_UNIX ~kind:SOCK_STREAM ~protocol:0 () in
   Unix.connect socket ~addr:(ADDR_UNIX socketname);
   let t =
@@ -116,12 +138,12 @@ let open_ socketname =
     ; bytes = Bytes.create 4096
     ; state = Parser.parse Msgpack.Internal.Parser.msg
     ; channel = -1
+    ; msgid = 0
+    ; verbose = false
     ; closed = false
     }
   in
-  let name = Uuid.to_string (Uuid_unix.create ()) in
-  notify t "nvim_set_client_info" [ String name; Map []; String "remote"; Map []; Map [] ];
-  request t "nvim_list_chans" [];
+  request t "nvim_get_api_info" [];
   let rec wait_for_response t = function
     | 0 -> failwith "Timed out waiting for Neovim to respond"
     | n ->
@@ -134,23 +156,12 @@ let open_ socketname =
   in
   let channel =
     match wait_for_response t 10 with
-    | Array [ Integer 1; Integer m; Nil; Array channel_infos ] when !msgid = m ->
-      channel_infos
-      (* We only use Vcaml to parse the channel info because it's tedious to replicate
-         that logic. We don't open it anywhere else because the purpose of this tool is to
-         see if a problem lies outside Vcaml. *)
-      |> List.map ~f:Vcaml.Channel_info.of_msgpack
-      |> Or_error.combine_errors
-      |> ok_exn
-      |> List.find_map ~f:(fun channel_info ->
-        Option.some_if
-          (Option.exists channel_info.client ~f:(fun client_info ->
-             Option.exists client_info.name ~f:(String.equal name)))
-          channel_info.id)
-      |> Option.value_exn
-    | message -> raise_s [%message "Failed to parse channels" (message : Msgpack.t)]
+    | Array [ Integer 1; Integer msgid; Nil; Array [ Integer channel; _metadata ] ]
+      when t.msgid = msgid -> channel
+    | message ->
+      raise_s
+        [%message "Failed to parse [nvim_get_api_info] response" (message : Msgpack.t)]
   in
   t.channel <- channel;
-  debug := true;
   t
 ;;

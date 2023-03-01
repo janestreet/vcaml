@@ -1,4 +1,0 @@
-(library (name msgpack_debug) (public_name vcaml.msgpack_debug)
- (libraries core angstrom angstrom-async async textutils.console
-  core_unix.filename_unix msgpack msgpack_rpc)
- (preprocess (pps ppx_jane)))

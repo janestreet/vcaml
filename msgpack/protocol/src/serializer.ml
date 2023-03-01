@@ -1,13 +1,12 @@
 open Base
 open Faraday
-open Message
 
 (* This is currently written with little to no concern about the efficiency of the
    serializer. If performance is necessary, we would want to keep a closer eye on
    the internal buffer and flush occasionally.
 *)
 
-let rec dispatch t = function
+let rec dispatch t : Message.t -> unit = function
   | Nil -> write_nil t
   | Integer i -> write_int t i
   | UInt64 i -> write_uint64 t i

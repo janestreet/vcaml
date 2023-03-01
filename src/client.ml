@@ -227,11 +227,12 @@ let connect t reader writer ~close_reader_and_writer_on_disconnect ~time_source 
       let keyboard_interrupted = Bvar.wait keyboard_interrupts in
       let result = f ~keyboard_interrupted t args in
       (* In the case of a keyboard interrupt we want to return an [Ok] result instead of
-         an [Error] because we don't want to display an error message to the user. We
-         also send ":<BS>" command because Neovim doesn't recognize that it's in a
-         blocked context so it displays a message about how to exit, and we want to hide
-         this message. We use [nvim_feedkeys] instead of [nvim_input] because the latter
-         doesn't reliably clear the command line. *)
+         an [Error] because we don't want to display an error message to the user. We also
+         send ":<BS>" command because Neovim doesn't recognize that it's in a blocked
+         context so it displays a message about how to exit, and we want to hide this
+         message. We use [nvim_feedkeys] instead of [nvim_input] because the latter
+         doesn't reliably clear the command line. [nvim_out_write "\n"] also does not work
+         here to clear the command line even though it normally does. *)
       choose
         [ choice result Fn.id
         ; choice keyboard_interrupted (fun () ->

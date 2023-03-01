@@ -59,6 +59,21 @@ module Buffer = (val make_nvim_id ~name:"buffer" ~type_id:0)
 module Window = (val make_nvim_id ~name:"window" ~type_id:1)
 module Tabpage = (val make_nvim_id ~name:"tabpage" ~type_id:2)
 
+let pp =
+  Msgpack.pp ~pp_ext:(fun formatter ext ->
+    let open Stdlib.Format in
+    match Buffer.of_msgpack (Extension ext) with
+    | Ok buffer -> pp_print_int formatter (buffer :> int)
+    | Error _ ->
+      (match Window.of_msgpack (Extension ext) with
+       | Ok window -> pp_print_int formatter (window :> int)
+       | Error _ ->
+         (match Tabpage.of_msgpack (Extension ext) with
+          | Ok tabpage -> pp_print_int formatter (tabpage :> int)
+          | Error _ ->
+            raise_s [%message "Unrecognized extension" (ext : Msgpack.Custom.t)])))
+;;
+
 module Phantom = struct
   type _ t =
     | Nil : unit t

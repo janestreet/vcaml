@@ -25,6 +25,9 @@ module Window = Window
 (** API version for which this library is built (not the same as the Neovim version). *)
 val api_version : Api_version.t
 
+(** [Msgpack.pp] with support for Neovim Msgpack extensions. *)
+val pp : Formatter.t -> Msgpack.t -> unit
+
 module Nvim_version : sig
   include Semantic_version.S
 

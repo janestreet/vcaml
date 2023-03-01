@@ -1,3 +1,5 @@
+open Core
+
 type t
 
 (** This is a barebones implementation of Msgpack RPC for Neovim to facilitate debugging
@@ -29,3 +31,8 @@ val receive_all_available : t -> Msgpack.t list
 
 (** Close the connection. *)
 val close : t -> unit
+
+(** Enable / disable printing messages as they are sent and received. *)
+val verbose : t -> bool -> unit
+
+val pp : Formatter.t -> Msgpack.t -> unit

@@ -37,7 +37,7 @@ let%expect_test "Test keymaps" =
   in
   let%bind () =
     with_client (fun client ->
-      Deferred.Or_error.List.iter Keymap.Mode.all ~f:(test ~client))
+      Deferred.Or_error.List.iter ~how:`Sequential Keymap.Mode.all ~f:(test ~client))
   in
   [%expect
     {|

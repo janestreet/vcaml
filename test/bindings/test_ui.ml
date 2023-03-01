@@ -341,7 +341,7 @@ let run_echo_tests ~f ~message =
     ; "api_echo", Nvim.echo [ { text = message; hl_group = None } ] ~add_to_history:false
     ]
   in
-  Deferred.List.map tests ~f:(fun (name, echo) ->
+  Deferred.List.map ~how:`Sequential tests ~f:(fun (name, echo) ->
     let%map output = f ~echo in
     output, name)
   >>| String.Map.of_alist_multi

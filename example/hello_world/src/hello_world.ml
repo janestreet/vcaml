@@ -20,7 +20,9 @@ let main =
            ~time_source:(Time_source.wall_clock ())
        in
        echo_hello_world client)
+    ~behave_nicely_in_pipeline:false
 ;;
+
 
 module For_testing = struct
   let echo_hello_world = echo_hello_world

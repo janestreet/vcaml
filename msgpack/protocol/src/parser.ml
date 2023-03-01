@@ -235,9 +235,7 @@ let map parser =
   Map v
 ;;
 
-let create_custom ~type_id ~data : custom Angstrom.t =
-  return { type_id; data = Bytes.of_string data }
-;;
+let create_custom ~type_id ~data = return { Custom.type_id; data = Bytes.of_string data }
 
 let make_fixext_parser ~header ~len =
   let%bind type_id = with_header_byte header any_int8 in

@@ -12,23 +12,25 @@ build: [
 depends: [
   "ocaml" {>= "4.08.0"}
   "async"
-  "base"
   "core"
   "core_kernel"
   "core_unix"
   "expect_test_helpers_async"
+  "jsonaf"
+  "man_in_the_middle_debugger"
   "ppx_jane"
+  "ppx_optcomp"
   "semantic_version"
   "textutils"
-  "angstrom"                  {>= "0.15.0"}
-  "angstrom-async"            {>= "0.15.0"}
-  "dune"                      {>= "2.0.0"}
+  "angstrom"                   {>= "0.15.0"}
+  "angstrom-async"             {>= "0.15.0"}
+  "dune"                       {>= "2.0.0"}
   "faraday"
 ]
+available: arch != "arm32" & arch != "x86_32"
 synopsis: "OCaml bindings for the Neovim API"
 description: "
-The Neovim text editor comes with an RPC-based public API
-which can be used to control the editor.  This set of libraries implements
-an OCaml interface to those APIs, for the purpose of permitting neovim
-plugins to be written in OCaml.
+VCaml provides OCaml bindings for Neovim's and models some of Neovim's
+more tricky semantics so plugin authors do not need to consider them when writing plugins.
+Plugins communicate with Neovim remotely over Msgpack RPC (see `:h api` for details).
 "

@@ -1,0 +1,6 @@
+(library (name vcaml_debug) (public_name vcaml.debug)
+ (libraries angstrom core_unix msgpack msgpack_debug
+  core_kernel.reversed_list vcaml)
+ (preprocess (pps ppx_jane)))
+
+(alias (name DEFAULT) (deps ./utop))

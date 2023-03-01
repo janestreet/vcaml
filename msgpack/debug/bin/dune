@@ -1,0 +1,2 @@
+(executables (names main) (libraries core_unix.command_unix msgpack_debug)
+ (preprocess (pps ppx_jane)))
