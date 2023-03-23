@@ -30,14 +30,12 @@ let%expect_test "Asynchronous write failure is returned to outstanding requests"
           client
           (Embed
              { prog = neovim_path
-             ; args =
-                 [ "--headless"; "-n"; "--embed"; "--clean"; "--listen"; "./socket" ]
+             ; args = [ "--headless"; "-n"; "--embed"; "--clean"; "--listen"; "./socket" ]
              ; working_dir
              ; env = `Extend [ "NVIM_RPLUGIN_MANIFEST", "rplugin.vim" ]
              })
           ~close_reader_and_writer_on_disconnect
-          ~time_source:
-            (Time_source.read_only (Time_source.create ~now:Time_ns.epoch ()))
+          ~time_source:(Time_source.read_only (Time_source.create ~now:Time_ns.epoch ()))
         >>| ok_exn
       in
       Process.send_signal nvim Signal.term;
@@ -46,9 +44,7 @@ let%expect_test "Asynchronous write failure is returned to outstanding requests"
       (* Wait for Msgpack RPC to close the writer after disconnect if
          [close_reader_and_writer_on_disconnect] is set. *)
       let%bind () = Scheduler.yield_until_no_jobs_remain () in
-      let write_after_termination =
-        run_join [%here] client (Nvim.command "echo 'hi'")
-      in
+      let write_after_termination = run_join [%here] client (Nvim.command "echo 'hi'") in
       let%bind result = write_after_termination in
       print_s (omit_unstable_writer_info [%sexp (result : unit Or_error.t)]);
       Client.close client)

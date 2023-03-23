@@ -341,11 +341,7 @@ let%expect_test "files numbered with leading zeroes are treated as their own gro
     Vcaml_test_helpers.with_client (fun client ->
       let open Deferred.Or_error.Let_syntax in
       let%bind () =
-        setup_client
-          ~empty_files
-          ~files_with_includes:[]
-          ~entry_point:"foo_01.ml"
-          ~client
+        setup_client ~empty_files ~files_with_includes:[] ~entry_point:"foo_01.ml" ~client
       in
       let%bind () = print_current_file client in
       repeat_n_times 4 ~f:(fun () -> cycle_forward client))

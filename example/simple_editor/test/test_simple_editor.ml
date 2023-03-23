@@ -29,11 +29,7 @@ let%expect_test "splits open a new window and allows the user to send keys" =
   let%map.Deferred () =
     with_client (fun client ->
       let%bind () = print_window_count ~client in
-      let%bind { plugin_state = { buffer; window = _ }
-               ; shutdown = _
-               ; wait_for_shutdown
-               }
-        =
+      let%bind { plugin_state = { buffer; window = _ }; shutdown = _; wait_for_shutdown } =
         Simple_editor.For_testing.start ~client
       in
       let buffer = Set_once.get_exn buffer [%here] in

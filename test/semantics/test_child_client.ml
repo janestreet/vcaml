@@ -49,10 +49,7 @@ let%expect_test "Simple test of [Child] client" =
                 Stdio
             in
             let%bind result =
-              run_join
-                [%here]
-                client
-                (Nvim.eval "'Hello, world!'" ~result_type:String)
+              run_join [%here] client (Nvim.eval "'Hello, world!'" ~result_type:String)
             in
             let%map () = attempt_to_quit ~tmp_dir ~client |> Deferred.ok in
             result

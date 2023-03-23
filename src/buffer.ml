@@ -485,8 +485,7 @@ module Untested = struct
       ; bind hide_virtual_text_when_overlaying_selection ~f:(fun () ->
           [ "virt_text_hide", M.Boolean true ])
       ; bind virtual_lines ~f:(fun virtual_lines ->
-          [ "virt_lines", virtual_lines |> List.map ~f:pack_highlighted_text |> M.Array
-          ])
+          [ "virt_lines", virtual_lines |> List.map ~f:pack_highlighted_text |> M.Array ])
       ; bind virtual_lines_pos ~f:(fun pos ->
           let above =
             match pos with
@@ -571,8 +570,7 @@ module Untested = struct
     |> Api_call.of_api_result
     |> Api_call.map_bind ~f:(function
       | true -> Ok ()
-      | false ->
-        Or_error.error_s [%message "Invalid extmark" ~_:(extmark : Extmark.t)])
+      | false -> Or_error.error_s [%message "Invalid extmark" ~_:(extmark : Extmark.t)])
   ;;
 
   let get_extmark { Extmark.id; namespace; buffer } =
@@ -586,8 +584,7 @@ module Untested = struct
     |> Api_call.map_bind ~f:(function
       | [] -> Ok None
       | [ Integer row; Integer col ] -> Ok (Some { Position.row; col })
-      | _ ->
-        Or_error.error_string "malformed result from [nvim_buf_get_extmark_by_id]")
+      | _ -> Or_error.error_string "malformed result from [nvim_buf_get_extmark_by_id]")
   ;;
 
   let get_extmark_with_details { Extmark.id; namespace; buffer } =
@@ -604,8 +601,7 @@ module Untested = struct
         let open Or_error.Let_syntax in
         let%map details = Extract.map_of_msgpack_map details in
         Some ({ Position.row; col }, details)
-      | _ ->
-        Or_error.error_string "malformed result from [nvim_buf_get_extmark_by_id]")
+      | _ -> Or_error.error_string "malformed result from [nvim_buf_get_extmark_by_id]")
   ;;
 
   let all_extmarks t ~namespace ?start_inclusive ?end_inclusive () =
@@ -637,8 +633,7 @@ module Untested = struct
           let extmark = { Extmark.id; namespace; buffer } in
           let pos = { Position.row; col } in
           Ok (extmark, pos)
-        | _ ->
-          Or_error.error_string "malformed result from [nvim_buf_get_extmarks]")
+        | _ -> Or_error.error_string "malformed result from [nvim_buf_get_extmarks]")
       |> Or_error.combine_errors)
   ;;
 
@@ -673,8 +668,7 @@ module Untested = struct
           let extmark = { Extmark.id; namespace; buffer } in
           let pos = { Position.row; col } in
           extmark, pos, details
-        | _ ->
-          Or_error.error_string "malformed result from [nvim_buf_get_extmarks]")
+        | _ -> Or_error.error_string "malformed result from [nvim_buf_get_extmarks]")
       |> Or_error.combine_errors)
   ;;
 
@@ -694,8 +688,7 @@ module Untested = struct
         (match channel with
          | 0 ->
            Or_error.error_s
-             [%message
-               "nvim_open_term failed (returned 0)" ~buffer:(t : Or_current.t)]
+             [%message "nvim_open_term failed (returned 0)" ~buffer:(t : Or_current.t)]
          | _ -> Ok channel))
   ;;
 

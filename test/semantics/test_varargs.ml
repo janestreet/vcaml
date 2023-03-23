@@ -20,8 +20,7 @@ let%expect_test "Varargs" =
         let open Deferred.Or_error.Let_syntax in
         let test_dispatcher_file = tmp_dir ^/ "test_dispatcher.vim" in
         let%bind () =
-          Nvim.command (sprintf "edit %s" test_dispatcher_file)
-          |> run_join [%here] client
+          Nvim.command (sprintf "edit %s" test_dispatcher_file) |> run_join [%here] client
         in
         let%bind () =
           Buffer.set_lines
@@ -79,8 +78,7 @@ let%expect_test "Varargs (async)" =
         let open Deferred.Or_error.Let_syntax in
         let test_printer_file = tmp_dir ^/ "test_printer.vim" in
         let%bind () =
-          Nvim.command (sprintf "edit %s" test_printer_file)
-          |> run_join [%here] client
+          Nvim.command (sprintf "edit %s" test_printer_file) |> run_join [%here] client
         in
         let%bind () =
           Buffer.set_lines

@@ -170,8 +170,7 @@ let%expect_test "find_by_name_or_create name prefixes" =
     with_client (fun client ->
       let open Deferred.Or_error.Let_syntax in
       let%bind new_buf =
-        Buffer.find_by_name_or_create ~name:"test_buffer_name"
-        |> run_join [%here] client
+        Buffer.find_by_name_or_create ~name:"test_buffer_name" |> run_join [%here] client
       in
       let%bind new_buf_prefix_name =
         Buffer.find_by_name_or_create ~name:"test_buffer" |> run_join [%here] client
@@ -272,8 +271,7 @@ let%expect_test "get_mark" =
         |> run_join [%here] client
       in
       let%bind () =
-        Nvim.feedkeys (`Already_escaped escaped_keys) ~mode:"n"
-        |> run_join [%here] client
+        Nvim.feedkeys (`Already_escaped escaped_keys) ~mode:"n" |> run_join [%here] client
       in
       let%bind mark = Buffer.get_mark Current ~sym:'m' |> run_join [%here] client in
       print_s [%sexp (mark : Mark.t)];
@@ -292,8 +290,7 @@ let%expect_test "Extmark indexing" =
       |> run_join [%here] client
     in
     let%bind escaped_keys =
-      Nvim.replace_termcodes_and_keycodes "ihello\nworld!<Esc>"
-      |> run_join [%here] client
+      Nvim.replace_termcodes_and_keycodes "ihello\nworld!<Esc>" |> run_join [%here] client
     in
     let%bind () =
       Nvim.feedkeys (`Already_escaped escaped_keys) ~mode:"n" |> run_join [%here] client

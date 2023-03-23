@@ -296,8 +296,7 @@ module Fast = struct
       | msg ->
         Or_error.error_s
           [%message
-            "Unable to parse [get_mode] response"
-              (msg : (Msgpack.t * Msgpack.t) list)])
+            "Unable to parse [get_mode] response" (msg : (Msgpack.t * Msgpack.t) list)])
   ;;
 
   let input keys = Nvim_internal.nvim_input ~keys |> Api_call.of_api_result
@@ -638,8 +637,7 @@ module Untested = struct
         | _, (`Window None | `Character None | `Integer None) -> None
         | label, `Window (Some window) ->
           Some (Msgpack.String label, Window.to_msgpack window)
-        | label, `Character (Some ch) ->
-          Some (String label, String (Char.to_string ch))
+        | label, `Character (Some ch) -> Some (String label, String (Char.to_string ch))
         | label, `Integer (Some x) -> Some (String label, Integer x)
         | label, `Boolean flag -> Some (String label, Boolean flag))
     in

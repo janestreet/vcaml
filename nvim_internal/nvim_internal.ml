@@ -363,8 +363,7 @@ module Ui_event = struct
              Ok (Default_colors_set { rgb_fg; rgb_bg; rgb_sp; cterm_fg; cterm_bg })
            | "hl_attr_define", [ Integer id; Map rgb_attrs; Map cterm_attrs; Array info ]
              -> Ok (Hl_attr_define { id; rgb_attrs; cterm_attrs; info })
-           | "hl_group_set", [ String name; Integer id ] ->
-             Ok (Hl_group_set { name; id })
+           | "hl_group_set", [ String name; Integer id ] -> Ok (Hl_group_set { name; id })
            | "grid_resize", [ Integer grid; Integer width; Integer height ] ->
              Ok (Grid_resize { grid; width; height })
            | "grid_clear", [ Integer grid ] -> Ok (Grid_clear { grid })
@@ -439,8 +438,8 @@ module Ui_event = struct
              return
                (Win_viewport { grid; win; topline; botline; curline; curcol; line_count })
            | ( "popupmenu_show"
-             , [ Array items; Integer selected; Integer row; Integer col; Integer grid ]
-             ) -> Ok (Popupmenu_show { items; selected; row; col; grid })
+             , [ Array items; Integer selected; Integer row; Integer col; Integer grid ] )
+             -> Ok (Popupmenu_show { items; selected; row; col; grid })
            | "popupmenu_hide", [] -> Ok Popupmenu_hide
            | "popupmenu_select", [ Integer selected ] ->
              Ok (Popupmenu_select { selected })
@@ -476,8 +475,7 @@ module Ui_event = struct
            | "msg_showmode", [ Array content ] -> Ok (Msg_showmode { content })
            | "msg_ruler", [ Array content ] -> Ok (Msg_ruler { content })
            | "msg_history_show", [ Array entries ] -> Ok (Msg_history_show { entries })
-           | _ ->
-             Or_error.error_s [%message "Failed to parse UI event" (msg : Msgpack.t)])
+           | _ -> Or_error.error_s [%message "Failed to parse UI event" (msg : Msgpack.t)])
         | _ -> Or_error.error_s [%message "Failed to parse UI event" (msg : Msgpack.t)])
       |> Or_error.combine_errors
     | _ -> Or_error.error_s [%message "Failed to parse UI event" (msg : Msgpack.t)]

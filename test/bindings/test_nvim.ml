@@ -40,8 +40,7 @@ let%expect_test "command, list_bufs, Buffer.get_name" =
           Buffer.get_name (Id buffer) |> run_join [%here] client)
         |> Deferred.Or_error.combine_errors
         |> Deferred.Or_error.map ~f:(fun filenames ->
-          List.map filenames ~f:(fun file ->
-            file |> Filename.parts |> List.last_exn))
+          List.map filenames ~f:(fun file -> file |> Filename.parts |> List.last_exn))
       in
       print_s [%message (buffers : Buffer.t list) (buffer_names : string list)])
   in
@@ -168,8 +167,7 @@ let%expect_test "replace_termcodes" =
         |> run_join [%here] client
       in
       let%bind () =
-        Nvim.feedkeys (`Already_escaped escaped_keys) ~mode:"n"
-        |> run_join [%here] client
+        Nvim.feedkeys (`Already_escaped escaped_keys) ~mode:"n" |> run_join [%here] client
       in
       let%bind lines =
         Buffer.get_lines Current ~start:0 ~end_:(-1) ~strict_indexing:false
@@ -492,9 +490,7 @@ let%expect_test "Check that all modes documented in the help are covered by [Mod
             let word2 = String.subo str ~pos:start_of_second_word in
             word1, word2
           in
-          let symbol, description =
-            line |> String.strip |> lsplit2_whitespace_exn
-          in
+          let symbol, description = line |> String.strip |> lsplit2_whitespace_exn in
           let symbol =
             match String.substr_index symbol ~pattern:"CTRL-" with
             | None -> symbol

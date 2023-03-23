@@ -46,9 +46,7 @@ let attach here client ~width ~height ~options ~on_event ~on_parse_error =
         | Ok events ->
           List.iter events ~f:(fun event ->
             (match event with
-             | Clear | Resize _
-             | Grid_resize { grid = 1; _ }
-             | Grid_clear { grid = 1 } ->
+             | Clear | Resize _ | Grid_resize { grid = 1; _ } | Grid_clear { grid = 1 } ->
                Set_once.set_if_none cleared_screen [%here] ()
              | _ -> ());
             if Set_once.is_some cleared_screen then on_event event)
