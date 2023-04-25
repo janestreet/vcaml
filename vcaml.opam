@@ -1,4 +1,5 @@
 opam-version: "2.0"
+version: "v0.16.0"
 maintainer: "Jane Street developers"
 authors: ["Jane Street Group, LLC"]
 homepage: "https://github.com/janestreet/vcaml"
@@ -10,18 +11,18 @@ build: [
   ["dune" "build" "-p" name "-j" jobs]
 ]
 depends: [
-  "ocaml" {>= "4.14.0"}
-  "async"
-  "core"
-  "core_kernel"
-  "core_unix"
-  "expect_test_helpers_async"
-  "jsonaf"
-  "man_in_the_middle_debugger"
-  "ppx_jane"
-  "ppx_optcomp"
-  "semantic_version"
-  "textutils"
+  "ocaml"                      {>= "4.14.0"}
+  "async"                      {>= "v0.16" & < "v0.17"}
+  "core"                       {>= "v0.16" & < "v0.17"}
+  "core_kernel"                {>= "v0.16" & < "v0.17"}
+  "core_unix"                  {>= "v0.16" & < "v0.17"}
+  "expect_test_helpers_async"  {>= "v0.16" & < "v0.17"}
+  "jsonaf"                     {>= "v0.16" & < "v0.17"}
+  "man_in_the_middle_debugger" {>= "v0.16" & < "v0.17"}
+  "ppx_jane"                   {>= "v0.16" & < "v0.17"}
+  "ppx_optcomp"                {>= "v0.16" & < "v0.17"}
+  "semantic_version"           {>= "v0.16" & < "v0.17"}
+  "textutils"                  {>= "v0.16" & < "v0.17"}
   "angstrom"                   {>= "0.15.0"}
   "angstrom-async"             {>= "0.15.0"}
   "dune"                       {>= "2.0.0"}
