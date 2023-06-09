@@ -373,7 +373,7 @@ module Fast = struct
               (* Documentation says we must stop pasting when we receive [false]. *)
               force_stop ()
             | Error _ as error ->
-              Ivar.fill flushed error;
+              Ivar.fill_exn flushed error;
               force_stop ())
         in
         let%bind () =
@@ -387,7 +387,7 @@ module Fast = struct
             >>| tag_callsite here
             >>| (function
               | Ok () -> ()
-              | Error _ as error -> Ivar.fill flushed error)
+              | Error _ as error -> Ivar.fill_exn flushed error)
         in
         Ivar.fill_if_empty flushed (Ok ());
         return ())

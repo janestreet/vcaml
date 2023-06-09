@@ -7,6 +7,7 @@ module Format = struct
       | Bytes
       | Json
       | Hex
+      | Sexp
     [@@deriving enumerate, sexp_of]
   end
 
@@ -123,7 +124,7 @@ let hex_of_bytes bytes =
 let conv ~from ~to_ ~reader ~writer =
   let%bind reader =
     match (from : Format.t) with
-    | Bytes | Json -> return reader
+    | Bytes | Json | Sexp -> return reader
     | Hex ->
       let pipe_r =
         Reader.pipe reader
@@ -173,6 +174,18 @@ let conv ~from ~to_ ~reader ~writer =
            allowing "12" and "1" "2" to be distinguished) and also makes the CLI output
            more readable. *)
         Fn.compose (sprintf !"%{Jsonaf#hum}\n") jsonaf_of_msgpack
+      | Sexp ->
+        fun msgpack ->
+          msgpack
+          |> [%sexp_of: Msgpack.t]
+          |> Sexp.to_string_hum
+          (* Adding whitespace after "Nil" is needed to avoid conflation with the next
+             sexp, which may also be Nil, in which case the two strings will be read as a
+             single atom. All other Mspgack constructors have arguments, so they have sexp
+             list representations. *)
+          |> (function
+            | "Nil" -> "Nil "
+            | sexp -> sexp)
     in
     fun msgpack ->
       Writer.write writer (msgpack_to_output_format msgpack);
@@ -198,6 +211,11 @@ let conv ~from ~to_ ~reader ~writer =
              | None -> return ()
              | Some ch -> fail (sprintf "'%c'" ch) <?> "Trailing character")
            reader)
+    | Sexp ->
+      Monitor.try_with (fun () ->
+        Reader.read_sexps reader
+        |> Pipe.iter ~f:(Fn.compose write_msgpack [%of_sexp: Msgpack.t]))
+      >>| Result.map_error ~f:Exn.to_string
   in
   let%map () = Writer.close writer
   and () = Reader.close reader in
@@ -258,6 +276,51 @@ let%expect_test "Msgpack->JSON->Msgpack == Msgpack->JSON->Msgpack->JSON->Msgpack
   return ()
 ;;
 
+let%expect_test "Msgpack ~= Msgpack->Sexp->Msgpack" =
+  Quickcheck.test
+    (* We don't want to test NAN with roundtripping through sexp because [of_sexp: float]
+       converts -NAN to NAN. *)
+    (Msgpack.quickcheck_generator ~only_string_keys:false ~only_finite_floats:true)
+    ~sexp_of:[%sexp_of: Msgpack.t]
+    ~f:(fun expected ->
+      let sexp = [%sexp_of: Msgpack.t] expected in
+      let actual = [%of_sexp: Msgpack.t] sexp in
+      match effectively_equivalent_msgpack expected actual with
+      | true -> ()
+      | false ->
+        raise_s
+          [%message
+            "Not effectively equivalent"
+              ~expected:(Msgpack.string_of_t_exn expected)
+              ~actual:(Msgpack.string_of_t_exn actual)
+              (sexp : Sexp.t)
+              (actual : Msgpack.t)]);
+  [%expect {||}];
+  return ()
+;;
+
+let%expect_test "Msgpack->Sexp->Msgpack == Msgpack->Sexp->Msgpack->Sexp->Msgpack" =
+  Quickcheck.test
+    (Msgpack.quickcheck_generator ~only_string_keys:false ~only_finite_floats:true)
+    ~sexp_of:[%sexp_of: Msgpack.t]
+    ~f:(fun original ->
+      let expected = original |> [%sexp_of: Msgpack.t] |> [%of_sexp: Msgpack.t] in
+      let sexp = [%sexp_of: Msgpack.t] expected in
+      let actual = [%of_sexp: Msgpack.t] sexp in
+      match Msgpack.equal expected actual with
+      | true -> ()
+      | false ->
+        raise_s
+          [%message
+            "Not exactly equivalent"
+              ~original:(Msgpack.string_of_t_exn original)
+              ~expected:(Msgpack.string_of_t_exn expected)
+              ~actual:(Msgpack.string_of_t_exn actual)
+              (sexp : Sexp.t)]);
+  [%expect {||}];
+  return ()
+;;
+
 let quickcheck_conv_roundtrip quickcheck_generator ~format =
   let pipe () =
     let%map `Reader reader_fd, `Writer writer_fd = Unix.pipe (Info.of_string "") in
@@ -272,8 +335,8 @@ let quickcheck_conv_roundtrip quickcheck_generator ~format =
     Async_quickcheck.async_test
       quickcheck_generator
       ~sexp_of:[%sexp_of: Msgpack.t]
-      ~f:(fun msg ->
-        let expected_bytes = Msgpack.string_of_t_exn msg in
+      ~f:(fun msgpack ->
+        let expected_bytes = Msgpack.string_of_t_exn msgpack in
         Writer.write writer1 expected_bytes;
         let%bind () = Writer.flushed writer1 in
         let actual_bytes = Bytes.create (String.length expected_bytes) in
@@ -281,7 +344,7 @@ let quickcheck_conv_roundtrip quickcheck_generator ~format =
         | `Eof ->
           raise_s
             [%message
-              "Expected bytes but got EOF" (expected_bytes : string) (msg : Msgpack.t)]
+              "Expected bytes but got EOF" (expected_bytes : string) (msgpack : Msgpack.t)]
         | `Ok n_bytes ->
           let actual_bytes =
             (* We use [String.prefix] here in case [n_bytes < String.length expected_bytes]
@@ -299,7 +362,7 @@ let quickcheck_conv_roundtrip quickcheck_generator ~format =
                  "Mismatch between actual and expected bytes"
                    (expected_bytes : string)
                    (actual_bytes : string)
-                   (msg : Msgpack.t)]))
+                   (msgpack : Msgpack.t)]))
   in
   let%bind () = Writer.close writer1 in
   let%bind () = pass1 in
@@ -317,6 +380,15 @@ let%expect_test "Hex/Bytes Roundtrip" =
     quickcheck_conv_roundtrip
       (Msgpack.quickcheck_generator ~only_string_keys:false ~only_finite_floats:false)
       ~format:Hex
+  in
+  [%expect {||}]
+;;
+
+let%expect_test "Sexp/Bytes Roundtrip" =
+  let%map () =
+    quickcheck_conv_roundtrip
+      (Msgpack.quickcheck_generator ~only_string_keys:false ~only_finite_floats:true)
+      ~format:Sexp
   in
   [%expect {||}]
 ;;

@@ -30,7 +30,7 @@ let%expect_test "Simple asynchronous notification" =
         client
         ~name:"async_func"
         ~type_:Defun.Ocaml.Async.unit
-        ~f:(fun ~client:_ -> Deferred.Or_error.return (Ivar.fill result "Called!"));
+        ~f:(fun ~client:_ -> Deferred.Or_error.return (Ivar.fill_exn result "Called!"));
       Notifier.notify client call_async_func;
       Ivar.read result |> Deferred.ok)
   in
@@ -48,7 +48,7 @@ let%expect_test "Bad asynchronous notification" =
         (`Call
            (fun error ->
               print_s [%sexp (error : Vcaml_error.t)];
-              Ivar.fill result "Received asynchronous failure message"))
+              Ivar.fill_exn result "Received asynchronous failure message"))
       (fun client ->
          Notifier.For_testing.send_raw client ~function_name:"" ~params:[];
          Ivar.read result |> Deferred.ok)

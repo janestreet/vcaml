@@ -33,8 +33,8 @@
 : 
 : === flags ===
 : 
-:   -from FORMAT               . Input format (can be: Bytes, Hex, Json)
-:   -to FORMAT                 . Output format (can be: Bytes, Hex, Json)
+:   -from FORMAT               . Input format (can be: Bytes, Hex, Json, Sexp)
+:   -to FORMAT                 . Output format (can be: Bytes, Hex, Json, Sexp)
 :   [-help], -?                . print this help text and exit
 
 ** stdio

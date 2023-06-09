@@ -42,11 +42,11 @@ let event_loop t ~close_reader_and_writer_on_disconnect =
     | Msgpack.Array [ Integer 1; Integer msgid; Nil; result ] ->
       (match Hashtbl.find t.pending_requests msgid with
        | None -> t.on_error (Response_for_unknown_request msg)
-       | Some box -> Ivar.fill box (Ok result))
+       | Some box -> Ivar.fill_exn box (Ok result))
     | Array [ Integer 1; Integer msgid; err; Nil ] ->
       (match Hashtbl.find t.pending_requests msgid with
        | None -> t.on_error (Response_for_unknown_request msg)
-       | Some box -> Ivar.fill box (Error err))
+       | Some box -> Ivar.fill_exn box (Error err))
     | Array [ Integer 2; String method_name; Array params ] ->
       Bus.write t.notifications { method_name; params }
     | Array [ Integer 0; Integer msgid; String method_name; Array params ] ->
@@ -106,7 +106,7 @@ let handle_write_syscall_failure t ~close_reader_and_writer_on_disconnect =
   Monitor.detach_and_iter_errors monitor ~f:(fun exn ->
     let exn = Monitor.extract_exn exn in
     let error = Error (Msgpack.String (Exn.to_string exn)) in
-    Hashtbl.iter t.pending_requests ~f:(fun result -> Ivar.fill result error);
+    Hashtbl.iter t.pending_requests ~f:(fun result -> Ivar.fill_exn result error);
     Hashtbl.clear t.pending_requests;
     match close_reader_and_writer_on_disconnect with
     | false -> ()

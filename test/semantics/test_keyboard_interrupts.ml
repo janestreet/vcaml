@@ -115,7 +115,7 @@ let on_keyboard_interrupt_abort_rpcrequest_and_notify_callback ~timeout ~time_so
         ~name:function_name
         ~type_:Defun.Ocaml.Sync.(Nil @-> return Nil)
         ~f:(fun ~keyboard_interrupted ~client () ->
-          Ivar.fill blocking ();
+          Ivar.fill_exn blocking ();
           upon keyboard_interrupted (fun () -> print_endline "Keyboard interrupt!");
           let%bind () = Ivar.read sent_keys in
           f client);
@@ -134,7 +134,7 @@ let on_keyboard_interrupt_abort_rpcrequest_and_notify_callback ~timeout ~time_so
     let%bind message = Reader.read_line reader in
     print_s [%sexp (message : string Reader.Read_result.t)];
     send_keys "\003";
-    Ivar.fill sent_keys ();
+    Ivar.fill_exn sent_keys ();
     let rpc_result =
       let%bind rpc_result = rpc_result in
       let%bind () = attempt_to_quit ~tmp_dir ~client in

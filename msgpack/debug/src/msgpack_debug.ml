@@ -99,7 +99,7 @@ let connect_unix_peers_and_listen
              ~log:stderr
              ()
          in
-         Ivar.fill terminated ();
+         Ivar.fill_exn terminated ();
          return ())
   in
   let%bind () = Ivar.read terminated in

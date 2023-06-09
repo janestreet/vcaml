@@ -47,12 +47,12 @@ let%expect_test "[rpcrequest] blocks other channels" =
               ~name:function_name
               ~type_:Defun.Ocaml.Sync.(Nil @-> return Nil)
               ~f:(fun ~keyboard_interrupted:_ ~client:_ () ->
-                Ivar.fill blocking ();
+                Ivar.fill_exn blocking ();
                 Ivar.read result |> Deferred.ok);
             let result_deferred = run_join [%here] client call_rpc in
             let%map () = Ivar.read blocking in
             fun response ->
-              Ivar.fill result response;
+              Ivar.fill_exn result response;
               result_deferred
           in
           let%bind client1 = socket_client socket >>| ok_exn in
@@ -130,7 +130,7 @@ let%expect_test "Plugin dying during [rpcrequest] does not bring down Neovim" =
               ~name:function_name
               ~type_:Defun.Ocaml.Sync.(Nil @-> return Nil)
               ~f:(fun ~keyboard_interrupted:_ ~client:_ () ->
-                Ivar.fill blocking ();
+                Ivar.fill_exn blocking ();
                 Deferred.never ());
             don't_wait_for (run_join [%here] client call_rpc >>| ok_exn);
             Ivar.read blocking

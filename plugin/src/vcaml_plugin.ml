@@ -26,7 +26,7 @@ module Oneshot = struct
              | None ->
                Set_once.set_exn invoked_rpc [%here] name;
                let%map result = f () in
-               Ivar.fill shutdown ();
+               Ivar.fill_exn shutdown ();
                result
            in
            List.iter O.rpc_handlers ~f:(fun (Sync_rpc { name; type_; f }) ->
@@ -151,12 +151,12 @@ module Persistent = struct
         don't_wait_for
           (let%bind.Deferred () = Ivar.read shutdown_started in
            let%map.Deferred result = on_shutdown client state in
-           Ivar.fill shutdown_finished result);
+           Ivar.fill_exn shutdown_finished result);
         register_handlers ~client ~state ~shutdown:shutdown_started;
         let%bind () = start ~client ~state ~shutdown:shutdown_started in
         return
           { State.plugin_state = state
-          ; shutdown = Ivar.fill shutdown_started
+          ; shutdown = Ivar.fill_exn shutdown_started
           ; wait_for_shutdown = Ivar.read shutdown_finished
           }
       ;;

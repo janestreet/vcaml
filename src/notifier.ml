@@ -22,17 +22,17 @@ module Notification = struct
       : type fn i. (fn, i) Defun.Vim.t -> (Msgpack.t list -> Msgpack.t list) -> fn
       =
       fun arity f ->
-        (* Due to the fact that OCaml does not (easily) support higher-ranked
-           polymorphism, we need to construct the function [to_msgpack] *after* we unpack
-           this GADT, so it can have the type [i -> Msgpack.t] (which is fixed by [arity]
-           in this function). Otherwise, it needs the type [forall 'a . 'a witness -> 'a
-           -> Msgpack.t], which is not that easily expressible. *)
-        match arity with
-        | Unit -> T (Nvim_internal.nvim_call_function ~fn:function_name ~args:(f []))
-        | Cons (typ, rest) ->
-          fun i ->
-            let to_msgpack = Extract.inject typ in
-            custom rest (fun args -> f (to_msgpack i :: args))
+      (* Due to the fact that OCaml does not (easily) support higher-ranked
+         polymorphism, we need to construct the function [to_msgpack] *after* we unpack
+         this GADT, so it can have the type [i -> Msgpack.t] (which is fixed by [arity]
+         in this function). Otherwise, it needs the type [forall 'a . 'a witness -> 'a
+         -> Msgpack.t], which is not that easily expressible. *)
+      match arity with
+      | Unit -> T (Nvim_internal.nvim_call_function ~fn:function_name ~args:(f []))
+      | Cons (typ, rest) ->
+        fun i ->
+          let to_msgpack = Extract.inject typ in
+          custom rest (fun args -> f (to_msgpack i :: args))
     in
     custom type_ Fn.id
   ;;

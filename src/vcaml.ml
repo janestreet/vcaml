@@ -170,10 +170,10 @@ module Defun = struct
       let valid_number_of_args : ('fn, 'i) t -> int -> bool =
         let rec f : type fn i. (fn, i) t -> required:int -> int -> bool =
           fun t ~required ->
-            match t with
-            | Nullary _ -> ( = ) required
-            | Varargs _ -> Int.( <= ) required
-            | Cons (_, t) -> f t ~required:(required + 1)
+          match t with
+          | Nullary _ -> ( = ) required
+          | Varargs _ -> Int.( <= ) required
+          | Cons (_, t) -> f t ~required:(required + 1)
         in
         f ~required:0
       ;;
@@ -182,28 +182,28 @@ module Defun = struct
         : type fn i. (fn, i) t -> fn -> Msgpack.t list -> Msgpack.t Deferred.Or_error.t
         =
         fun arity f l ->
-          let open Deferred.Or_error.Let_syntax in
-          match arity, l with
-          | Nullary (return_type, T), [] ->
-            let%map v = f in
-            Extract.inject return_type v
-          | Varargs (leftmost, output, T), l ->
-            (match List.map l ~f:(Extract.value leftmost) |> Or_error.combine_errors with
-             | Error error ->
-               Deferred.Or_error.error_s
-                 [%message
-                   "Wrong argument type"
-                     ~expected_type:(leftmost : _ Type.t)
-                     (error : Error.t)]
-             | Ok l ->
-               let%map v = f l in
-               Extract.inject output v)
-          | Cons (leftmost, rest), x :: xs ->
-            let%bind v = Extract.value leftmost x |> Deferred.return in
-            make_fn rest (f v) xs
-          | _, _ ->
-            (* This should be caught by the [valid_number_of_args] check. *)
-            Deferred.Or_error.error_s [%message "[BUG] Wrong number of arguments"]
+        let open Deferred.Or_error.Let_syntax in
+        match arity, l with
+        | Nullary (return_type, T), [] ->
+          let%map v = f in
+          Extract.inject return_type v
+        | Varargs (leftmost, output, T), l ->
+          (match List.map l ~f:(Extract.value leftmost) |> Or_error.combine_errors with
+           | Error error ->
+             Deferred.Or_error.error_s
+               [%message
+                 "Wrong argument type"
+                   ~expected_type:(leftmost : _ Type.t)
+                   (error : Error.t)]
+           | Ok l ->
+             let%map v = f l in
+             Extract.inject output v)
+        | Cons (leftmost, rest), x :: xs ->
+          let%bind v = Extract.value leftmost x |> Deferred.return in
+          make_fn rest (f v) xs
+        | _, _ ->
+          (* This should be caught by the [valid_number_of_args] check. *)
+          Deferred.Or_error.error_s [%message "[BUG] Wrong number of arguments"]
       ;;
 
       let return t = Nullary (t, T)
@@ -225,33 +225,33 @@ module Defun = struct
       let valid_number_of_args : 'fn t -> int -> bool =
         let rec f : type fn. fn t -> required:int -> int -> bool =
           fun t ~required ->
-            match t with
-            | Unit -> ( = ) required
-            | Varargs _ -> Int.( <= ) required
-            | Cons (_, t) -> f t ~required:(required + 1)
+          match t with
+          | Unit -> ( = ) required
+          | Varargs _ -> Int.( <= ) required
+          | Cons (_, t) -> f t ~required:(required + 1)
         in
         f ~required:0
       ;;
 
       let rec make_fn : type fn. fn t -> fn -> Msgpack.t list -> unit Deferred.Or_error.t =
         fun arity f l ->
-          match arity, l with
-          | Varargs typ, l ->
-            (match List.map l ~f:(Extract.value typ) |> Or_error.combine_errors with
-             | Error error ->
-               raise (Failed_to_parse (Error.tag error ~tag:"Wrong argument type"))
-             | Ok l -> f l)
-          | Unit, [] -> f
-          | Cons (leftmost, rest), x :: xs ->
-            (match%bind Extract.value leftmost x |> return with
-             | Ok v ->
-               let f' = f v in
-               make_fn rest f' xs
-             | Error error ->
-               raise (Failed_to_parse (Error.tag error ~tag:"Wrong argument type")))
-          | _ ->
-            (* This should be caught by the [valid_number_of_args] check. *)
-            raise (Failed_to_parse (Error.of_string "[BUG] Wrong number of arguments"))
+        match arity, l with
+        | Varargs typ, l ->
+          (match List.map l ~f:(Extract.value typ) |> Or_error.combine_errors with
+           | Error error ->
+             raise (Failed_to_parse (Error.tag error ~tag:"Wrong argument type"))
+           | Ok l -> f l)
+        | Unit, [] -> f
+        | Cons (leftmost, rest), x :: xs ->
+          (match%bind Extract.value leftmost x |> return with
+           | Ok v ->
+             let f' = f v in
+             make_fn rest f' xs
+           | Error error ->
+             raise (Failed_to_parse (Error.tag error ~tag:"Wrong argument type")))
+        | _ ->
+          (* This should be caught by the [valid_number_of_args] check. *)
+          raise (Failed_to_parse (Error.of_string "[BUG] Wrong number of arguments"))
       ;;
 
       let unit = Unit
