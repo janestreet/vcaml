@@ -15,7 +15,7 @@ module Options : sig
     ; ext_wildmenu : bool
     ; rgb : bool
     }
-  [@@deriving fields, sexp_of]
+  [@@deriving fields ~iterators:(make_creator, to_list), sexp_of]
 
   val default : t
 end

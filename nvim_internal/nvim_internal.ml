@@ -31,7 +31,7 @@ module Ui_options = struct
     ; ext_wildmenu : bool
     ; rgb : bool
     }
-  [@@deriving fields, sexp_of]
+  [@@deriving fields ~iterators:(make_creator, to_list), sexp_of]
 
   let empty =
     { ext_cmdline = false
