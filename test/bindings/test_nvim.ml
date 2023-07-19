@@ -5,8 +5,10 @@ open Vcaml_test_helpers
 
 let%expect_test "open neovim and get channel list" =
   let%bind () =
-    simple [%here] Nvim.channels (fun channels ->
-      channels |> List.length > 0 |> sexp_of_bool)
+    with_client (fun client ->
+      let open Deferred.Or_error.Let_syntax in
+      let%map channels = Nvim.channels [%here] client in
+      channels |> List.length > 0 |> sexp_of_bool |> print_s)
   in
   [%expect "true"];
   return ()
@@ -14,15 +16,49 @@ let%expect_test "open neovim and get channel list" =
 
 let%expect_test "get_channel_info" =
   let%bind () =
-    simple [%here] (Nvim.get_channel_info 1) ("call-succeeded" |> Sexp.Atom |> Fn.const)
+    with_client (fun client ->
+      let open Deferred.Or_error.Let_syntax in
+      let%map (_ : Channel_info.t) = Nvim.get_channel_info [%here] client 1 in
+      print_endline "call-succeeded")
   in
   [%expect "call-succeeded"];
   return ()
 ;;
 
-let%expect_test "command output" =
-  let%bind () = simple [%here] (Nvim.source "echo 'hi'") sexp_of_string in
-  [%expect "hi"];
+let%expect_test "exec_viml, exec_lua" =
+  let%bind () =
+    with_client (fun client ->
+      let open Deferred.Or_error.Let_syntax in
+      let%bind () = Nvim.exec_viml [%here] client "let viml_msg = 'hi from viml'" in
+      let%bind () = Nvim.exec_lua [%here] client "vim.g.lua_msg = 'hi from lua'" in
+      let%map output =
+        Nvim.exec_viml_and_capture_output [%here] client "echo viml_msg lua_msg"
+      in
+      print_endline output)
+  in
+  [%expect "hi from viml hi from lua"];
+  return ()
+;;
+
+let%expect_test "call_function" =
+  let test ~fname =
+    with_client (fun client ->
+      let open Deferred.Or_error.Let_syntax in
+      let%map result =
+        Nvim.call_function
+          [%here]
+          client
+          ~name:fname
+          ~type_:Nvim.Func.(String @-> String @-> return (Array String))
+          "foo,bar,baz"
+          ","
+      in
+      print_s [%sexp (result : string list)])
+  in
+  let%bind () = test ~fname:(`Viml "split") in
+  [%expect "(foo bar baz)"];
+  let%bind () = test ~fname:(`Lua "vim.split") in
+  [%expect "(foo bar baz)"];
   return ()
 ;;
 
@@ -30,14 +66,13 @@ let%expect_test "command, list_bufs, Buffer.get_name" =
   let%bind () =
     with_client (fun client ->
       let open Deferred.Or_error.Let_syntax in
-      let%bind () = Nvim.command "e foo.txt" |> run_join [%here] client in
-      let%bind () = Nvim.command "e bar.txt" |> run_join [%here] client in
-      let%bind () = Nvim.command "e baz.txt" |> run_join [%here] client in
-      let%bind buffers = Nvim.list_bufs |> run_join [%here] client in
+      let%bind () = Command.exec [%here] client "edit" ~args:[ "foo.txt" ] in
+      let%bind () = Command.exec [%here] client "edit" ~args:[ "bar.txt" ] in
+      let%bind () = Command.exec [%here] client "edit" ~args:[ "baz.txt" ] in
+      let%bind buffers = Nvim.list_bufs [%here] client in
       let%map buffer_names =
         buffers
-        |> List.map ~f:(fun buffer ->
-          Buffer.get_name (Id buffer) |> run_join [%here] client)
+        |> List.map ~f:(fun buffer -> Buffer.get_name [%here] client (Id buffer))
         |> Deferred.Or_error.combine_errors
         |> Deferred.Or_error.map ~f:(fun filenames ->
           List.map filenames ~f:(fun file -> file |> Filename.parts |> List.last_exn))
@@ -49,8 +84,13 @@ let%expect_test "command, list_bufs, Buffer.get_name" =
   return ()
 ;;
 
-let%expect_test "eval" =
-  let%bind () = simple [%here] (Nvim.eval "1 + 2" ~result_type:Integer) [%sexp_of: int] in
+let%expect_test "eval_viml_expression" =
+  let%bind () =
+    with_client (fun client ->
+      let open Deferred.Or_error.Let_syntax in
+      let%map sum = Nvim.eval_viml_expression [%here] client "1 + 2" ~result_type:Int in
+      print_s [%sexp (sum : int)])
+  in
   [%expect {| 3 |}];
   return ()
 ;;
@@ -59,11 +99,11 @@ let%expect_test "set_current_buf" =
   let%bind () =
     with_client (fun client ->
       let open Deferred.Or_error.Let_syntax in
-      let%bind () = Nvim.command "e foo.txt" |> run_join [%here] client in
-      let%bind expected_buf = Nvim.get_current_buf |> run_join [%here] client in
-      let%bind () = Nvim.command "e bar.txt" |> run_join [%here] client in
-      let%bind () = Nvim.set_current_buf expected_buf |> run_join [%here] client in
-      let%bind actual_buf = Nvim.get_current_buf |> run_join [%here] client in
+      let%bind () = Command.exec [%here] client "edit" ~args:[ "foo.txt" ] in
+      let%bind expected_buf = Nvim.get_current_buf [%here] client in
+      let%bind () = Command.exec [%here] client "edit" ~args:[ "bar.txt" ] in
+      let%bind () = Nvim.set_current_buf [%here] client expected_buf in
+      let%bind actual_buf = Nvim.get_current_buf [%here] client in
       print_s [%message (expected_buf : Buffer.t) (actual_buf : Buffer.t)];
       return ())
   in
@@ -72,21 +112,27 @@ let%expect_test "set_current_buf" =
 ;;
 
 let%expect_test "set_client_info" =
-  let test_method =
-    { Client_info.Client_method.async = false; nargs = Some (`Fixed 1) }
-  in
   let%bind () =
     with_client (fun client ->
       let open Deferred.Or_error.Let_syntax in
       (* The initial setting happens when a VCaml client connects to Neovim. *)
       let get_client_info () =
-        let%map.Deferred.Or_error channels = run_join [%here] client Nvim.channels in
+        let%map.Deferred.Or_error channels = Nvim.channels [%here] client in
         let channel = List.hd_exn channels in
         channel.client
       in
       let%bind client_before_setting_info = get_client_info () in
+      Ocaml_from_nvim.register_request_blocking
+        [%here]
+        Asynchronous
+        client
+        ~name:"test_method"
+        ~type_:Ocaml_from_nvim.Blocking.(return Nil)
+        ~f:(fun ~run_in_background:_ ~client:_ -> return ());
       let%bind () =
         Nvim.set_client_info
+          [%here]
+          client
           ~version:
             { major = Some 1
             ; minor = Some 2
@@ -94,12 +140,9 @@ let%expect_test "set_client_info" =
             ; prerelease = Some "test_prerelease"
             ; commit = Some "test_commit"
             }
-          ~methods:(String.Map.of_alist_exn [ "test_method", test_method ])
           ~attributes:(String.Map.of_alist_exn [ "attr1", "val1" ])
-          ~name:"foo"
-          ~type_:`Embedder
+          ~client_type:Embedder
           ()
-        |> run_join [%here] client
       in
       let%bind client_after_setting_info = get_client_info () in
       print_s
@@ -111,16 +154,17 @@ let%expect_test "set_client_info" =
   [%expect
     {|
     ((client_before_setting_info
-      (((version
+      (((name (test-client))
+        (version
          (((major (0)) (minor ()) (patch ()) (prerelease ()) (commit ()))))
-        (methods ()) (attributes ()) (name (<uuid-omitted-in-test>))
-        (type_ (Remote)))))
+        (client_type (Remote)) (methods ()) (attributes ()))))
      (client_after_setting_info
-      (((version
+      (((name (test-client))
+        (version
          (((major (1)) (minor (2)) (patch (3)) (prerelease (test_prerelease))
            (commit (test_commit)))))
-        (methods ((test_method ((async false) (nargs ((Fixed 1)))))))
-        (attributes ((attr1 val1))) (name (foo)) (type_ (Embedder))))))|}];
+        (client_type (Embedder)) (methods ((test_method ((async (false))))))
+        (attributes ((attr1 val1)))))))|}];
   return ()
 ;;
 
@@ -128,11 +172,11 @@ let%expect_test "get_current_win, set_current_win" =
   let%bind () =
     with_client (fun client ->
       let open Deferred.Or_error.Let_syntax in
-      let%bind original_win = Nvim.get_current_win |> run_join [%here] client in
-      let%bind () = Nvim.command "split" |> run_join [%here] client in
-      let%bind win_after_split = Nvim.get_current_win |> run_join [%here] client in
-      let%bind () = Nvim.set_current_win original_win |> run_join [%here] client in
-      let%bind win_after_set = run_join [%here] client Nvim.get_current_win in
+      let%bind original_win = Nvim.get_current_win [%here] client in
+      let%bind () = Command.exec [%here] client "split" in
+      let%bind win_after_split = Nvim.get_current_win [%here] client in
+      let%bind () = Nvim.set_current_win [%here] client original_win in
+      let%bind win_after_set = Nvim.get_current_win [%here] client in
       print_s
         [%message
           (original_win : Window.t)
@@ -144,17 +188,53 @@ let%expect_test "get_current_win, set_current_win" =
   return ()
 ;;
 
+let%expect_test "get_current_tab, set_current_tab" =
+  let%bind () =
+    with_client (fun client ->
+      let open Deferred.Or_error.Let_syntax in
+      let%bind original_tab = Nvim.get_current_tab [%here] client in
+      let%bind () = Command.exec [%here] client "tabnew" in
+      let%bind tab_after_tabnew = Nvim.get_current_tab [%here] client in
+      let%bind () = Nvim.set_current_tab [%here] client original_tab in
+      let%bind tab_after_set = Nvim.get_current_tab [%here] client in
+      print_s
+        [%message
+          (original_tab : Tabpage.t)
+            (tab_after_tabnew : Tabpage.t)
+            (tab_after_set : Tabpage.t)];
+      return ())
+  in
+  [%expect "((original_tab 1) (tab_after_tabnew 2) (tab_after_set 1))"];
+  return ()
+;;
+
 let%expect_test "list_wins" =
   let%bind () =
     with_client (fun client ->
       let open Deferred.Or_error.Let_syntax in
-      let%bind () = Nvim.command "split" |> run_join [%here] client in
-      let%bind () = Nvim.command "split" |> run_join [%here] client in
-      let%bind win_list = Nvim.list_wins |> run_join [%here] client in
+      let%bind () = Command.exec [%here] client "split" in
+      let%bind () = Command.exec [%here] client "quit" in
+      let%bind () = Command.exec [%here] client "split" in
+      let%bind win_list = Nvim.list_wins [%here] client in
       print_s [%message (win_list : Window.t list)];
       return ())
   in
-  [%expect "(win_list (1002 1001 1000))"];
+  [%expect "(win_list (1002 1000))"];
+  return ()
+;;
+
+let%expect_test "list_tabs" =
+  let%bind () =
+    with_client (fun client ->
+      let open Deferred.Or_error.Let_syntax in
+      let%bind () = Command.exec [%here] client "tabnew" in
+      let%bind () = Command.exec [%here] client "quit" in
+      let%bind () = Command.exec [%here] client "tabnew" in
+      let%bind tab_list = Nvim.list_tabs [%here] client in
+      print_s [%message (tab_list : Tabpage.t list)];
+      return ())
+  in
+  [%expect "(tab_list (1 3))"];
   return ()
 ;;
 
@@ -163,15 +243,11 @@ let%expect_test "replace_termcodes" =
     with_client (fun client ->
       let open Deferred.Or_error.Let_syntax in
       let%bind escaped_keys =
-        Nvim.replace_termcodes_and_keycodes "ifoobar<ESC><Left><Left>XXX"
-        |> run_join [%here] client
+        Nvim.replace_termcodes_and_keycodes [%here] client "ifoobar<ESC><Left><Left>XXX"
       in
-      let%bind () =
-        Nvim.feedkeys (`Already_escaped escaped_keys) ~mode:"n" |> run_join [%here] client
-      in
-      let%bind lines =
-        Buffer.get_lines Current ~start:0 ~end_:(-1) ~strict_indexing:false
-        |> run_join [%here] client
+      let%bind () = Nvim.feedkeys [%here] client (`Keycodes escaped_keys) ~mode:"n" in
+      let%bind { value = lines; changedtick = _ } =
+        Buffer.get_lines [%here] client Current ~start:0 ~end_:(-1) ~strict_indexing:false
       in
       print_s [%message (lines : string list)];
       return ())
@@ -184,9 +260,9 @@ let%expect_test "get_color_by_name" =
   let%bind () =
     with_client (fun client ->
       let open Deferred.Or_error.Let_syntax in
-      let%bind color = Nvim.get_color_by_name "#f0f8ff" |> run_join [%here] client in
+      let%bind color = Nvim.get_color_by_name [%here] client "#f0f8ff" in
       print_s [%sexp (color : Color.True_color.t)];
-      let%bind color = Nvim.get_color_by_name "AliceBlue" |> run_join [%here] client in
+      let%bind color = Nvim.get_color_by_name [%here] client "AliceBlue" in
       print_s [%sexp (color : Color.True_color.t)];
       return ())
   in
@@ -200,7 +276,7 @@ let%expect_test "color_map" =
   let%bind () =
     with_client (fun client ->
       let open Deferred.Or_error.Let_syntax in
-      let%bind color_map = Nvim.get_color_map |> run_join [%here] client in
+      let%bind color_map = Nvim.get_color_map [%here] client in
       print_s [%sexp (color_map : Color.True_color.t String.Map.t)];
       return ())
   in
@@ -408,10 +484,10 @@ let%expect_test "get_hl_by_name" =
     with_client (fun client ->
       let open Deferred.Or_error.Let_syntax in
       let%bind color256 =
-        Nvim.get_hl_by_name "ErrorMsg" ~color:Color256 |> run_join [%here] client
+        Nvim.get_hl_by_name [%here] client "ErrorMsg" ~color_depth:Color256
       in
       let%bind true_color =
-        Nvim.get_hl_by_name "ErrorMsg" ~color:True_color |> run_join [%here] client
+        Nvim.get_hl_by_name [%here] client "ErrorMsg" ~color_depth:True_color
       in
       let open Color in
       print_s
@@ -421,25 +497,19 @@ let%expect_test "get_hl_by_name" =
   in
   [%expect
     {|
-    ((color256 ((fg 15) (bg 1))) (true_color ((fg #ffffff) (bg #ff0000)))) |}];
+    ((color256 ((fg (15)) (bg (1))))
+     (true_color ((fg (#ffffff)) (bg (#ff0000))))) |}];
   return ()
 ;;
 
-let%expect_test "get_hl_by_id" =
+let%expect_test "get_hl_id_by_name, get_hl_by_id" =
   let%bind () =
     with_client (fun client ->
       let open Deferred.Or_error.Let_syntax in
-      let get_hl_id =
-        wrap_viml_function
-          ~type_:Defun.Vim.(String @-> return Integer)
-          ~function_name:"hlID"
-      in
-      let%bind hl_id = get_hl_id "ErrorMsg" |> run_join [%here] client in
-      let%bind color256 =
-        Nvim.get_hl_by_id hl_id ~color:Color256 |> run_join [%here] client
-      in
+      let%bind hl_id = Nvim.get_hl_id_by_name [%here] client "ErrorMsg" in
+      let%bind color256 = Nvim.get_hl_by_id [%here] client hl_id ~color_depth:Color256 in
       let%bind true_color =
-        Nvim.get_hl_by_id hl_id ~color:True_color |> run_join [%here] client
+        Nvim.get_hl_by_id [%here] client hl_id ~color_depth:True_color
       in
       let open Color in
       print_s
@@ -449,7 +519,8 @@ let%expect_test "get_hl_by_id" =
   in
   [%expect
     {|
-    ((color256 ((fg 15) (bg 1))) (true_color ((fg #ffffff) (bg #ff0000)))) |}];
+    ((color256 ((fg (15)) (bg (1))))
+     (true_color ((fg (#ffffff)) (bg (#ff0000))))) |}];
   return ()
 ;;
 
@@ -457,17 +528,14 @@ let%expect_test "Check that all modes documented in the help are covered by [Mod
   let%bind () =
     with_client (fun client ->
       let open Deferred.Or_error.Let_syntax in
-      let%bind () = Nvim.command "h mode()" |> run_join [%here] client in
+      let%bind () = Command.exec [%here] client "help" ~args:[ "mode()" ] in
       let feedkeys keys =
-        let%bind keys =
-          Nvim.replace_termcodes_and_keycodes keys |> run_join [%here] client
-        in
-        Nvim.feedkeys (`Already_escaped keys) ~mode:"n" |> run_join [%here] client
+        let%bind keys = Nvim.replace_termcodes_and_keycodes [%here] client keys in
+        Nvim.feedkeys [%here] client (`Keycodes keys) ~mode:"n"
       in
       let%bind () = feedkeys "}jy}<C-w>np<C-w>o" in
-      let%bind lines =
-        Buffer.get_lines Current ~start:1 ~end_:(-1) ~strict_indexing:true
-        |> run_join [%here] client
+      let%bind { value = lines; changedtick = _ } =
+        Buffer.get_lines [%here] client Current ~start:1 ~end_:(-1) ~strict_indexing:true
       in
       let modes_in_help, new_modes =
         lines
@@ -526,52 +594,245 @@ let%expect_test "Check that all modes documented in the help are covered by [Mod
   return ()
 ;;
 
-let%expect_test "Get and set variables" =
+let%expect_test "Option.get, Option.set" =
+  with_client (fun client ->
+    let open Deferred.Or_error.Let_syntax in
+    let%bind () = Nvim.Option.set [%here] client Updatetime 1234 in
+    let%bind.Deferred value = Nvim.Option.get [%here] client Updatetime in
+    print_s [%sexp (value : int Or_error.t)];
+    [%expect {| (Ok 1234) |}];
+    return ())
+;;
+
+let%expect_test "Option.get, Option.set with list options" =
+  with_client (fun client ->
+    let open Deferred.Or_error.Let_syntax in
+    let%bind () = Nvim.Option.set [%here] client Breakat [ 'a'; 'b'; 'c' ] in
+    let%bind value = Nvim.Option.get [%here] client Breakat in
+    print_s [%sexp (value : char list)];
+    [%expect {| (a b c) |}];
+    let%bind () = Nvim.Option.set [%here] client Backspace [ "indent"; "nostop" ] in
+    let%bind value = Nvim.Option.get [%here] client Backspace in
+    print_s [%sexp (value : string list)];
+    [%expect {| (indent nostop) |}];
+    (* Whichwrap is particularly weird option - both a commalist and a flaglist. *)
+    let%bind () = Nvim.Option.set [%here] client Whichwrap [ 'b'; 'h'; 'l' ] in
+    let%bind value = Nvim.Option.get [%here] client Whichwrap in
+    print_s [%sexp (value : char list)];
+    [%expect {| (b h l) |}];
+    return ())
+;;
+
+let%expect_test "get_var, set_var, delete_var" =
+  Backtrace.elide := true;
   let%bind () =
     with_client (fun client ->
       let open Deferred.Or_error.Let_syntax in
-      let%map result =
-        run_join
-          [%here]
-          client
-          (let open Api_call.Or_error.Let_syntax in
-           let%map () = Nvim.set_var "foo" ~type_:String ~value:"Hello"
-           and value = Nvim.get_var "foo" ~type_:String in
-           value)
-      in
-      print_s [%message result])
+      let%bind () = Nvim.set_var [%here] client "foo" ~type_:Bool ~value:true in
+      let%bind.Deferred value = Nvim.get_var [%here] client "foo" ~type_:Bool in
+      print_s [%sexp (value : bool Or_error.t)];
+      let%bind () = Nvim.delete_var [%here] client "foo" in
+      let%bind.Deferred value = Nvim.get_var [%here] client "foo" ~type_:Bool in
+      print_s [%sexp (value : bool Or_error.t)];
+      return ())
   in
-  [%expect {| Hello |}];
+  Backtrace.elide := false;
+  [%expect
+    {|
+  (Ok true)
+  (Error
+   (("Vim returned error" "Key not found: foo" (error_type Validation))
+    (("Called from" lib/vcaml/test/bindings/test_nvim.ml:LINE:COL)))) |}];
   return ()
 ;;
 
-module _ = struct
-  module Nvim = Nvim.Fast
+let%expect_test "get_vvar, set_vvar" =
+  Backtrace.elide := true;
+  let%bind () =
+    with_client (fun client ->
+      let open Deferred.Or_error.Let_syntax in
+      let%bind.Deferred value = Nvim.get_vvar [%here] client "hlsearch" ~type_:Bool in
+      print_s [%sexp (value : bool Or_error.t)];
+      let%bind () = Nvim.set_vvar [%here] client "hlsearch" ~type_:Bool ~value:false in
+      let%bind.Deferred value = Nvim.get_vvar [%here] client "hlsearch" ~type_:Bool in
+      print_s [%sexp (value : bool Or_error.t)];
+      return ())
+  in
+  Backtrace.elide := false;
+  [%expect {|
+  (Ok true)
+  (Ok false) |}];
+  return ()
+;;
 
-  let%expect_test "[get_mode] and [input]" =
-    let%bind () =
-      with_client (fun client ->
-        let open Deferred.Or_error.Let_syntax in
-        let input keys =
-          let%bind bytes_written = Nvim.input keys |> run_join [%here] client in
-          assert (bytes_written = String.length keys);
-          let%map mode = Nvim.get_mode |> run_join [%here] client in
-          print_s [%message keys ~_:(mode : Mode.With_blocking_info.t)]
-        in
-        let%bind () = input "g" in
-        let%bind () = input "<Esc>" in
-        let%bind () = input "itest" in
-        let%bind () = input "<C-o>" in
-        let%bind () = input "<Esc>" in
-        let%bind () = input "<Esc>r" in
-        let%bind () = input "<Esc>V" in
-        let%bind () = input "<Esc><C-v>" in
-        let%bind () = input "<Esc>gR" in
-        let%bind () = input "<Esc>:" in
-        return ())
+let%expect_test "get_current_line, set_current_line, delete_current_line" =
+  with_client (fun client ->
+    let open Deferred.Or_error.Let_syntax in
+    let print_lines () =
+      Buffer.get_lines [%here] client Current ~start:0 ~end_:(-1) ~strict_indexing:true
+      >>| Buffer.With_changedtick.value
+      >>| List.iter ~f:print_endline
     in
+    let%bind () =
+      Buffer.set_lines
+        [%here]
+        client
+        Current
+        ~start:0
+        ~end_:(-1)
+        ~strict_indexing:true
+        [ "foo"; "bar" ]
+    in
+    let%bind () = print_lines () in
+    [%expect {|
+      foo
+      bar |}];
+    let%bind current_line = Nvim.get_current_line [%here] client in
+    print_endline current_line;
+    [%expect {| foo |}];
+    let%bind () = Nvim.set_current_line [%here] client "baz" in
+    let%bind () = print_lines () in
+    [%expect {|
+      baz
+      bar |}];
+    let%bind () = Nvim.delete_current_line [%here] client in
+    let%bind () = print_lines () in
+    [%expect {| bar |}];
+    return ())
+;;
+
+let%expect_test "subscribe_to_broadcast, unsubscribe_from_broadcast" =
+  with_client (fun client ->
+    let open Deferred.Or_error.Let_syntax in
+    let received_event = Mvar.create () in
+    let name = "rpc" in
+    Ocaml_from_nvim.register_request_async
+      [%here]
+      Asynchronous
+      client
+      ~name
+      ~type_:Ocaml_from_nvim.Async.(Int @-> unit)
+      ~f:(fun ~client:_ count -> Mvar.put received_event count |> Deferred.ok);
+    let broadcast n =
+      Nvim.call_function
+        [%here]
+        client
+        ~name:(`Viml "rpcnotify")
+        ~type_:Nvim.Func.(Int @-> String @-> Int @-> return Int)
+        0
+        name
+        n
+      |> Deferred.Or_error.ignore_m
+    in
+    let%bind () = broadcast 1 in
+    let%bind () = Ocaml_from_nvim.subscribe_to_broadcast [%here] client ~name in
+    let%bind () = broadcast 2 in
+    let%bind count = Mvar.take received_event |> Deferred.ok in
+    printf "%d\n" count;
+    [%expect {| 2 |}];
+    let%bind () = Ocaml_from_nvim.unsubscribe_from_broadcast [%here] client ~name in
+    let%bind () = broadcast 3 in
+    let%bind () = Ocaml_from_nvim.subscribe_to_broadcast [%here] client ~name in
+    let%bind () = broadcast 4 in
+    let%bind count = Mvar.take received_event |> Deferred.ok in
+    printf "%d\n" count;
+    [%expect {| 4 |}];
+    return ())
+;;
+
+(* This is just testing the parsing, not the semantics. *)
+let%expect_test "get_context, load_context" =
+  with_client (fun client ->
+    let open Deferred.Or_error.Let_syntax in
+    let%bind context =
+      Nvim.get_context
+        [%here]
+        client
+        (Nvim.Context_type.Set.of_list Nvim.Context_type.all)
+    in
+    print_s [%sexp (context : _ Nvim.Context_type.Map.t)];
     [%expect
       {|
+      ((Jumplist _) (Registers _) (Buffer_list _) (Global_variables _)
+       (Global_and_script_local_functions _)) |}];
+    let%bind () = Nvim.load_context [%here] client context in
+    return ())
+;;
+
+let%expect_test "get_mark, delete_mark" =
+  with_client (fun client ->
+    let open Deferred.Or_error.Let_syntax in
+    let%bind mark = Nvim.get_mark [%here] client 'A' in
+    print_s [%sexp (mark : (Buffer.t * Mark.t) option)];
+    [%expect {| () |}];
+    let%bind () = Command.exec [%here] client ~bang:true "normal" ~args:[ "mA" ] in
+    let%bind () = Command.exec [%here] client "write" ~args:[ "foo.txt" ] in
+    let%bind mark = Nvim.get_mark [%here] client 'A' in
+    print_s [%sexp (mark : (Buffer.t * Mark.t) option)];
+    [%expect {| ((1 ((sym A) (pos ((row 1) (col 0)))))) |}];
+    let%bind () = Command.exec [%here] client "enew " in
+    let%bind () = Command.exec [%here] client "bwipeout" ~range_or_count:(Count 1) in
+    let%bind mark = Nvim.get_mark [%here] client 'A' in
+    print_s [%sexp (mark : (Buffer.t * Mark.t) option)];
+    [%expect {| () |}];
+    let%bind () = Command.exec [%here] client ~bang:true "normal" ~args:[ "mA" ] in
+    let%bind mark = Nvim.get_mark [%here] client 'A' in
+    print_s [%sexp (mark : (Buffer.t * Mark.t) option)];
+    [%expect {| ((3 ((sym A) (pos ((row 1) (col 0)))))) |}];
+    let%bind () = Nvim.delete_mark [%here] client 'A' in
+    let%bind mark = Nvim.get_mark [%here] client 'A' in
+    print_s [%sexp (mark : (Buffer.t * Mark.t) option)];
+    [%expect {| () |}];
+    return ())
+;;
+
+let%expect_test "get_dynamic_info" =
+  with_client (fun client ->
+    let open Deferred.Or_error.Let_syntax in
+    let%bind info = Nvim.Option.get_dynamic_info [%here] client Autochdir in
+    print_s [%sexp (info : bool Dynamic_option_info.t)];
+    [%expect {| ((default false) (last_set ())) |}];
+    let%bind () = Nvim.Option.set [%here] client Autochdir true in
+    let%bind info = Nvim.Option.get_dynamic_info [%here] client Autochdir in
+    print_s [%sexp (info : bool Dynamic_option_info.t)];
+    [%expect {| ((default false) (last_set ((By_channel 1)))) |}];
+    return ())
+;;
+
+let%expect_test "get_display_width_of_text" =
+  with_client (fun client ->
+    let open Deferred.Or_error.Let_syntax in
+    let%bind width = Nvim.get_display_width_of_text [%here] client "foo\tbar" in
+    printf "%d\n" width;
+    [%expect {| 7 |}];
+    return ())
+;;
+
+
+let%expect_test "[get_mode] and [input]" =
+  let%bind () =
+    with_client (fun client ->
+      let open Deferred.Or_error.Let_syntax in
+      let input keys =
+        let%bind bytes_written = Nvim.Fast.input [%here] client keys in
+        assert (bytes_written = String.length keys);
+        let%map mode = Nvim.Fast.get_mode [%here] client in
+        print_s [%message keys ~_:(mode : Mode.With_blocking_info.t)]
+      in
+      let%bind () = input "g" in
+      let%bind () = input "<Esc>" in
+      let%bind () = input "itest" in
+      let%bind () = input "<C-o>" in
+      let%bind () = input "<Esc>" in
+      let%bind () = input "<Esc>r" in
+      let%bind () = input "<Esc>V" in
+      let%bind () = input "<Esc><C-v>" in
+      let%bind () = input "<Esc>gR" in
+      let%bind () = input "<Esc>:" in
+      return ())
+  in
+  [%expect
+    {|
       (g ((mode Normal) (blocking true)))
       (<Esc> ((mode Normal) (blocking false)))
       (itest ((mode Insert) (blocking false)))
@@ -582,93 +843,294 @@ module _ = struct
       (<Esc><C-v> ((mode Visual_blockwise) (blocking false)))
       (<Esc>gR ((mode Virtual_replace) (blocking false)))
       (<Esc>: ((mode Command_line_editing) (blocking false))) |}];
-    return ()
-  ;;
+  return ()
+;;
 
-  let%expect_test "[paste]" =
-    let%bind () =
-      with_client (fun client ->
-        let open Deferred.Or_error.Let_syntax in
-        let%bind () = Nvim.paste [ "hello"; "world!" ] |> run_join [%here] client in
-        let%bind lines =
-          Buffer.get_lines Current ~start:0 ~end_:(-1) ~strict_indexing:false
-          |> run_join [%here] client
-        in
-        let%bind cursor_pos = Window.get_cursor Current |> run_join [%here] client in
-        print_s [%message (lines : string list)];
-        print_s [%message (cursor_pos : Position.One_indexed_row.t)];
-        return ())
-    in
-    [%expect {|
+let%expect_test "[paste]" =
+  let%bind () =
+    with_client (fun client ->
+      let open Deferred.Or_error.Let_syntax in
+      let%bind () = Nvim.paste [%here] client [ "hello"; "world!" ] in
+      let%bind { value = lines; changedtick = _ } =
+        Buffer.get_lines [%here] client Current ~start:0 ~end_:(-1) ~strict_indexing:false
+      in
+      let%bind cursor_pos = Window.get_cursor [%here] client Current in
+      print_s [%message (lines : string list)];
+      print_s [%message (cursor_pos : Position.One_indexed_row.t)];
+      return ())
+  in
+  [%expect {|
       (lines (hello world!))
       (cursor_pos ((row 2) (col 5))) |}];
-    return ()
-  ;;
+  return ()
+;;
 
-  let%expect_test "[paste_stream]" =
-    let%bind () =
-      with_client (fun client ->
-        let open Deferred.Or_error.Let_syntax in
-        let writer, flushed = Nvim.paste_stream [%here] client in
-        let%bind () = Pipe.write writer "hello\n" |> Deferred.ok in
-        let%bind () = Pipe.write writer "world!" |> Deferred.ok in
-        Pipe.close writer;
-        let%bind () = flushed in
-        let%bind lines =
-          Buffer.get_lines Current ~start:0 ~end_:(-1) ~strict_indexing:false
-          |> run_join [%here] client
-        in
-        let%bind cursor_pos = Window.get_cursor Current |> run_join [%here] client in
-        print_s [%message (lines : string list)];
-        print_s [%message (cursor_pos : Position.One_indexed_row.t)];
-        return ())
-    in
-    [%expect {|
+let%expect_test "[paste_stream]" =
+  let%bind () =
+    with_client (fun client ->
+      let open Deferred.Or_error.Let_syntax in
+      let writer, flushed = Nvim.paste_stream [%here] client in
+      let%bind () = Pipe.write writer "hello\n" |> Deferred.ok in
+      let%bind () = Pipe.write writer "world!" |> Deferred.ok in
+      Pipe.close writer;
+      let%bind () = flushed in
+      let%bind { value = lines; changedtick = _ } =
+        Buffer.get_lines [%here] client Current ~start:0 ~end_:(-1) ~strict_indexing:false
+      in
+      let%bind cursor_pos = Window.get_cursor [%here] client Current in
+      print_s [%message (lines : string list)];
+      print_s [%message (cursor_pos : Position.One_indexed_row.t)];
+      return ())
+  in
+  [%expect {|
       (lines (hello world!))
       (cursor_pos ((row 2) (col 5))) |}];
-    return ()
-  ;;
+  return ()
+;;
 
-  (* This behavior is perhaps surprising. *)
-  let%expect_test "API calls work while a [paste_stream] is open" =
-    let%bind () =
-      with_client (fun client ->
-        let open Deferred.Or_error.Let_syntax in
-        let%bind () =
-          Vcaml.Nvim.Untested.set_option "hidden" ~type_:Boolean ~value:true
-          |> run_join [%here] client
+(* This behavior is perhaps surprising. *)
+let%expect_test "API calls work while a [paste_stream] is open" =
+  let%bind () =
+    with_client (fun client ->
+      let open Deferred.Or_error.Let_syntax in
+      let%bind () = Nvim.Option.set [%here] client Hidden true in
+      let get_lines () =
+        let%map { value = lines; changedtick = _ } =
+          Buffer.get_lines
+            [%here]
+            client
+            Current
+            ~start:0
+            ~end_:(-1)
+            ~strict_indexing:false
         in
-        let get_lines () =
-          Buffer.get_lines Current ~start:0 ~end_:(-1) ~strict_indexing:false
-          |> run_join [%here] client
-        in
-        let switch_buffers buffer =
-          let%map.Deferred result =
-            Vcaml.Nvim.set_current_buf buffer |> run_join [%here] client
-          in
-          match result with
-          | Ok () -> print_s [%message "Switched buffers!" (buffer : Buffer.t)]
-          | Error error -> print_s [%sexp (error : Error.t)]
-        in
-        let writer, flushed = Nvim.paste_stream [%here] client in
-        let%bind () = Pipe.write writer "hello\n" |> Deferred.ok in
-        let%bind lines = get_lines () in
-        print_s [%sexp (lines : string list)];
-        let%bind alt_buf =
-          Buffer.create ~listed:true ~scratch:false |> run_join [%here] client
-        in
-        let%bind () = switch_buffers alt_buf |> Deferred.ok in
-        let%bind () = Pipe.write writer "world!" |> Deferred.ok in
-        Pipe.close writer;
-        let%bind () = flushed in
-        let%bind lines = get_lines () in
-        print_s [%sexp (lines : string list)];
-        return ())
-    in
-    [%expect {|
+        lines
+      in
+      let switch_buffers buffer =
+        let%map.Deferred result = Nvim.set_current_buf [%here] client buffer in
+        match result with
+        | Ok () -> print_s [%message "Switched buffers!" (buffer : Buffer.t)]
+        | Error error -> print_s [%sexp (error : Error.t)]
+      in
+      let writer, flushed = Nvim.paste_stream [%here] client in
+      let%bind () = Pipe.write writer "hello\n" |> Deferred.ok in
+      let%bind lines = get_lines () in
+      print_s [%sexp (lines : string list)];
+      let%bind alt_buf = Buffer.create [%here] client ~listed:true ~scratch:false in
+      let%bind () = switch_buffers alt_buf |> Deferred.ok in
+      let%bind () = Pipe.write writer "world!" |> Deferred.ok in
+      Pipe.close writer;
+      let%bind () = flushed in
+      let%bind lines = get_lines () in
+      print_s [%sexp (lines : string list)];
+      return ())
+  in
+  [%expect {|
       (hello "")
       ("Switched buffers!" (buffer 2))
       (world!) |}];
-    return ()
-  ;;
-end
+  return ()
+;;
+
+let%expect_test "put" =
+  with_ui_client (fun client ui ->
+    let open Deferred.Or_error.Let_syntax in
+    let%bind () =
+      Window.Option.set_for_current_buffer_in_window [%here] client Current Number true
+    in
+    let put_and_print ~text_mode ~where ~place_cursor contents =
+      let%bind () = Nvim.put [%here] client ~text_mode ~where ~place_cursor contents in
+      let%bind screen = get_screen_contents ui in
+      let%bind cursor = Window.get_cursor [%here] client Current in
+      print_s [%message (cursor : Position.One_indexed_row.t)];
+      print_endline screen;
+      return ()
+    in
+    let%bind () =
+      put_and_print
+        ~text_mode:Linewise
+        ~where:`Before_cursor
+        ~place_cursor:`At_end_of_text
+        [ "This is"; "editor" ]
+    in
+    [%expect
+      {|
+      (cursor ((row 3) (col 0)))
+      ╭────────────────────────────────────────────────────────────────────────────────╮
+      │  1 This is                                                                     │
+      │  2 editor                                                                      │
+      │  3                                                                             │
+      │~                                                                               │
+      │~                                                                               │
+      │~                                                                               │
+      │~                                                                               │
+      │~                                                                               │
+      │~                                                                               │
+      │~                                                                               │
+      │~                                                                               │
+      │~                                                                               │
+      │~                                                                               │
+      │~                                                                               │
+      │~                                                                               │
+      │~                                                                               │
+      │~                                                                               │
+      │~                                                                               │
+      │~                                                                               │
+      │~                                                                               │
+      │~                                                                               │
+      │~                                                                               │
+      │~                                                                               │
+      │~                                                                               │
+      │~                                                                               │
+      │~                                                                               │
+      │~                                                                               │
+      │~                                                                               │
+      │[No Name] [+]                                                 3,0-1          All│
+      │                                                                                │
+      ╰────────────────────────────────────────────────────────────────────────────────╯ |}];
+    let%bind () = Command.exec [%here] client ~bang:true "normal" ~args:[ "k" ] in
+    let%bind () =
+      put_and_print
+        ~text_mode:Charwise
+        ~where:`Before_cursor
+        ~place_cursor:`At_start_of_text
+        [ "the best"; "text " ]
+    in
+    [%expect
+      {|
+      (cursor ((row 2) (col 0)))
+      ╭────────────────────────────────────────────────────────────────────────────────╮
+      │  1 This is                                                                     │
+      │  2 the best                                                                    │
+      │  3 text editor                                                                 │
+      │  4                                                                             │
+      │~                                                                               │
+      │~                                                                               │
+      │~                                                                               │
+      │~                                                                               │
+      │~                                                                               │
+      │~                                                                               │
+      │~                                                                               │
+      │~                                                                               │
+      │~                                                                               │
+      │~                                                                               │
+      │~                                                                               │
+      │~                                                                               │
+      │~                                                                               │
+      │~                                                                               │
+      │~                                                                               │
+      │~                                                                               │
+      │~                                                                               │
+      │~                                                                               │
+      │~                                                                               │
+      │~                                                                               │
+      │~                                                                               │
+      │~                                                                               │
+      │~                                                                               │
+      │~                                                                               │
+      │[No Name] [+]                                                 2,1            All│
+      │                                                                                │
+      ╰────────────────────────────────────────────────────────────────────────────────╯ |}];
+    return ())
+;;
+
+let%expect_test "eval_tabline, input_mouse" =
+  with_client (fun client ->
+    let open Deferred.Or_error.Let_syntax in
+    let%bind () = Command.exec [%here] client "tabnew" in
+    let%bind () = Command.exec [%here] client "tabnew" in
+    let%bind () = Command.exec [%here] client "tabnext" ~range_or_count:(Count 2) in
+    let%bind tabline =
+      let%bind tabs = Nvim.list_tabs [%here] client in
+      let%bind current_tab = Nvim.get_current_tab [%here] client in
+      tabs
+      |> List.mapi ~f:(fun idx tab ->
+        let hlgroup =
+          match Tabpage.equal tab current_tab with
+          | true -> "TabLineSel"
+          | false -> "TabLine"
+        in
+        [%string "%%{idx#Int}T%#%{hlgroup}#tab%{idx#Int}"])
+      |> String.concat ~sep:"%#TabLineFill# "
+      |> Nvim.Fast.eval_tabline [%here] client ~include_highlights:true
+    in
+    print_s [%sexp (tabline : Nvim.Tabline.t)];
+    [%expect
+      {|
+        ((text "tab0 tab1 tab2") (display_width 14)
+         (highlights
+          ((((text tab0) (hl_group (TabLine))) ((text " ") (hl_group (TabLineFill)))
+            ((text tab1) (hl_group (TabLineSel)))
+            ((text " ") (hl_group (TabLineFill))) ((text tab2) (hl_group (TabLine))))))) |}];
+    let%bind current_tab = Nvim.get_current_tab [%here] client in
+    print_s [%sexp (current_tab : Tabpage.t)];
+    [%expect {| 2 |}];
+    let%bind () = Nvim.Fast.input_mouse [%here] client (Press Left) ~row:0 ~col:0 in
+    let%bind current_tab = Nvim.get_current_tab [%here] client in
+    print_s [%sexp (current_tab : Tabpage.t)];
+    [%expect {| 1 |}];
+    return ())
+;;
+
+let%expect_test "set_current_dir" =
+  with_client (fun client ->
+    let open Deferred.Or_error.Let_syntax in
+    let%bind () = Unix.mkdir ~p:() "global/tab/window" |> Deferred.ok in
+    let%bind () = Command.exec [%here] client "cd" ~args:[ "global" ] in
+    let%bind () = Command.exec [%here] client "tcd" ~args:[ "tab" ] in
+    let%bind () = Command.exec [%here] client "lcd" ~args:[ "window" ] in
+    let getcwd here client =
+      Nvim.call_function
+        ~name:(`Viml "call")
+        ~type_:Nvim.Func.(String @-> Array Int @-> return String)
+        here
+        client
+        "getcwd"
+    in
+    let print_dirs () =
+      let%bind local_dir = getcwd [%here] client [] in
+      let%bind tab_dir = getcwd [%here] client [ -1 ] in
+      let%bind global_dir = getcwd [%here] client [ -1; -1 ] in
+      print_s [%message (local_dir : string) (tab_dir : string) (global_dir : string)];
+      return ()
+    in
+    let%bind () = print_dirs () in
+    [%expect
+      {|
+      ((local_dir ${TMPDIR}/global/tab/window) (tab_dir ${TMPDIR}/global/tab)
+       (global_dir ${TMPDIR}/global)) |}];
+    let%bind () =
+      let%bind cwd = Unix.getcwd () |> Deferred.ok in
+      Nvim.set_current_dir [%here] client cwd
+    in
+    let%bind () = print_dirs () in
+    [%expect
+      {|
+      ((local_dir ${TMPDIR}) (tab_dir ${TMPDIR}) (global_dir ${TMPDIR})) |}];
+    return ())
+;;
+
+let%expect_test "find_runtime_file_matching, all_runtime_files_matching" =
+  with_client (fun client ->
+    let open Deferred.Or_error.Let_syntax in
+    let%bind runtime =
+      Nvim.eval_viml_expression [%here] client "$VIMRUNTIME" ~result_type:String
+    in
+    let chop_runtime = String.chop_prefix_if_exists ~prefix:(runtime ^/ "") in
+    let%bind first_runtime_file_matching =
+      Nvim.Fast.find_runtime_file_matching [%here] client ~pattern:"**/query.lua"
+      >>| Option.map ~f:chop_runtime
+    in
+    print_s [%sexp (first_runtime_file_matching : string option)];
+    [%expect {| (ftplugin/query.lua) |}];
+    let%bind runtime_files =
+      Nvim.Fast.all_runtime_files_matching [%here] client ~pattern:"**/query.lua"
+      >>| List.map ~f:chop_runtime
+    in
+    print_s [%sexp (runtime_files : string list)];
+    [%expect
+      {|
+      (ftplugin/query.lua indent/query.lua lua/vim/treesitter/query.lua
+       syntax/query.lua) |}];
+    return ())
+;;

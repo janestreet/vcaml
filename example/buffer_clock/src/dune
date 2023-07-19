@@ -1,2 +1,0 @@
-(library (name vcaml_buffer_clock) (libraries async core vcaml vcaml_plugin)
- (preprocess (pps ppx_jane)))

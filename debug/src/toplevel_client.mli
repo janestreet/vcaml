@@ -6,7 +6,7 @@ type t
     problems in the VCaml library by seeing if the problem is in VCaml or Neovim. *)
 
 (** Open a connection to a running Neovim instance. You can find the name by checking
-    [v:servername] or $NVIM_LISTEN_ADDRESS. *)
+    [v:servername] or $NVIM. *)
 val open_ : string -> t
 
 (** Get the channel for this connection. Once you have this you can issue [rpcrequest]

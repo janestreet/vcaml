@@ -2,11 +2,11 @@ open Core
 open Msgpack
 
 let%expect_test "basic array" =
-  let msg = Array [ Integer 5; String "abc"; Boolean true ] in
+  let msg = Array [ Int 5; String "abc"; Bool true ] in
   let serialized = string_of_t_exn msg in
   let msg' = t_of_string_exn serialized in
   printf !"%{sexp:t}" msg';
-  [%expect {| (Array ((Integer 5) (String abc) (Boolean true))) |}]
+  [%expect {| (Array ((Int 5) (String abc) (Bool true))) |}]
 ;;
 
 let%expect_test "big integer" =
@@ -26,11 +26,11 @@ let%expect_test "big integer 2" =
 ;;
 
 let%expect_test "extension" =
-  let msg = Extension { type_id = -48; data = Bytes.of_string "W\xC1I" } in
+  let msg = Ext { type_id = -48; data = Bytes.of_string "W\xC1I" } in
   let serialized = string_of_t_exn msg in
   let msg' = t_of_string_exn serialized in
   printf !"%{sexp:t}" msg';
-  [%expect {| (Extension ((type_id -48) (data "W\193I"))) |}]
+  [%expect {| (Ext ((type_id -48) (data "W\193I"))) |}]
 ;;
 
 let%expect_test "strings" =

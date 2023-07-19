@@ -1,3 +1,0 @@
-(library (name vcaml_buffer_clock_test)
- (libraries async core vcaml vcaml_test_helpers vcaml_buffer_clock)
- (preprocess (pps ppx_jane)))

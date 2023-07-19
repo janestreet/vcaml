@@ -19,8 +19,8 @@ let with_header_byte c next =
 ;;
 
 let nil = with_header_byte Constants.nil (return Nil)
-let true_ = with_header_byte Constants.true_ (return (Boolean true))
-let false_ = with_header_byte Constants.false_ (return (Boolean false))
+let true_ = with_header_byte Constants.true_ (return (Bool true))
+let false_ = with_header_byte Constants.false_ (return (Bool false))
 let bool = true_ <|> false_
 
 (* See [Constants] for why these are separate functions.
@@ -82,7 +82,7 @@ let uint32 =
 
 let uint64 =
   let%map v = with_header_byte Constants.uint64_header BE.any_int64 in
-  UInt64 v
+  Uint64 v
 ;;
 
 let int8 = with_header_byte Constants.int8_header any_int8
@@ -105,7 +105,7 @@ let int64 =
 
 let int =
   let%map v = choice [ fixint; uint8; uint16; uint32; int8; int16; int32 ] in
-  Integer v
+  Int v
 ;;
 
 let float = with_header_byte Constants.float32_header BE.any_float
@@ -113,7 +113,7 @@ let double = with_header_byte Constants.float64_header BE.any_double
 
 let floating =
   let%map v = float <|> double in
-  Floating v
+  Float v
 ;;
 
 let fixstr =
@@ -277,7 +277,7 @@ let ext =
   let%map v =
     choice [ fixext1; fixext2; fixext4; fixext8; fixext16; ext8; ext16; ext32 ]
   in
-  Extension v
+  Ext v
 ;;
 
 let atom = choice [ nil; bool; int; floating; str; bin; ext; uint64; int64 ]

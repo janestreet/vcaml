@@ -1,7 +1,9 @@
-(library (name vcaml_semantics_test) (public_name vcaml.semantics_test)
- (libraries async core expect_test_helpers_async
-  core_unix.unix_pseudo_terminal vcaml vcaml_test_helpers)
- (preprocessor_deps config_ext.h) (preprocess (pps ppx_jane ppx_optcomp)))
+(library (name vcaml_semantics_test) (public_name vcaml.test.semantics)
+ (libraries async async.async_quickcheck core expect_test_helpers_async
+  core_kernel.reversed_list base_trie core_unix.unix_pseudo_terminal vcaml
+  vcaml.test.helpers core_kernel.vec)
+ (preprocessor_deps config_ext.h) (preprocess (pps ppx_jane ppx_optcomp))
+ (flags :standard -alert -vcaml_private) (inline_tests))
 
 (rule (targets config_ext.h) (deps)
  (action (bash "cp %{lib:core_unix.unix_pseudo_terminal:config_ext.h} .")))

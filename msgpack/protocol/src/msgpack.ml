@@ -60,10 +60,10 @@ let pp =
   fun ?pp_ext formatter t ->
     let rec pp ~break_lists formatter = function
       | Nil -> pp_print_string formatter "nil"
-      | Integer x -> Int.pp formatter x
-      | Int64 x | UInt64 x -> Int64.pp formatter x
-      | Boolean x -> Bool.pp formatter x
-      | Floating x -> Float.pp formatter x
+      | Int x -> Int.pp formatter x
+      | Int64 x | Uint64 x -> Int64.pp formatter x
+      | Bool x -> Bool.pp formatter x
+      | Float x -> Float.pp formatter x
       | String x -> String.pp formatter x
       | Binary x -> Bytes.pp formatter x
       | Array xs ->
@@ -75,7 +75,7 @@ let pp =
           formatter
           xs
       | Map xs -> pp_print_map ~break_lists ~pp_key:pp ~pp_value:pp formatter xs
-      | Extension ext ->
+      | Ext ext ->
         (match pp_ext with
          | None -> default_pp_ext ~break_lists formatter ext
          | Some pp_ext -> pp_ext formatter ext)
@@ -85,7 +85,7 @@ let pp =
         ~pp_key:pp
         ~pp_value:pp
         formatter
-        [ String "type", Integer type_id; String "data", String (Bytes.to_string data) ]
+        [ String "type", Int type_id; String "data", String (Bytes.to_string data) ]
     in
     pp ~break_lists:true formatter t
 ;;
@@ -105,15 +105,15 @@ let%expect_test "Test the pretty printer" =
   let test_array len = Array (List.init len ~f:(fun _ -> String "test")) in
   pp Nil;
   [%expect {| nil |}];
-  pp (Integer 0);
+  pp (Int 0);
   [%expect {| 0 |}];
   pp (Int64 0L);
   [%expect {| 0 |}];
-  pp (UInt64 0L);
+  pp (Uint64 0L);
   [%expect {| 0 |}];
-  pp (Boolean false);
+  pp (Bool false);
   [%expect {| false |}];
-  pp (Floating 0.0);
+  pp (Float 0.0);
   [%expect {| 0. |}];
   pp (String "test");
   [%expect {| "test" |}];
@@ -141,41 +141,39 @@ let%expect_test "Test the pretty printer" =
     ] |}];
   pp (Map []);
   [%expect {| {} |}];
-  pp (Map [ test_array 12, Boolean false; String "hello", Integer 10 ]);
+  pp (Map [ test_array 12, Bool false; String "hello", Int 10 ]);
   [%expect
     {|
     { [ "test", "test", "test", "test", "test", "test", "test", "test", "test", "test", "test", "test" ]:
           false
     , "hello": 10
     } |}];
-  pp (Extension { type_id = 0; data = Bytes.of_string "\x41" });
+  pp (Ext { type_id = 0; data = Bytes.of_string "\x41" });
   [%expect {| { "type": 0, "data": "A" } |}];
-  pp ~pp_ext (Extension { type_id = 0; data = Bytes.of_string "\x41" });
+  pp ~pp_ext (Ext { type_id = 0; data = Bytes.of_string "\x41" });
   [%expect {| 65 |}];
   (* Now a practical example... *)
   Array
-    [ Integer 0
-    ; Integer 1
+    [ Int 0
+    ; Int 1
     ; String "nvim_call_atomic"
     ; Array
         [ Array [ String "nvim_command"; Array [ String "echo 'hi'" ] ]
         ; Array
-            [ String "nvim_get_commands"
-            ; Array [ Map [ String "builtin", Boolean false ] ]
-            ]
+            [ String "nvim_get_commands"; Array [ Map [ String "builtin", Bool false ] ] ]
         ; Array
             [ String "nvim_open_win"
             ; Array
-                [ Extension { type_id = 0; data = Bytes.of_string "\x01" }
-                ; Boolean false
+                [ Ext { type_id = 0; data = Bytes.of_string "\x01" }
+                ; Bool false
                 ; Map
                     [ String "relative", String "editor"
-                    ; String "width", Integer 30
-                    ; String "height", Integer 20
-                    ; String "zindex", Integer 150
+                    ; String "width", Int 30
+                    ; String "height", Int 20
+                    ; String "zindex", Int 150
                     ; String "style", String "minimal"
                     ; String "border", String "rounded"
-                    ; String "noautocmd", Boolean true
+                    ; String "noautocmd", Bool true
                     ]
                 ]
             ]

@@ -55,6 +55,6 @@ let%test_unit "32-bit binary" =
 
 let%test_unit "fix array" =
   [%test_result: string]
-    (string_of_t_exn (Array [ Integer 5; String "abc"; Boolean true ]))
+    (string_of_t_exn (Array [ Int 5; String "abc"; Bool true ]))
     ~expect:"\x93\x05\xa3\x61\x62\x63\xc3"
 ;;

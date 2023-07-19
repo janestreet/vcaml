@@ -9,9 +9,14 @@ license: "MIT"
 build: [
   ["dune" "build" "-p" name "-j" jobs]
 ]
+run-test: [
+  ["./run-tests-in-opam.sh" name jobs]
+]
 depends: [
   "ocaml" {>= "4.14.0"}
   "async"
+  "async_unix"
+  "base_trie"
   "core"
   "core_kernel"
   "core_unix"
@@ -25,12 +30,23 @@ depends: [
   "angstrom"                   {>= "0.15.0"}
   "angstrom-async"             {>= "0.15.0"}
   "dune"                       {>= "2.0.0"}
-  "faraday"
+  "faraday"                    {>= "0.8.1"}
 ]
 available: arch != "arm32" & arch != "x86_32"
 synopsis: "OCaml bindings for the Neovim API"
 description: "
-VCaml provides OCaml bindings for Neovim's and models some of Neovim's
-more tricky semantics so plugin authors do not need to consider them when writing plugins.
-Plugins communicate with Neovim remotely over Msgpack RPC (see `:h api` for details).
+
+VCaml provides OCaml bindings for Neovim and models some of Neovim's trickier
+semantics so plugin authors do not need to consider them when writing plugins.
+Plugins communicate with Neovim remotely over Msgpack RPC (see `:h api` for
+details).
+"
+post-messages: "
+
+This version of VCaml is built and tested against Neovim 0.9.1. Because Neovim
+is an evolving project and VCaml does not provide versionining guarantees,
+expect the degree of breakage to increase the further away your version of
+Neovim is from the tested version. The best way to ensure that nothing will
+break unexpectedly for versions of Neovim you wish to support is to write tests
+for your plugin.
 "

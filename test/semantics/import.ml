@@ -2,6 +2,7 @@ open Core
 open Async
 open Vcaml
 
+
 let with_process_cleanup ~name pid ~f =
   let reap = ref (`Need_to_reap `Impatient) in
   let print_and_return exit_or_signal =
@@ -46,21 +47,30 @@ let spin_until_nvim_creates_socket_file pid ~socket =
    about to enter a state after which it will not be able to communicate (e.g., because
    it is exiting or because it will be uninterruptible for some reason). This function
    lets our tests wait for Neovim to reach this point before proceeding. *)
-let writefile file ~contents =
-  Nvim.eval (sprintf "writefile(['%s'], '%s', 's')" contents file) ~result_type:Integer
-  |> Api_call.map ~f:(function
-    | Ok 0 -> Ok ()
-    | Ok -1 ->
-      Or_error.error_s
-        [%message "[writefile]: write failed" (file : string) (contents : string)]
-    | Ok error_code ->
-      Or_error.error_s
-        [%message
-          "[writefile]: unknown error code"
-            (error_code : int)
-            (file : string)
-            (contents : string)]
-    | Error _ as error -> error)
+let writefile here client file ~contents ~then_do =
+  let open Expert in
+  let writefile =
+    Atomic.T
+      (Nvim_internal.nvim_eval
+         ~expr:(sprintf "writefile(['%s'], '%s', 's')" contents file))
+  in
+  match%map Atomic.run here client (writefile :: then_do) with
+  | Error error -> Error (Atomic.Error.to_error error)
+  | Ok (Int result :: _) ->
+    (match result with
+     | 0 -> Ok ()
+     | -1 ->
+       Or_error.error_s
+         [%message "[writefile]: write failed" (file : string) (contents : string)]
+     | error_code ->
+       Or_error.error_s
+         [%message
+           "[writefile]: unknown error code"
+             (error_code : int)
+             (file : string)
+             (contents : string)])
+  | Ok response ->
+    Error (Atomic.Error.to_error (Unexpected_format (Array response), here))
 ;;
 
 (* This function lets us attempt to exit Neovim cleanly. It uses [writefile] to confirm
@@ -71,13 +81,18 @@ let attempt_to_quit ~tmp_dir ~client =
   let fifo = tmp_dir ^/ "quit" in
   let%bind () = Unix.mkfifo fifo in
   don't_wait_for
-    (run_join
+    (writefile
        [%here]
        client
-       ([ writefile fifo ~contents:":q"; Nvim.command "quit" ]
-        |> Api_call.Or_error.all_unit)
-     |> Deferred.Or_error.ignore_m
-     |> Deferred.Or_error.ok_exn);
+       fifo
+       ~contents:":q"
+       ~then_do:
+         [ T
+             (Private.Nvim_internal.nvim_cmd
+                ~cmd:(String.Map.singleton "cmd" (Msgpack.String "quit"))
+                ~opts:String.Map.empty)
+         ]
+     |> Deferred.ignore_m);
   Deferred.any
     [ Clock_ns.after Time_ns.Span.second
     ; (let%bind reader = Reader.open_file fifo in

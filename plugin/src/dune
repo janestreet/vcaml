@@ -1,2 +1,3 @@
 (library (name vcaml_plugin) (public_name vcaml.plugin)
- (libraries async core vcaml) (preprocess (pps ppx_jane)))
+ (libraries async core vcaml vcaml.test.helpers)
+ (flags :standard -alert -vcaml_private) (preprocess (pps ppx_jane)))

@@ -1,0 +1,3 @@
+(executables (names main)
+ (libraries core_unix.command_unix core vcaml_hangman)
+ (preprocess (pps ppx_jane)) (promote (until-clean)))

@@ -58,25 +58,25 @@ let%test "32-bit binary" =
 ;;
 
 let%test "fix array" =
-  let s = Array [ Integer 5; String "abc"; Boolean true ] in
+  let s = Array [ Int 5; String "abc"; Bool true ] in
   let s' = t_of_string_exn "\x93\x05\xa3\x61\x62\x63\xc3" in
   Msgpack.equal s s'
 ;;
 
 let%test "16-bit array1" =
-  let s = Array (List.init 16 ~f:(fun _ -> Integer 5)) in
+  let s = Array (List.init 16 ~f:(fun _ -> Int 5)) in
   let s' = "\xdc\x00\x10" ^ String.init ~f:(fun _ -> '\x05') 16 |> t_of_string_exn in
   Msgpack.equal s s'
 ;;
 
 let%test "16-bit array2" =
-  let s = Array (List.init 65535 ~f:(fun _ -> Integer 5)) in
+  let s = Array (List.init 65535 ~f:(fun _ -> Int 5)) in
   let s' = "\xdc\xff\xff" ^ String.init ~f:(fun _ -> '\x05') 65535 |> t_of_string_exn in
   Msgpack.equal s s'
 ;;
 
 let%test "32-bit array" =
-  let s = Array (List.init 65536 ~f:(fun _ -> Integer 5)) in
+  let s = Array (List.init 65536 ~f:(fun _ -> Int 5)) in
   let s' =
     "\xdd\x00\x01\x00\x00" ^ String.init ~f:(fun _ -> '\x05') 65536 |> t_of_string_exn
   in

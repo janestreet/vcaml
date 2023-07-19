@@ -1,2 +1,0 @@
-(library (name mli_plugin) (libraries async core vcaml vcaml_plugin)
- (preprocess (pps ppx_jane)))

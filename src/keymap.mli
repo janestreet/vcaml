@@ -1,4 +1,5 @@
 open Core
+open Async
 
 module Mode : sig
   (** Map modes. For more information see `:h map-modes`. In the documentation here and in
@@ -28,34 +29,38 @@ end
 
 (** A representation of a keybinding. *)
 type t =
-  { description : string option
-  ; lhs : string
-  ; rhs : string
+  { lhs : string
   ; mode : Mode.t
   ; scope : [ `Global | `Buffer_local of Nvim_internal.Buffer.t ]
-  ; expr : bool
+  ; description : string option
+  ; rhs : string
+  ; expr : [ `Replace_keycodes of bool ] option (** See [:h map-<expr>] *)
   ; nowait : bool
   ; silent : bool
   ; recursive : bool
-  ; sid : int
+  ; script_id : int
   }
 [@@deriving sexp_of]
 
-(* Queries keymappings for a given scope and mode. For simple modes, returns all
-   mappings that apply in that mode. For complex modes, returns all mappings that apply
-   in any of the constituent modes. Queries for [Language] mode return only language
-   mappings. *)
+(** Queries keymappings for a given scope and mode. For simple modes, returns all
+    mappings that apply in that mode. For complex modes, returns all mappings that apply
+    in any of the constituent modes. Queries for [Language] mode return only language
+    mappings. *)
 val get
-  :  scope:[ `Global | `Buffer_local of Nvim_internal.Buffer.Or_current.t ]
+  :  Source_code_position.t
+  -> _ Client.t
+  -> scope:[ `Global | `Buffer_local of Nvim_internal.Buffer.Or_current.t ]
   -> mode:Mode.t
-  -> t list Api_call.Or_error.t
+  -> t list Deferred.Or_error.t
 
 (** Add a keymapping. Only use [recursive] if you really know what you are doing. Also
     note that [nowait] is only meaningful for buffer-local mappings; on global mappings it
     has no effect (see :h map-nowait). *)
 val set
-  :  ?recursive:bool (** default: [false]. *)
-  -> ?expr:bool (** default: [false] *)
+  :  Source_code_position.t
+  -> _ Client.t
+  -> ?recursive:bool (** default: [false]. *)
+  -> ?expr:[ `Replace_keycodes of bool ]
   -> ?unique:bool (** default: [false] *)
   -> ?nowait:bool (** default: [false] *)
   -> ?silent:bool (** default: [false] *)
@@ -65,11 +70,13 @@ val set
   -> rhs:string
   -> mode:Mode.t
   -> unit
-  -> unit Api_call.Or_error.t
+  -> unit Deferred.Or_error.t
 
 (** Unset a keymapping. *)
 val unset
-  :  scope:[ `Global | `Buffer_local of Nvim_internal.Buffer.Or_current.t ]
+  :  Source_code_position.t
+  -> _ Client.t
+  -> scope:[ `Global | `Buffer_local of Nvim_internal.Buffer.Or_current.t ]
   -> lhs:string
   -> mode:Mode.t
-  -> unit Api_call.Or_error.t
+  -> unit Deferred.Or_error.t

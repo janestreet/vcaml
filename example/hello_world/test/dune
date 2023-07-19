@@ -1,3 +1,0 @@
-(library (name vcaml_hello_world_test)
- (libraries async core vcaml vcaml_test_helpers vcaml_hello_world)
- (preprocess (pps ppx_jane)))

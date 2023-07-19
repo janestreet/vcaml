@@ -1,4 +1,5 @@
 open Core
+open Async
 
 
 (** A [Namespace.t] allows you to group virtual text and highlights together so that they
@@ -12,10 +13,15 @@ type t = private
 include Comparable.S_plain with type t := t
 include Hashable.S_plain with type t := t
 
-module Untested : sig
-  (** If [name] is given and a namespace with [name] already exists, that namespace is
-      returned. Otherwise a new namespace is created. *)
-  val create : ?name:string -> unit -> t Api_call.Or_error.t
+(** If [name] is given and a namespace with [name] already exists, that namespace is
+    returned. Otherwise a new namespace is created. If [name] is omitted, the namespace
+    will be anonymous. *)
+val create
+  :  Source_code_position.t
+  -> _ Client.t
+  -> ?name:string
+  -> unit
+  -> t Deferred.Or_error.t
 
-  val all_named : t String.Map.t Api_call.Or_error.t
-end
+(** Retrieve a mapping of all named namespaces. *)
+val all_named : Source_code_position.t -> _ Client.t -> t String.Map.t Deferred.Or_error.t

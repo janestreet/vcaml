@@ -15,6 +15,7 @@ type t =
   | Normal_using_i_ctrl_o_in_insert_mode
   | Normal_using_i_ctrl_o_in_replace_mode
   | Normal_using_i_ctrl_o_in_virtual_replace_mode
+  | Normal_using_t_ctrl_slash_ctrl_o_in_terminal_mode
   | Operator_pending
   | Operator_pending_forced_blockwise
   | Operator_pending_forced_characterwise

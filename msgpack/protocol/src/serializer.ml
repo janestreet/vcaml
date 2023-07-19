@@ -8,16 +8,16 @@ open Faraday
 
 let rec dispatch t : Message.t -> unit = function
   | Nil -> write_nil t
-  | Integer i -> write_int t i
-  | UInt64 i -> write_uint64 t i
+  | Int i -> write_int t i
+  | Uint64 i -> write_uint64 t i
   | Int64 i -> write_signed_integer t i
-  | Boolean b -> write_bool t b
-  | Floating f -> write_float t f
+  | Bool b -> write_bool t b
+  | Float f -> write_float t f
   | Array vs -> write_array t vs
   | Map kvs -> write_map t kvs
   | String s -> write_strval t s
   | Binary bs -> write_bin t bs
-  | Extension ext -> write_ext t ext
+  | Ext ext -> write_ext t ext
 
 and write_nil t = write_char t Constants.nil
 

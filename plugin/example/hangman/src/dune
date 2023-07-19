@@ -1,0 +1,3 @@
+(library (name vcaml_hangman)
+ (libraries async core vcaml vcaml.plugin core_kernel.vec)
+ (preprocess (pps ppx_jane)))

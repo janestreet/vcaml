@@ -2,6 +2,8 @@ open Core
 open Async
 module Event = Nvim_internal.Ui_event
 
+(** This module supports attaching a UI to Neovim. See `:h ui.txt` for details. *)
+
 module Options : sig
   type t = Nvim_internal.Ui_options.t =
     { ext_cmdline : bool
@@ -30,35 +32,51 @@ module Description : sig
   [@@deriving sexp_of]
 end
 
-val describe_attached_uis : Description.t list Api_call.Or_error.t
+val describe_attached_uis
+  :  Source_code_position.t
+  -> _ Client.t
+  -> Description.t list Deferred.Or_error.t
 
-type t
-
-(** Note that setting certain UI options implicitly sets other UI options despite the
-    value passed here. See `:h ui-option` for details. *)
+(** Attach a UI to Neovim. Note that setting certain UI options implicitly sets other UI
+    options despite the value passed here. See `:h ui-option` for details. *)
 val attach
   :  Source_code_position.t
-  -> [ `connected ] Client.t
+  -> _ Client.t
   -> width:int
   -> height:int
   -> options:Nvim_internal.Ui_options.t
-  -> on_event:(Event.t -> unit)
-  -> on_parse_error:[ `Raise | `Ignore | `Call of Error.t -> Msgpack_rpc.Event.t -> unit ]
-  -> t Deferred.Or_error.t
-
-val detach : t -> Source_code_position.t -> unit Deferred.Or_error.t
+  -> only_enable_options_supported_by_other_attached_uis:bool
+  -> Event.t Pipe.Reader.t Deferred.Or_error.t
 
 module Untested : sig
-  val try_resizing_grid : grid:int -> width:int -> height:int -> unit Api_call.Or_error.t
+  val set_focus
+    :  Source_code_position.t
+    -> _ Client.t
+    -> [ `Gained | `Lost ]
+    -> unit Deferred.Or_error.t
+
+  val try_resizing_grid
+    :  Source_code_position.t
+    -> _ Client.t
+    -> grid:int
+    -> width:int
+    -> height:int
+    -> unit Deferred.Or_error.t
 
   (** Set the number of visible items in the menu. *)
-  val popup_menu_set_height : height:int -> unit Api_call.Or_error.t
+  val popup_menu_set_height
+    :  Source_code_position.t
+    -> _ Client.t
+    -> height:int
+    -> unit Deferred.Or_error.t
 
   (** Set the bounding box of the menu, including borders and sliders. *)
   val popup_menu_set_bounds
-    :  width:float
+    :  Source_code_position.t
+    -> _ Client.t
+    -> width:float
     -> height:float
     -> row:float
     -> col:float
-    -> unit Api_call.Or_error.t
+    -> unit Deferred.Or_error.t
 end

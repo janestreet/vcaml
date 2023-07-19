@@ -41,7 +41,7 @@ module Color256 = struct
   let sexp_of_t t = t |> Char.to_int |> Int.sexp_of_t
 end
 
-module Kind = struct
+module Depth = struct
   type 'a t =
     | True_color : True_color.t t
     | Color256 : Color256.t t
@@ -50,10 +50,16 @@ end
 
 module Highlight = struct
   type 'a t =
-    { fg : 'a
-    ; bg : 'a
+    { fg : 'a option
+    ; bg : 'a option
     }
   [@@deriving sexp_of]
+end
+
+module Namespace = struct
+  include Int
+
+  let global = 0
 end
 
 type 'a t =

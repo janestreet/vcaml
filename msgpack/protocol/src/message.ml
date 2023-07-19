@@ -11,18 +11,18 @@ end
 module T = struct
   type t =
     | Nil
-    | Integer of int
+    | Int of int
     | Int64 of Int64.t
-    | UInt64 of Int64.t
-    | Boolean of bool
-    | Floating of float
+    | Uint64 of Int64.t
+    | Bool of bool
+    | Float of float
     | Array of t list
     (* The specification doesn't say what to do in the case of duplicate keys. Also, these
        objects are currently mutable, so [Map.t] might not be the best idea. *)
     | Map of (t * t) list
     | String of string
     | Binary of Bytes.t
-    | Extension of Custom.t
+    | Ext of Custom.t
   [@@deriving compare, sexp]
 end
 
@@ -31,8 +31,8 @@ include Comparable.Make (T)
 
 (* This generator is intended to generate ``well-behaved'' objects, ie those satisfying
    [parse . serialize == id]. Because we need to be able to handle 64-bit integers, any
-   [Integer] variant containing a value greater than [0xFFFF_FFFF] get deserialized into
-   [Int64] or [UInt64] variants instead. *)
+   [Int] variant containing a value greater than [0xFFFF_FFFF] get deserialized into
+   [Int64] or [Uint64] variants instead. *)
 let quickcheck_generator ~only_string_keys ~only_finite_floats =
   let open Quickcheck in
   let open Generator in
@@ -56,22 +56,22 @@ let quickcheck_generator ~only_string_keys ~only_finite_floats =
   recursive_union
     [ return Nil
     ; (let%map i = int_gen in
-       Integer i)
+       Int i)
     ; (let%map i = int64_gen in
-       UInt64 i)
+       Uint64 i)
     ; (let%map i = int64_pos_gen in
        Int64 i)
     ; (let%map b = bool in
-       Boolean b)
+       Bool b)
     ; (let%map f = float in
-       Floating f)
+       Float f)
     ; (let%map s = String.gen' char_print in
        String s)
     ; (let%map b = Bytes.gen' char in
        Binary b)
     ; (let%bind type_id = Int.gen_uniform_incl (-128) 127 in
        let%map data = Bytes.gen' char in
-       Extension { type_id; data })
+       Ext { type_id; data })
     ]
     ~f:(fun self ->
       [ (let%map vs = list self in

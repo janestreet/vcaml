@@ -2,7 +2,7 @@ open Core
 open Async
 open Vcaml
 
-let neovim_path = Core.Sys.getenv "NEOVIM_PATH" |> Option.value ~default:"nvim"
+let neovim_path = "nvim"
 let hundred_ms = Time_ns.Span.create ~ms:100 ()
 
 let time_source_at_epoch =
@@ -17,6 +17,63 @@ let default_args = [ "--clean"; "-n" ]
    since there's some undocumented internal limit for the socket length (it doesn't appear
    in `:h limits). *)
 let required_args = [ "--headless"; "--embed"; "--listen"; "./socket" ]
+let verbose_env_var = "VCAML_VERBOSE"
+
+type verbose_debugging =
+  { wrap_connection : (Reader.t -> Writer.t -> (Reader.t * Writer.t) Deferred.t) option
+  ; done_logging : unit Deferred.t
+  }
+
+let verbose_debugging' ~log =
+  let peer_name = "Neovim" in
+  let my_name = "Plugin" in
+  let done_logging = Ivar.create () in
+  let wrap_connection reader writer =
+    Shutdown.don't_finish_before (Ivar.read done_logging);
+    let%bind ( reader
+             , writer
+             , `Stopped_reading stopped_reading
+             , `Stopped_writing stopped_writing )
+      =
+      let open Msgpack_debug in
+      let `Peer_1_to_2 sent, `Peer_2_to_1 receive =
+        create_debug_printers ~pp ~peer1:my_name ~peer2:peer_name log
+      in
+      Man_in_the_middle_debugger.wrap_connection_to_peer
+        { name = peer_name; reader; writer }
+        ~my_name
+        ~f:(function
+          | `Sent -> sent
+          | `Received -> receive)
+    in
+    let announce_closed_connection angstrom_exit_status ~from ~to_ =
+      [%message
+        [%string "%{from} -> %{to_}: Connection closed"]
+          (angstrom_exit_status : (unit, string) Result.t)]
+      |> Sexp.to_string_hum
+      |> Out_channel.output_string log;
+      Out_channel.output_char log '\n';
+      Out_channel.flush log
+    in
+    don't_wait_for
+      (let%map () =
+         let%map exit_status = stopped_reading in
+         announce_closed_connection exit_status ~from:peer_name ~to_:my_name
+       and () =
+         let%map exit_status = stopped_writing in
+         announce_closed_connection exit_status ~from:my_name ~to_:peer_name
+       in
+       Ivar.fill_exn done_logging ());
+    return (reader, writer)
+  in
+  { wrap_connection = Some wrap_connection; done_logging = Ivar.read done_logging }
+;;
+
+let verbose_debugging ~verbose =
+  match verbose with
+  | false -> { wrap_connection = None; done_logging = return () }
+  | true -> verbose_debugging' ~log:stderr
+;;
 
 let with_client
       ?(args = default_args)
@@ -25,12 +82,19 @@ let with_client
       ?(time_source = time_source_at_epoch)
       ?(on_error = `Raise)
       ?(before_connecting = ignore)
+      ?(verbose = false)
+      ?(warn_if_neovim_exits_early = true)
       f
   =
   Expect_test_helpers_async.within_temp_dir ?links (fun () ->
     let nvim_log_file = "nvim_low_level_log.txt" in
     let args = required_args @ args in
     let%bind working_dir = Sys.getcwd () in
+    let verbose_log_file = Filename_unix.temp_file ~in_dir:working_dir "vcaml" ".log" in
+    (* We set this variable in the current environment instead of just extending Neovim's
+       environment so that clients that are attached with [attach_client] will also use
+       verbose logging. *)
+    if verbose then Unix.putenv ~key:verbose_env_var ~data:verbose_log_file;
     let env =
       let env =
         let base =
@@ -45,28 +109,69 @@ let with_client
       in
       `Replace_raw env
     in
-    let client = Client.create ~on_error in
+    let client = Client.create ~name:"test-client" ~on_error in
     before_connecting client;
+    let { wrap_connection; done_logging } = verbose_debugging ~verbose in
     let%bind client, process =
-      Client.attach
+      Private.attach_client
+        ?wrap_connection
         client
         (Embed { prog = neovim_path; args; working_dir; env })
         ~time_source
       >>| ok_exn
     in
-    let%bind result = f client >>| ok_exn in
+    let exited_early = ref true in
+    don't_wait_for
+      (let%map exit_or_signal = Process.wait process in
+       if !exited_early && warn_if_neovim_exits_early
+       then
+         print_s
+           [%message
+             "Neovim exited before the test finished"
+               (exit_or_signal : Unix.Exit_or_signal.t)]);
+    let%bind result = Monitor.try_with_join_or_error ~rest:`Log (fun () -> f client) in
+    exited_early := false;
     let%bind () = Client.close client in
+    let%bind () = done_logging in
     let%bind () =
       (* Because the client is embedded, stdin and stdout are used for Msgpack RPC.
          However, there still may be errors reported on stderr that we should capture. *)
-      let%map stderr = Reader.contents (Process.stderr process)
-      and low_level_log = Reader.file_contents nvim_log_file in
-      [ stderr; low_level_log ]
-      |> List.filter ~f:(Fn.non String.is_empty)
-      |> String.concat ~sep:"\n"
-      |> print_string
+      let%map stderr = Process.stderr process |> Reader.contents >>| String.split_lines
+      and low_level_log =
+        match%bind Sys.file_exists_exn nvim_log_file with
+        | false -> return []
+        | true ->
+          Reader.file_lines nvim_log_file
+          >>| List.map ~f:(fun line ->
+            match String.split line ~on:' ' with
+            | "WARN" :: "" :: _timestamp :: _pid :: message ->
+              message
+              |> List.drop_while ~f:String.is_empty
+              |> List.cons "WARN"
+              |> String.concat ~sep:" "
+            | "ERROR" :: _timestamp :: _pid :: message ->
+              message
+              |> List.drop_while ~f:String.is_empty
+              |> List.cons "ERROR"
+              |> String.concat ~sep:" "
+            | _ -> line)
+      and verbose_log =
+        (* This file will be populated by VCaml plugins that are launched during
+           integration tests under verbose mode (in other words, when the test setup is
+           test<->neovim<->plugin). The test<->neovim communication is just logged to
+           stderr and captured by the expect test framework. *)
+        Reader.file_lines verbose_log_file
+      in
+      match
+        [ stderr; verbose_log; low_level_log ]
+        |> List.concat
+        |> List.filter ~f:(Fn.non String.is_empty)
+      with
+      | [] -> ()
+      | error_lines -> print_endline (String.concat error_lines ~sep:"\n")
     in
-    return result)
+    if verbose then Unix.unsetenv verbose_env_var;
+    return (ok_exn result))
 ;;
 
 let print_s ?mach sexp =
@@ -82,21 +187,15 @@ let print_s ?mach sexp =
   | true -> print_s ?mach (filter sexp ~tmp_dir:working_dir)
 ;;
 
-let simple here k to_sexp =
-  with_client (fun client ->
-    let%map.Deferred.Or_error result = run_join here client k in
-    print_s (to_sexp result))
-;;
-
 module Test_ui = struct
   type t =
     { mutable buffer : string array array
     ; mutable cursor_col : int
     ; mutable cursor_row : int
-    ; flushed : [ `Awaiting_first_flush | `Flush of string | `Detached ] Mvar.Read_write.t
-    ; ui : Ui.t Set_once.t
-    ; client : [ `connected ] Client.t
+    ; flushed : [ `Awaiting_first_flush | `Flush of string ] Mvar.Read_write.t
+    ; reader : Ui.Event.t Pipe.Reader.t
     }
+  [@@ocaml.warning "-69"]
 
   let ui_to_string t =
     let module Buffer = Core.Buffer in
@@ -128,13 +227,12 @@ module Test_ui = struct
   let apply t (event : Ui.Event.t) =
     let unflush t =
       match Mvar.peek t.flushed with
-      | None | Some (`Awaiting_first_flush | `Detached) -> ()
+      | None | Some `Awaiting_first_flush -> ()
       | Some (`Flush _) -> ignore (Mvar.take_now_exn t.flushed : _)
     in
     match event with
     | Flush ->
       (match Mvar.peek t.flushed with
-       | Some `Detached -> ()
        | Some `Awaiting_first_flush -> ignore (Mvar.take_now_exn t.flushed : _)
        | None | Some (`Flush _) -> Mvar.set t.flushed (`Flush (ui_to_string t)))
     | Grid_line { grid = 1; row; col_start; data } ->
@@ -145,8 +243,8 @@ module Test_ui = struct
         incr col
       in
       List.iter data ~f:(function
-        | Array ([ String str ] | [ String str; Integer _ ]) -> write str
-        | Array [ String str; Integer _; Integer repeat ] ->
+        | Array ([ String str ] | [ String str; Int _ ]) -> write str
+        | Array [ String str; Int _; Int repeat ] ->
           for _ = 1 to repeat do
             write str
           done
@@ -167,7 +265,7 @@ module Test_ui = struct
           if x < width && y < height then new_array.(y).(x) <- c));
       t.buffer <- new_array
     | Grid_scroll { grid = 1; top; bot; left = _; right = _; rows; cols = 0 } ->
-      (* In Neovim 0.7.0, [cols] is fixed at [0] so we never need [left] or [right]. *)
+      (* In Neovim 0.9.1, [cols] is fixed at [0] so we never need [left] or [right]. *)
       unflush t;
       (* Establish our understanding of grid scrolling. If this is violated we are
          probably misinterpreting this event. *)
@@ -186,6 +284,8 @@ module Test_ui = struct
       (* This only applies to ext_multigrid but is sent anyway due to a bug:
          https://github.com/neovim/neovim/issues/14956 *)
       ()
+    | Busy_start
+    | Busy_stop
     | Default_colors_set _
     | Highlight_set _
     | Hl_attr_define _
@@ -195,6 +295,8 @@ module Test_ui = struct
     | Mouse_off
     | Mouse_on
     | Option_set _
+    | Set_icon _
+    | Set_title _
     | Update_bg _
     | Update_fg _
     | Update_sp _ -> ()
@@ -203,62 +305,52 @@ module Test_ui = struct
 
   let attach ?(width = 80) ?(height = 30) here client =
     let open Deferred.Or_error.Let_syntax in
-    let t =
-      { buffer = [||]
-      ; cursor_col = 0
-      ; cursor_row = 0
-      ; flushed = Mvar.create ()
-      ; ui = Set_once.create ()
-      ; client
-      }
-    in
-    Mvar.set t.flushed `Awaiting_first_flush;
-    let%bind ui =
+    let%bind reader =
       Ui.attach
         here
         client
         ~width
         ~height
         ~options:Ui.Options.default
-        ~on_event:(apply t)
-        ~on_parse_error:`Raise
+        ~only_enable_options_supported_by_other_attached_uis:true
     in
-    Set_once.set_exn t.ui [%here] ui;
+    let t =
+      { buffer = [||]; cursor_col = 0; cursor_row = 0; flushed = Mvar.create (); reader }
+    in
+    Mvar.set t.flushed `Awaiting_first_flush;
+    don't_wait_for (Pipe.iter_without_pushback reader ~f:(apply t));
     return t
-  ;;
-
-  let detach t here =
-    Mvar.set t.flushed `Detached;
-    Ui.detach (Set_once.get_exn t.ui [%here]) here
   ;;
 
   let with_ui ?width ?height here client f =
     let open Deferred.Or_error.Let_syntax in
-    let%bind t = attach here ?width ?height client in
+    let%bind t = attach here client ?width ?height in
     let%bind result = f t in
-    let%bind () = detach t here in
+    Pipe.close_read t.reader;
     return result
   ;;
 end
 
-let rec get_screen_contents here ui =
-  match Mvar.peek ui.Test_ui.flushed with
-  | None ->
-    let%bind () = Mvar.value_available ui.flushed in
-    get_screen_contents here ui
-  | Some `Awaiting_first_flush ->
-    let%bind () = Clock_ns.after hundred_ms in
-    get_screen_contents here ui
-  | Some (`Flush screen) ->
-    (* Attempt to confirm that Neovim has finished sending updates. We don't want to grab
-       a flush if more data is immediately following. *)
-    choose
-      [ choice (Mvar.taken ui.flushed) (fun () -> get_screen_contents here ui)
-      ; choice (Clock_ns.after hundred_ms) (fun () -> Deferred.Or_error.return screen)
-      ]
-    |> Deferred.join
-  | Some `Detached ->
+let rec get_screen_contents ui =
+  match Pipe.is_closed ui.Test_ui.reader with
+  | true ->
     Deferred.Or_error.error_s [%message "Tried to get screen contents of detached UI"]
+  | false ->
+    (match Mvar.peek ui.Test_ui.flushed with
+     | None ->
+       let%bind () = Mvar.value_available ui.flushed in
+       get_screen_contents ui
+     | Some `Awaiting_first_flush ->
+       let%bind () = Clock_ns.after hundred_ms in
+       get_screen_contents ui
+     | Some (`Flush screen) ->
+       (* Attempt to confirm that Neovim has finished sending updates. We don't want to
+          grab a flush if more data is immediately following. *)
+       choose
+         [ choice (Mvar.taken ui.flushed) (fun () -> get_screen_contents ui)
+         ; choice (Clock_ns.after hundred_ms) (fun () -> Deferred.Or_error.return screen)
+         ]
+       |> Deferred.join)
 ;;
 
 let wait_until_text ?(timeout = Time_ns.Span.of_int_sec 2) here ui ~f =
@@ -268,7 +360,7 @@ let wait_until_text ?(timeout = Time_ns.Span.of_int_sec 2) here ui ~f =
     Clock_ns.run_after timeout (fun () -> is_timed_out := true) ();
     let%bind result =
       let repeating () =
-        let%bind output = get_screen_contents here ui in
+        let%bind output = get_screen_contents ui in
         match f output, !is_timed_out with
         | true, _ -> return (`Finished (Ok ()))
         | false, true -> return (`Finished (Error output))
@@ -283,7 +375,14 @@ let wait_until_text ?(timeout = Time_ns.Span.of_int_sec 2) here ui ~f =
     | Error screen_contents ->
       (* print here instead of returning the string in the error in order to
          keep the sexp-printing from ruining all the unicode chars *)
-      let error = Error.of_string "ERROR: timeout when looking for value on screen" in
+      let error =
+        Error.create_s
+          (List
+             [ Atom "ERROR: timeout when looking for value on screen"
+             ; List
+                 [ Atom "Called from"; [%sexp (here : Private.Source_code_position.t)] ]
+             ])
+      in
       printf !"%{Error.to_string_hum}\n%s\n" error screen_contents;
       Deferred.Or_error.fail error
   in
@@ -303,20 +402,42 @@ let wait_until_text ?(timeout = Time_ns.Span.of_int_sec 2) here ui ~f =
   wait_until_text_stabilizes ()
 ;;
 
-let with_ui_client ?width ?height ?time_source ?on_error ?before_connecting f =
-  with_client ?time_source ?on_error ?before_connecting (fun client ->
-    Test_ui.with_ui [%here] ?width ?height client (fun ui -> f client ui))
+let with_ui_client
+      ?width
+      ?height
+      ?args
+      ?env
+      ?links
+      ?time_source
+      ?on_error
+      ?before_connecting
+      ?verbose
+      f
+  =
+  with_client
+    ?args
+    ?env
+    ?links
+    ?time_source
+    ?on_error
+    ?before_connecting
+    ?verbose
+    (fun client -> Test_ui.with_ui [%here] ?width ?height client (fun ui -> f client ui))
 ;;
 
 let socket_client
       ?(time_source = time_source_at_epoch)
       ?(on_error = `Raise)
       ?(before_connecting = ignore)
+      ?(verbose = false)
       socket
   =
-  let client = Client.create ~on_error in
+  let client = Client.create ~name:"test-client" ~on_error in
   before_connecting client;
-  Client.attach client ~time_source (Unix (`Socket socket))
+  (* There's nothing we can do with [done_logging] here and it's not clear that it's worth
+     cluttering the interface by returning it. *)
+  let { wrap_connection; done_logging = _ } = verbose_debugging ~verbose in
+  Private.attach_client ?wrap_connection client ~time_source (Socket (`Address socket))
 ;;
 
 module For_debugging = struct
@@ -324,15 +445,22 @@ module For_debugging = struct
         ?(time_source = time_source_at_epoch)
         ?(on_error = `Raise)
         ?(before_connecting = ignore)
+        ?(verbose = false)
         ~socket
         f
     =
+    let { wrap_connection; done_logging } = verbose_debugging ~verbose in
     let%bind client =
-      let client = Client.create ~on_error in
+      let client = Client.create ~name:"test-client" ~on_error in
       before_connecting client;
-      Client.attach client ~time_source (Unix (`Socket socket)) >>| ok_exn
+      Private.attach_client
+        ?wrap_connection
+        client
+        ~time_source
+        (Socket (`Address socket))
+      >>| ok_exn
     in
-    let%bind attached_uis = run_join [%here] client Ui.describe_attached_uis >>| ok_exn in
+    let%bind attached_uis = Ui.describe_attached_uis [%here] client >>| ok_exn in
     let width, height =
       attached_uis
       |> List.map ~f:(fun { width; height; _ } -> width, height)
@@ -343,18 +471,63 @@ module For_debugging = struct
     let%bind result =
       Test_ui.with_ui [%here] ~width ~height client (fun ui -> f client ui) >>| ok_exn
     in
-    let%map () = Client.close client in
+    let%bind () = Client.close client in
+    let%map () = done_logging in
     result
   ;;
 end
 
+module Private = struct
+  include Private
+
+  let neovim_path = neovim_path
+
+  (* It's a bit strange and unfortunate that the plugin library needs to rely on the test
+     helpers library for an operation as fundamental as attaching a client to Neovim, but
+     trying to abstract away this dependency would probably be difficult and may be more
+     confusing. The dependency is real - we want plugins to have support for running in
+     tests with the verbose logging defined in this library. *)
+  let attach_client ?stdio_override ?time_source client connection_type =
+    let wrap_connection =
+      match Sys.getenv verbose_env_var with
+      | None -> None
+      | Some logfile ->
+        (* Logging a header and footer is useful - the header demarcates the place in the
+           output where verbose logs change from one client to another, and presence of
+           the footer indicates that the logs are complete. *)
+        let log = Out_channel.create logfile in
+        let header_middle = [%string "  %{Client.Not_connected.name client}  "] in
+        let header_side = String.make ((90 - String.length header_middle) / 2) '-' in
+        let header = String.concat [ header_side; header_middle; header_side ] in
+        let footer = String.make (String.length header) '-' in
+        Out_channel.output_string log header;
+        Out_channel.output_char log '\n';
+        let { wrap_connection; done_logging } = verbose_debugging' ~log in
+        upon done_logging (fun () ->
+          Out_channel.output_string log footer;
+          Out_channel.output_char log '\n';
+          Out_channel.close log);
+        wrap_connection
+    in
+    Private.attach_client
+      ?wrap_connection
+      ?stdio_override
+      ?time_source
+      client
+      connection_type
+  ;;
+end
+
+
 let%expect_test "We cannot have two blocking RPCs with the same name" =
   let register_dummy_rpc_handler ~name client =
-    register_request_blocking
+    Ocaml_from_nvim.register_request_blocking
+      [%here]
+      Asynchronous
       client
       ~name
-      ~type_:Defun.Ocaml.Sync.(Nil @-> return Nil)
-      ~f:(fun ~keyboard_interrupted:_ ~client:_ () -> Deferred.Or_error.return ())
+      ~type_:Ocaml_from_nvim.Blocking.(return Nil)
+      ~f:(fun ~run_in_background:_ ~client:_ -> Deferred.Or_error.return ())
   in
   let%map () =
     with_client (fun client ->
@@ -363,16 +536,18 @@ let%expect_test "We cannot have two blocking RPCs with the same name" =
         register_dummy_rpc_handler client ~name:"test");
       Deferred.Or_error.return ())
   in
-  [%expect {| (Failure "Already defined synchronous RPC 'test'") |}]
+  [%expect {| (Failure "Already defined synchronous RPC: test") |}]
 ;;
 
 let%expect_test "We cannot have two async RPCs with the same name" =
   let register_dummy_rpc_handler ~name client =
-    register_request_async
+    Ocaml_from_nvim.register_request_async
+      [%here]
+      Asynchronous
       client
       ~name
-      ~type_:Defun.Ocaml.Async.(Nil @-> unit)
-      ~f:(fun ~client:_ () -> Deferred.Or_error.return ())
+      ~type_:Ocaml_from_nvim.Async.(unit)
+      ~f:(fun ~client:_ -> Deferred.Or_error.return ())
   in
   let%map () =
     with_client (fun client ->
@@ -381,7 +556,7 @@ let%expect_test "We cannot have two async RPCs with the same name" =
         register_dummy_rpc_handler client ~name:"test");
       Deferred.Or_error.return ())
   in
-  [%expect {| (Failure "Already defined asynchronous RPC 'test'") |}]
+  [%expect {| (Failure "Already defined asynchronous RPC: test") |}]
 ;;
 
 (* We allow this in case a plugin wants to implement slightly different semantics based
@@ -390,16 +565,20 @@ let%expect_test "We can have an async RPC and a blocking RPC with the same name"
   let%map () =
     with_client (fun client ->
       let name = "test" in
-      register_request_blocking
+      Ocaml_from_nvim.register_request_blocking
+        [%here]
+        Asynchronous
         client
         ~name
-        ~type_:Defun.Ocaml.Sync.(Nil @-> return Nil)
-        ~f:(fun ~keyboard_interrupted:_ ~client:_ () -> Deferred.Or_error.return ());
-      register_request_async
+        ~type_:Ocaml_from_nvim.Blocking.(return Nil)
+        ~f:(fun ~run_in_background:_ ~client:_ -> Deferred.Or_error.return ());
+      Ocaml_from_nvim.register_request_async
+        [%here]
+        Asynchronous
         client
         ~name
-        ~type_:Defun.Ocaml.Async.(Nil @-> unit)
-        ~f:(fun ~client:_ () -> Deferred.Or_error.return ());
+        ~type_:Ocaml_from_nvim.Async.(unit)
+        ~f:(fun ~client:_ -> Deferred.Or_error.return ());
       Deferred.Or_error.return ())
   in
   [%expect {| |}]
@@ -409,11 +588,13 @@ let%expect_test "We can have two separate Embedded connections with RPC handlers
                  names without error (no bleeding state)"
   =
   let register_dummy_rpc_handler ~name client =
-    register_request_blocking
+    Ocaml_from_nvim.register_request_blocking
+      [%here]
+      Asynchronous
       client
       ~name
-      ~type_:Defun.Ocaml.Sync.(Nil @-> return Nil)
-      ~f:(fun ~keyboard_interrupted:_ ~client:_ () -> Deferred.Or_error.return ());
+      ~type_:Ocaml_from_nvim.Blocking.(return Nil)
+      ~f:(fun ~run_in_background:_ ~client:_ -> Deferred.Or_error.return ());
     Deferred.Or_error.return ()
   in
   let%bind () = with_client (register_dummy_rpc_handler ~name:"test") in

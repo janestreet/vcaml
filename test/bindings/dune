@@ -1,3 +1,4 @@
-(library (name vcaml_bindings_test) (public_name vcaml.bindings_test)
- (libraries async core expect_test_helpers_async vcaml vcaml_test_helpers)
+(library (name vcaml_bindings_test) (public_name vcaml.test.bindings)
+ (libraries async core expect_test_helpers_async vcaml vcaml.test.helpers)
+ (flags :standard -alert -vcaml_private) (inline_tests)
  (preprocess (pps ppx_jane)))

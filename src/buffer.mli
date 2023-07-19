@@ -1,170 +1,401 @@
-module Unshadow_command := Command
 open Core
-module Command := Unshadow_command
-module Type := Nvim_internal.Phantom
+open Async
+open Import
 
 include module type of struct
   include Nvim_internal.Buffer
 end
 
-module Event : sig
-  type nonrec t =
-    | Lines of
-        { buffer : t
-        ; changedtick : int option
-        ; firstline : int
-        ; lastline : int
-        ; linedata : string list
-        ; more : bool
-        }
-    | Changed_tick of
-        { buffer : t
-        ; changedtick : int
-        }
-    | Detach of t
+module Event :
+  module type of Subscription_manager.Buffer_event
+  with module Private := Subscription_manager.Buffer_event.Private
+
+(** A [changedtick] represents the edit number of the buffer. If you pass it to a function
+    that updates the buffer contents, the contents will only be updated if the buffer has
+    not changed since that changedtick. See `:h b:changedtick`. *)
+type changedtick = Event.changedtick [@@deriving sexp_of]
+
+module With_changedtick : sig
+  type 'a t =
+    { value : 'a
+    ; changedtick : changedtick
+    }
   [@@deriving sexp_of]
+
+  val value : 'a t -> 'a
 end
 
-val get_name : Or_current.t -> string Api_call.Or_error.t
-val set_name : Or_current.t -> name:string -> unit Api_call.Or_error.t
+val get_changedtick
+  :  Source_code_position.t
+  -> _ Client.t
+  -> Or_current.t
+  -> changedtick Deferred.Or_error.t
 
+val get_name
+  :  Source_code_position.t
+  -> _ Client.t
+  -> Or_current.t
+  -> string Deferred.Or_error.t
+
+val set_name
+  :  Source_code_position.t
+  -> _ Client.t
+  -> Or_current.t
+  -> string
+  -> unit Deferred.Or_error.t
+
+(** Read a range of lines from a buffer. The character encoding is UTF-8. Indexing is
+    zero-based, end-exclusive. *)
 val get_lines
-  :  Or_current.t
+  :  Source_code_position.t
+  -> _ Client.t
+  -> Or_current.t
   -> start:int
   -> end_:int
   -> strict_indexing:bool
-  -> string list Api_call.Or_error.t
+  -> string list With_changedtick.t Deferred.Or_error.t
 
-(** This function should only be used for linewise replacement when you don't want to
-    preserve marks. If you want to preserve marks and/or want characterwise replacement,
-    prefer [set_text]. *)
+(** This function should only be used for linewise replacement when you don't care about
+    preserving marks. If you want to preserve marks and/or want characterwise replacement,
+    prefer [set_text]. The character encoding should be UTF-8. Indexing is zero-based,
+    end-exclusive. *)
 val set_lines
-  :  Or_current.t
+  :  Source_code_position.t
+  -> _ Client.t
+  -> ?changedtick:changedtick
+  -> Or_current.t
   -> start:int
   -> end_:int
   -> strict_indexing:bool
-  -> replacement:string list
-  -> unit Api_call.Or_error.t
+  -> string list
+  -> unit Deferred.Or_error.t
 
-val create : listed:bool -> scratch:bool -> t Api_call.Or_error.t
+(** Similar to [get_lines], but supports retrieving only portions of a line. If you only
+    need full lines, prefer [get_lines]. The character encoding is UTF-8. Indexing is
+    zero-based, end-exclusive. *)
+val get_text
+  :  Source_code_position.t
+  -> _ Client.t
+  -> Or_current.t
+  -> start_row:int
+  -> start_col:int
+  -> end_row:int
+  -> end_col:int
+  -> string list With_changedtick.t Deferred.Or_error.t
 
-(** A buffer created by this function will be unlisted. *)
-val find_by_name_or_create : name:string -> t Api_call.Or_error.t
+(** Replace text in a buffer. This supports setting portions of a line, which can help
+    preserve marks. If you don't care about mark preservation and have an update expressed
+    in terms of full lines, prefer [set_lines]. The character encoding should be UTF-8.
+    Indexing is zero-based, end-exclusive. *)
+val set_text
+  :  Source_code_position.t
+  -> _ Client.t
+  -> ?changedtick:changedtick
+  -> Or_current.t
+  -> start_row:int
+  -> start_col:int
+  -> end_row:int
+  -> end_col:int
+  -> string list
+  -> unit Or_error.t Deferred.t
 
-module Subscriber : sig
-  type buffer := t
-  type t
+(** Create a new buffer. See `:h 'buflisted'` and `:h scratch-buffer` for explanations
+    of [listed] and [scratch] respectively. *)
+val create
+  :  Source_code_position.t
+  -> _ Client.t
+  -> listed:bool
+  -> scratch:bool
+  -> t Deferred.Or_error.t
 
-  (** Only one [t] should be created for a given client. *)
-  val create
-    :  [ `connected ] Client.t
-    -> on_parse_error:[ `Raise | `Ignore | `Call of Msgpack_rpc.Event.t -> unit ]
-    -> t
+(** Create a new buffer with the given name or if one already exists, return it. A buffer
+    created by this function will be unlisted. *)
+val find_by_name_or_create
+  :  Source_code_position.t
+  -> _ Client.t
+  -> string
+  -> t Deferred.Or_error.t
 
+(** Unload the buffer from memory, but keep the buffer in the buffer list. The buffer's
+    marks, settings, etc. are preserved. For details, see `:h bunload`. *)
+val unload
+  :  Source_code_position.t
+  -> _ Client.t
+  -> Or_current.t
+  -> even_if_modified:bool
+  -> unit Deferred.Or_error.t
 
-  (** Attach to an existing buffer and receive a pipe of updates pretaining to this
-      buffer.
+(** Totally delete the buffer and forget all settings related to it. See `:h bwipeout`. *)
+val wipeout
+  :  Source_code_position.t
+  -> _ Client.t
+  -> Or_current.t
+  -> even_if_modified:bool
+  -> unit Deferred.Or_error.t
 
-      This function returns a regular [Deferred.t] instead of an [api_call] because it is
-      impossible to execute atomically -- due to potential race conditions between
-      multiple attaches and detaches, this function is written as multiple api calls to
-      neovim that are sequenced according to [Throttle.Sequencer]. This has the side
-      effect of potentially running Async cycles during execution, which may in turn
-      invoke other neovim operations, violating the atomicity guarantee of [Api_call].
+(** Will be [false] after calling [unload] on [t]. *)
+val loaded : Source_code_position.t -> _ Client.t -> t -> bool Deferred.Or_error.t
 
-      Attaching to a buffer is unlikely to race with anything. The only operation that may
-      interfere with the buffer attach is if the buffer is deleted or otherwise stops
-      broadcasting while the attach is in flight. Depending on the exact ordering, then,
-      one of two things may happen:
+(** Will be [false] after calling [wipeout] on [t]. *)
+val exists : Source_code_position.t -> _ Client.t -> t -> bool Deferred.Or_error.t
 
-      - If the delete occurs before the attach completes, then the attach will fail with a
-        ``nonexistent buffer'' error.
-      - If the attach completes first, then it will receive a detach message immediately
-        and close itself.
+(** Subscribe to updates from a buffer. Only one subscription per buffer is allowed at a
+    time. To unsubscribe, close the returned pipe. *)
+val subscribe
+  :  Source_code_position.t
+  -> _ Client.t
+  -> ?send_buffer:bool (** default: [true] *)
+  -> Or_current.t
+  -> Event.t Pipe.Reader.t Deferred.Or_error.t
 
-      Both cases are ones the application should be prepared to handle.
+(** Get a buffer variable (see `:h b:`). *)
+val get_var
+  :  Source_code_position.t
+  -> _ Client.t
+  -> Or_current.t
+  -> string
+  -> type_:'a Type.t
+  -> 'a Deferred.Or_error.t
 
-      [nvim_buf_detach] isn't directly exposed because it would detach all attached
-      clients. Instead, simply close the returned pipe. *)
-  val subscribe
-    :  ?on_detach_failure:[ `Ignore (* default *) | `Raise | `Call of buffer -> unit ]
-    -> ?on_lines:Nvim_internal.Luaref.t
-    -> ?on_bytes:Nvim_internal.Luaref.t
-    -> ?on_changed_tick:Nvim_internal.Luaref.t
-    -> ?on_detach:Nvim_internal.Luaref.t
-    -> ?on_reload:Nvim_internal.Luaref.t
-    -> ?utf_sizes:bool
-    -> ?preview:bool
-    -> t
-    -> Source_code_position.t
-    -> buffer:Or_current.t
-    -> send_buffer:bool
-    -> Event.t Async.Pipe.Reader.t Async.Deferred.Or_error.t
-end
-
-val get_option : Or_current.t -> name:string -> type_:'a Type.t -> 'a Api_call.Or_error.t
-
-val set_option
-  :  Or_current.t
-  -> scope:[ `Local | `Global ]
-  -> name:string
+(** Set a buffer variable (see `:h b:`). Before using this, note that users have the
+    freedom to change the values of these variables. If that would be undesirable, keep
+    your state management inside your plugin. *)
+val set_var
+  :  Source_code_position.t
+  -> _ Client.t
+  -> Or_current.t
+  -> string
   -> type_:'a Type.t
   -> value:'a
-  -> unit Api_call.Or_error.t
+  -> unit Deferred.Or_error.t
 
-(** Get a native nvim mark. To create a mark that will only be controlled by your
-    plugin, use an [Extmark.t]. *)
-val get_mark : Or_current.t -> sym:char -> Mark.t Api_call.Or_error.t
+(** Delete a buffer variable (see `:h b:`). *)
+val delete_var
+  :  Source_code_position.t
+  -> _ Client.t
+  -> Or_current.t
+  -> string
+  -> unit Deferred.Or_error.t
+
+(** Get a native lowercase mark (see `:h mark-motions`). Use [Nvim.get_mark] to get an
+    uppercase mark. *)
+val get_mark
+  :  Source_code_position.t
+  -> _ Client.t
+  -> Or_current.t
+  -> sym:char
+  -> Mark.t With_changedtick.t Deferred.Or_error.t
+
+(** Set a native lowercase mark (see `:h mark-motions`). To create a mark that will only
+    be controlled by your plugin, use an [Extmark.t]. *)
+val set_mark
+  :  Source_code_position.t
+  -> _ Client.t
+  -> ?changedtick:changedtick
+  -> Or_current.t
+  -> Mark.t
+  -> unit Deferred.Or_error.t
+
+(** Delete a native lowercase mark (see `:h mark-motions`). *)
+val delete_mark
+  :  Source_code_position.t
+  -> _ Client.t
+  -> Or_current.t
+  -> char
+  -> unit Deferred.Or_error.t
+
+(** Returns the number of lines in the buffer. *)
+val line_count
+  :  Source_code_position.t
+  -> _ Client.t
+  -> Or_current.t
+  -> int With_changedtick.t Deferred.Or_error.t
+
+(** Return the byte offset of the given line. N.B. this assumes UTF-8 text. *)
+val get_byte_offset_of_line
+  :  Source_code_position.t
+  -> _ Client.t
+  -> Or_current.t
+  -> line:int
+  -> int With_changedtick.t Deferred.Or_error.t
+
+(** Open a terminal not connected to a process in this buffer. Useful for displaying
+    ANSI-coded text. Returns the channel for use with [Nvim.send_to_channel]. *)
+val open_term
+  :  Source_code_position.t
+  -> _ Client.t
+  -> Or_current.t
+  -> int Deferred.Or_error.t
+
+module Option : sig
+  (*$ Vcaml_cinaps.generate_options_intf ~scope:Buffer *)
+  (** Buffer-specific Neovim options. The ['global] phantom type represents the notion of
+      a "global" value for the option. [`none] means setting the global value has no
+      effect. [`global] means there is a global value that can be locally overridden.
+      [`copied] means the global value is copied to the local value on buffer creation,
+      so setting it will only affect new buffers. *)
+  type ('a, 'global) t =
+    | Autoindent : (bool, [ `copied ]) t
+    | Autoread : (bool, [ `global ]) t
+    | Backupcopy : (string list, [ `global ]) t
+    | Binary : (bool, [ `copied ]) t
+    | Bomb : (bool, [ `copied ]) t
+    | Bufhidden : (string, [ `none ]) t
+    | Buflisted : (bool, [ `copied ]) t
+    | Buftype : (string, [ `none ]) t
+    | Channel : (int, [ `none ]) t
+    | Cindent : (bool, [ `copied ]) t
+    | Cinkeys : (string list, [ `copied ]) t
+    | Cinoptions : (string list, [ `copied ]) t
+    | Cinscopedecls : (string list, [ `copied ]) t
+    | Cinwords : (string list, [ `copied ]) t
+    | Comments : (string list, [ `copied ]) t
+    | Commentstring : (string, [ `copied ]) t
+    | Complete : (string list, [ `copied ]) t
+    | Completefunc : (string, [ `copied ]) t
+    | Copyindent : (bool, [ `copied ]) t
+    | Define : (string, [ `global ]) t
+    | Dictionary : (string list, [ `global ]) t
+    | Endoffile : (bool, [ `copied ]) t
+    | Endofline : (bool, [ `copied ]) t
+    | Equalprg : (string, [ `global ]) t
+    | Errorformat : (string list, [ `global ]) t
+    | Expandtab : (bool, [ `copied ]) t
+    | Fileencoding : (string, [ `copied ]) t
+    | Fileformat : (string, [ `copied ]) t
+    | Filetype : (string, [ `none ]) t
+    | Fixendofline : (bool, [ `copied ]) t
+    | Formatexpr : (string, [ `copied ]) t
+    | Formatlistpat : (string, [ `copied ]) t
+    | Formatoptions : (char list, [ `copied ]) t
+    | Formatprg : (string, [ `global ]) t
+    | Grepprg : (string, [ `global ]) t
+    | Iminsert : (int, [ `copied ]) t
+    | Imsearch : (int, [ `copied ]) t
+    | Include : (string, [ `global ]) t
+    | Includeexpr : (string, [ `copied ]) t
+    | Indentexpr : (string, [ `copied ]) t
+    | Indentkeys : (string list, [ `copied ]) t
+    | Infercase : (bool, [ `copied ]) t
+    | Iskeyword : (string list, [ `copied ]) t
+    | Keymap : (string, [ `copied ]) t
+    | Keywordprg : (string, [ `global ]) t
+    | Lisp : (bool, [ `copied ]) t
+    | Lispoptions : (string list, [ `copied ]) t
+    | Lispwords : (string list, [ `global ]) t
+    | Makeencoding : (string, [ `global ]) t
+    | Makeprg : (string, [ `global ]) t
+    | Matchpairs : (string list, [ `copied ]) t
+    | Modeline : (bool, [ `copied ]) t
+    | Modifiable : (bool, [ `copied ]) t
+    | Modified : (bool, [ `none ]) t
+    | Nrformats : (string list, [ `copied ]) t
+    | Omnifunc : (string, [ `copied ]) t
+    | Path : (string list, [ `global ]) t
+    | Preserveindent : (bool, [ `copied ]) t
+    | Quoteescape : (string, [ `copied ]) t
+    | Readonly : (bool, [ `none ]) t
+    | Scrollback : (int, [ `copied ]) t
+    | Shiftwidth : (int, [ `copied ]) t
+    | Smartindent : (bool, [ `copied ]) t
+    | Softtabstop : (int, [ `copied ]) t
+    | Spellcapcheck : (string, [ `copied ]) t
+    | Spellfile : (string list, [ `copied ]) t
+    | Spelllang : (string list, [ `copied ]) t
+    | Spelloptions : (string list, [ `copied ]) t
+    | Suffixesadd : (string list, [ `copied ]) t
+    | Swapfile : (bool, [ `copied ]) t
+    | Synmaxcol : (int, [ `copied ]) t
+    | Syntax : (string, [ `none ]) t
+    | Tabstop : (int, [ `copied ]) t
+    | Tagcase : (string, [ `global ]) t
+    | Tagfunc : (string, [ `copied ]) t
+    | Tags : (string list, [ `global ]) t
+    | Textwidth : (int, [ `copied ]) t
+    | Thesaurus : (string list, [ `global ]) t
+    | Thesaurusfunc : (string, [ `global ]) t
+    | Undofile : (bool, [ `copied ]) t
+    | Undolevels : (int, [ `global ]) t
+    | Varsofttabstop : (string list, [ `copied ]) t
+    | Vartabstop : (string list, [ `copied ]) t
+    | Wrapmargin : (int, [ `copied ]) t
+  [@@deriving sexp_of]
+  (*$*)
+
+  (** Get the effective value of the option for the given buffer. *)
+  val get
+    :  Source_code_position.t
+    -> _ Client.t
+    -> Or_current.t
+    -> ('a, _) t
+    -> 'a Deferred.Or_error.t
+
+  val set
+    :  Source_code_position.t
+    -> _ Client.t
+    -> Or_current.t
+    -> ('a, _) t
+    -> 'a
+    -> unit Deferred.Or_error.t
+
+  (** Get the global value of the option used by all buffers without local overrides. *)
+  val get_default
+    :  Source_code_position.t
+    -> _ Client.t
+    -> ('a, [ `global ]) t
+    -> 'a Deferred.Or_error.t
+
+  (** Set the option for all buffers without local overrides. *)
+  val set_default
+    :  Source_code_position.t
+    -> _ Client.t
+    -> ('a, [ `global ]) t
+    -> 'a
+    -> unit Deferred.Or_error.t
+
+  (** Get the value that new buffers will inherit for this option. *)
+  val get_for_new_buffers
+    :  Source_code_position.t
+    -> _ Client.t
+    -> ('a, [ `copied ]) t
+    -> 'a Deferred.Or_error.t
+
+  (** Set the option for buffers created in the future. *)
+  val set_for_new_buffers
+    :  Source_code_position.t
+    -> _ Client.t
+    -> ('a, [ `copied ]) t
+    -> 'a
+    -> unit Deferred.Or_error.t
+
+  val get_dynamic_info
+    :  Source_code_position.t
+    -> _ Client.t
+    -> ('a, _) t
+    -> 'a Dynamic_option_info.t Deferred.Or_error.t
+end
 
 module Untested : sig
-  val line_count : Or_current.t -> int Api_call.Or_error.t
-  val get_var : Or_current.t -> name:string -> type_:'a Type.t -> 'a Api_call.Or_error.t
-  val get_changedtick : Or_current.t -> int Api_call.Or_error.t
-
-  (** Gets a map of buffer-local user-commands. *)
-  val get_commands : Or_current.t -> Command.t String.Map.t Api_call.Or_error.t
-
-  val set_var
-    :  Or_current.t
-    -> name:string
-    -> type_:'a Type.t
-    -> value:'a
-    -> unit Api_call.Or_error.t
-
-  val delete_var : Or_current.t -> name:string -> unit Api_call.Or_error.t
-  val is_loaded : t -> bool Api_call.Or_error.t
-  val is_valid : t -> bool Api_call.Or_error.t
-  val unload : Or_current.t -> even_if_modified:bool -> unit Api_call.Or_error.t
-  val wipeout : Or_current.t -> even_if_modified:bool -> unit Api_call.Or_error.t
-  val get_byte_offset_of_line : Or_current.t -> line:int -> int Api_call.Or_error.t
-
   val add_highlight
-    :  Or_current.t
+    :  Source_code_position.t
+    -> _ Client.t
+    -> ?changedtick:changedtick
+    -> Or_current.t
     -> namespace:Namespace.t
     -> hl_group:string
     -> line:int
     -> col_start:int
     -> col_end:int
-    -> int Api_call.Or_error.t
+    -> unit Deferred.Or_error.t
 
   val clear_namespace
-    :  Or_current.t
+    :  Source_code_position.t
+    -> _ Client.t
+    -> Or_current.t
     -> namespace:Namespace.t
     -> line_start:int
     -> line_end:int
-    -> unit Api_call.Or_error.t
-
-  val set_text
-    :  Or_current.t
-    -> start_row:int
-    -> start_col:int
-    -> end_row:int
-    -> end_col:int
-    -> replacement:string list
-    -> unit Or_error.t Api_call.t
-
-  val set_mark : Or_current.t -> Mark.t -> unit Api_call.Or_error.t
-  val delete_mark : Or_current.t -> char -> unit Api_call.Or_error.t
+    -> unit Deferred.Or_error.t
 
   module Extmark : sig
     (** An [Extmark.t] represents a logical location in a buffer. It can be used to
@@ -184,45 +415,60 @@ module Untested : sig
     include Hashable.S_plain with type t := t
   end
 
-  val get_extmark : Extmark.t -> Position.t option Api_call.Or_error.t
+  val get_extmark
+    :  Source_code_position.t
+    -> _ Client.t
+    -> Extmark.t
+    -> Position.t option With_changedtick.t Deferred.Or_error.t
 
   val get_extmark_with_details
-    :  Extmark.t
-    -> (Position.t * Msgpack.t String.Map.t) option Api_call.Or_error.t
+    :  Source_code_position.t
+    -> _ Client.t
+    -> ?hl_groups:[ `Ids | `Names ]
+    -> Extmark.t
+    -> (Position.t * Msgpack.t String.Map.t) option With_changedtick.t Deferred.Or_error.t
 
   val all_extmarks
-    :  Or_current.t
-    -> namespace:Namespace.t
+    :  Source_code_position.t
+    -> _ Client.t
     -> ?start_inclusive:Position.t
     -> ?end_inclusive:Position.t
-    -> unit
-    -> (Extmark.t * Position.t) list Api_call.Or_error.t
+    -> ?limit:int
+    -> ?type_:[ `Highlight | `Sign | `Virtual_text | `Virtual_lines ]
+    -> Or_current.t
+    -> namespace:Namespace.t
+    -> (Extmark.t * Position.t) list With_changedtick.t Deferred.Or_error.t
 
   val all_extmarks_with_details
-    :  Or_current.t
-    -> namespace:Namespace.t
+    :  Source_code_position.t
+    -> _ Client.t
     -> ?start_inclusive:Position.t
     -> ?end_inclusive:Position.t
-    -> unit
-    -> (Extmark.t * Position.t * Msgpack.t String.Map.t) list Api_call.Or_error.t
+    -> ?limit:int
+    -> ?type_:[ `Highlight | `Sign | `Virtual_text | `Virtual_lines ]
+    -> ?hl_groups:[ `Ids | `Names ]
+    -> Or_current.t
+    -> namespace:Namespace.t
+    -> (Extmark.t * Position.t * Msgpack.t String.Map.t) list With_changedtick.t
+         Deferred.Or_error.t
 
-  (* See [:h nvim_buf_set_extmark] for differences in treatment of [virt_text] and
-     [virt_lines]. *)
+  (** See `:h nvim_buf_set_extmark` for differences in treatment of [virt_text] and
+      [virt_lines]. *)
   type 'a with_extmark_options :=
     ?end_exclusive:Position.t
     -> ?hl_group:string
     -> ?virtual_text:Highlighted_text.t
     -> ?virtual_text_pos:[ `Eol | `Overlay | `Right_align | `At_column of int ]
-    -> ?hide_virtual_text_when_overlaying_selection:unit
+    -> ?hide_virtual_text_when_overlaying_selection:bool
     -> ?virtual_lines:Highlighted_text.t list
     -> ?virtual_lines_pos:[ `Above | `Below ]
     -> ?bypass_sign_and_number_columns:bool
     -> ?when_underlying_highlight_conflicts:[ `Override | `Combine_with_bg | `Blend ]
-    -> ?extend_highlight_across_screen:unit
-    -> ?ephemeral:unit (* For use with [Nvim.Untested.Expert.set_decoration_provider] *)
+    -> ?extend_highlight_across_screen:bool
+    -> ?ephemeral:bool (** For use with [Nvim.Untested.Expert.set_decoration_provider] *)
     -> ?start_gravity:[ `Right | `Left ]
     -> ?end_gravity:[ `Right | `Left ]
-    -> ?priority:int (* Higher numbers take precedence. *)
+    -> ?priority:int (** Higher numbers take precedence. *)
     -> ?strict:bool
     -> ?sign_text:string
     -> ?sign_hl_group:string
@@ -230,42 +476,31 @@ module Untested : sig
     -> ?line_hl_group:string
     -> ?cursorline_hl_group:string
     -> ?conceal:[ `With_default | `With of char ]
+    -> ?spell:bool
+    -> ?ui_watched:bool
     -> unit
     -> 'a
 
   val create_extmark
-    :  Or_current.t
+    :  Source_code_position.t
+    -> _ Client.t
+    -> ?changedtick:changedtick
+    -> Or_current.t
     -> namespace:Namespace.t
     -> start_inclusive:Position.t
-    -> Extmark.t Api_call.Or_error.t with_extmark_options
+    -> Extmark.t Deferred.Or_error.t with_extmark_options
 
   val update_extmark
-    :  Extmark.t
+    :  Source_code_position.t
+    -> _ Client.t
+    -> ?changedtick:changedtick
+    -> Extmark.t
     -> start_inclusive:Position.t
-    -> unit Api_call.Or_error.t with_extmark_options
+    -> unit Deferred.Or_error.t with_extmark_options
 
-  val delete_extmark : Extmark.t -> unit Api_call.Or_error.t
-
-  (** Open a terminal not connected to a process in this buffer. Useful for displaying
-      ANSI-coded text. Returns the channel for use with [Nvim.Untested.send_to_channel].
-
-      NOTE: The buffer is expected to be empty and unmodified, but this is not enforced.
-      As far as I can tell there is no way to recover modifications once the buffer is
-      converted. The file cannot be reopened until the terminal buffer is closed. *)
-  val open_term
-    :  ?on_input:Nvim_internal.Luaref.t
-    -> Or_current.t
-    -> int Api_call.Or_error.t
-
-  module Expert : sig
-
-    (** Call a lua function from the given buffer, and if the buffer isn't in a window in
-        the current tabpage a new "autocmd window" will be created temporarily. If this is
-        actually useful we can create a wrapper similar to [wrap_viml_function] and expose
-        it in a more type-safe way. *)
-    val buf_call
-      :  Or_current.t
-      -> lua_callback:Nvim_internal.Luaref.t
-      -> Msgpack.t Api_call.Or_error.t
-  end
+  val delete_extmark
+    :  Source_code_position.t
+    -> _ Client.t
+    -> Extmark.t
+    -> unit Deferred.Or_error.t
 end

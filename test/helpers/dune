@@ -1,3 +1,5 @@
-(library (name vcaml_test_helpers) (public_name vcaml.test_helpers)
- (libraries async core expect_test_helpers_async core_unix.sys_unix vcaml)
- (preprocess (pps ppx_jane)))
+(library (name vcaml_test_helpers) (public_name vcaml.test.helpers)
+ (libraries async core expect_test_helpers_async core_unix.filename_unix
+  msgpack_debug core_unix.sys_unix vcaml)
+ (preprocess (pps ppx_jane)) (flags :standard -alert -vcaml_private)
+ (inline_tests))

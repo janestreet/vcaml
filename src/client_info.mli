@@ -1,10 +1,5 @@
 open Core
 
-(** Client_info is present for every remote, ui, embedder, host, or plugin
-    attached to neovim.
-
-    For more details, run `:h nvim_set_client_info` *)
-
 module Version : sig
   type t =
     { major : int option
@@ -13,31 +8,37 @@ module Version : sig
     ; prerelease : string option
     ; commit : string option
     }
+
+  val to_msgpack_map : t -> Msgpack.t String.Map.t
 end
 
 module Client_type : sig
   type t =
-    [ `Remote
-    | `Ui
-    | `Embedder
-    | `Host
-    | `Plugin
-    ]
+    | Remote
+    | Ui
+    | Embedder
+    | Host
+    | Plugin
+
+  val to_string : t -> string
 end
 
-module Client_method : sig
+module How_to_call_method : sig
   type t =
-    { async : bool
-    ; nargs : [ `Fixed of int | `Range of int * int ] option
+    { async : bool option
+    ; nargs : [ `Fixed of int | `Inclusive_range of int * int ] option
     }
+
+  val to_msgpack : t -> Msgpack.t
 end
 
+(** See `:h nvim_set_client_info` for details about this type. *)
 type t =
-  { version : Version.t option
-  ; methods : Client_method.t String.Map.t
+  { name : string option
+  ; version : Version.t option
+  ; client_type : Client_type.t option
+  ; methods : How_to_call_method.t String.Map.t
   ; attributes : string String.Map.t
-  ; name : string option
-  ; type_ : Client_type.t option
   }
 [@@deriving sexp_of]
 

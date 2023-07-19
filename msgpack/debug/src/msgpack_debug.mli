@@ -4,9 +4,10 @@ open! Async
 module Man_in_the_middle_debugger :
   Man_in_the_middle_debugger.S with type message := Msgpack.t
 
-(** Returns functions that pretty-print [Msgpack.t]s sent between [peer1] and [peer2].
-    The messages have "[peer1] -> [peer2]" or "[peer2] -> [peer1]" headings to indicate
-    the message direction. Useful for debugging communication between two peers. *)
+(** Given the names of two Msgpack peers and a channel to which traffic will be logged,
+    return two functions that log [Msgpack.t]s sent between [peer1] and [peer2]. The
+    messages have "[peer1] -> [peer2]" or "[peer2] -> [peer1]" headings to indicate the
+    message direction. Useful for debugging communication between two peers. *)
 val create_debug_printers
   :  ?pp:(Format.formatter -> Msgpack.t -> unit) (** default: [Msgpack.pp ?pp_ext:None] *)
   -> ?color:bool (** default: [false] *)

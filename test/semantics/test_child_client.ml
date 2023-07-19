@@ -16,7 +16,7 @@ let%expect_test "Simple test of [Child] client" =
       Process.create_exn
         ()
         ~working_dir:tmp_dir
-        ~prog:neovim_path
+        ~prog:Private.neovim_path
         ~args:[ "--headless"; "-n"; "--clean"; "--listen"; "./socket" ]
         ~env:(`Extend [ "NVIM_RPLUGIN_MANIFEST", "rplugin.vim" ])
     in
@@ -26,40 +26,31 @@ let%expect_test "Simple test of [Child] client" =
         | `Nvim_crashed exit_or_signal -> return (`Already_reaped exit_or_signal)
         | `Socket_missing -> raise_s [%message "Socket was not created"]
         | `Socket_created ->
-          let saved_stdin = Core_unix.dup Core_unix.stdin in
-          let saved_stdout = Core_unix.dup Core_unix.stdout in
-          let socketfd =
-            Core_unix.socket ~domain:PF_UNIX ~kind:SOCK_STREAM ~protocol:0 ()
-          in
-          Core_unix.connect socketfd ~addr:(ADDR_UNIX socket);
-          Core_unix.dup2 ~src:socketfd ~dst:Core_unix.stdin ();
-          Core_unix.dup2 ~src:socketfd ~dst:Core_unix.stdout ();
           let test () =
-            let open Deferred.Or_error.Let_syntax in
-            let%bind client =
-              let client = Client.create ~on_error:`Raise in
-              (* We don't close the reader and writer on disconnect because we want
-                 [Reader.stdin] and [Writer.stdout] to continue to work after restoring
-                 the original stdin and stdout. *)
-              Client.attach
-                ~close_reader_and_writer_on_disconnect:false
-                ~time_source:
-                  (Time_source.read_only (Time_source.create ~now:Time_ns.epoch ()))
-                client
-                Stdio
-            in
-            let%bind result =
-              run_join [%here] client (Nvim.eval "'Hello, world!'" ~result_type:String)
-            in
-            let%map () = attempt_to_quit ~tmp_dir ~client |> Deferred.ok in
-            result
+            Tcp.with_connection
+              (Tcp.Where_to_connect.of_unix_address (`Unix socket))
+              (fun (_ : _ Socket.t) reader writer ->
+                 let open Deferred.Or_error.Let_syntax in
+                 let%bind client =
+                   let client = Client.create ~name:"buffer-clock" ~on_error:`Raise in
+                   Private.attach_client
+                     ~stdio_override:(reader, writer)
+                     ~time_source:
+                       (Time_source.read_only (Time_source.create ~now:Time_ns.epoch ()))
+                     client
+                     Stdio
+                 in
+                 let%bind result =
+                   Nvim.eval_viml_expression
+                     [%here]
+                     client
+                     "'Hello, world!'"
+                     ~result_type:String
+                 in
+                 let%map () = attempt_to_quit ~tmp_dir ~client |> Deferred.ok in
+                 result)
           in
-          let%bind result = Deferred.Or_error.try_with test >>| Or_error.join in
-          Core_unix.dup2 ~src:saved_stdin ~dst:Core_unix.stdin ();
-          Core_unix.dup2 ~src:saved_stdout ~dst:Core_unix.stdout ();
-          Core_unix.close saved_stdin;
-          Core_unix.close saved_stdout;
-          Core_unix.close socketfd;
+          let%bind result = Deferred.Or_error.try_with_join test in
           print_s [%sexp (result : string Or_error.t)];
           return (`Need_to_reap `Patient))
     in

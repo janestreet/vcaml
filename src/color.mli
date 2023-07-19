@@ -19,7 +19,7 @@ module Color256 : sig
   val of_8bit_int : int -> t Or_error.t
 end
 
-module Kind : sig
+module Depth : sig
   type 'a t =
     | True_color : True_color.t t
     | Color256 : Color256.t t
@@ -28,10 +28,18 @@ end
 
 module Highlight : sig
   type 'a t =
-    { fg : 'a
-    ; bg : 'a
+    { fg : 'a option
+    ; bg : 'a option
     }
   [@@deriving sexp_of]
+end
+
+module Namespace : sig
+  type t
+
+  val global : t
+  val of_int : int -> t
+  val to_int : t -> int
 end
 
 type 'a t =

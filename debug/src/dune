@@ -2,5 +2,3 @@
  (libraries angstrom core_unix msgpack msgpack_debug
   core_kernel.reversed_list vcaml)
  (preprocess (pps ppx_jane)))
-
-(alias (name DEFAULT) (deps ./utop))

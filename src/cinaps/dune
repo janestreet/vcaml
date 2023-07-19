@@ -1,0 +1,2 @@
+(library (name vcaml_cinaps) (public_name vcaml.cinaps)
+ (libraries core nvim_internal) (preprocess (pps ppx_jane)))

@@ -15,6 +15,7 @@ module T = struct
     | Normal_using_i_ctrl_o_in_insert_mode
     | Normal_using_i_ctrl_o_in_replace_mode
     | Normal_using_i_ctrl_o_in_virtual_replace_mode
+    | Normal_using_t_ctrl_slash_ctrl_o_in_terminal_mode
     | Operator_pending
     | Operator_pending_forced_blockwise
     | Operator_pending_forced_characterwise
@@ -51,6 +52,7 @@ let of_mode_symbol = function
   | "niI" -> Ok Normal_using_i_ctrl_o_in_insert_mode
   | "niR" -> Ok Normal_using_i_ctrl_o_in_replace_mode
   | "niV" -> Ok Normal_using_i_ctrl_o_in_virtual_replace_mode
+  | "ntT" -> Ok Normal_using_t_ctrl_slash_ctrl_o_in_terminal_mode
   | "nt" -> Ok Normal_in_terminal_emulator
   | "v" -> Ok Visual_by_character
   | "vs" -> Ok Visual_by_character_using_v_ctrl_o_in_select_mode

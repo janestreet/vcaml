@@ -1,3 +1,0 @@
-(executables (names main)
- (libraries core_unix.command_unix core vcaml_buffer_clock)
- (preprocess (pps ppx_jane)))

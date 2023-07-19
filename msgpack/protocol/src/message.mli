@@ -10,16 +10,16 @@ end
 
 type t =
   | Nil
-  | Integer of int
+  | Int of int
   | Int64 of Int64.t
-  | UInt64 of Int64.t
-  | Boolean of bool
-  | Floating of float
+  | Uint64 of Int64.t
+  | Bool of bool
+  | Float of float
   | Array of t list
   | Map of (t * t) list
   | String of string
   | Binary of Bytes.t
-  | Extension of Custom.t
+  | Ext of Custom.t
 [@@deriving compare, sexp]
 
 include Comparable.S with type t := t

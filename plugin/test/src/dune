@@ -1,4 +1,4 @@
 (library (name vcaml_plugin_test)
- (libraries async core core_kernel.uuid vcaml vcaml_plugin
-  vcaml_test_helpers)
- (preprocess (pps ppx_jane)))
+ (libraries async core vcaml vcaml.test.helpers)
+ (flags :standard -alert -vcaml_private)
+ (inline_tests (deps ../bin/main.exe)) (preprocess (pps ppx_jane)))

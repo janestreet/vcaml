@@ -1,4 +1,6 @@
 open Core
+open Async
+open Import
 
 (** Note that (1) this is not the full set of modes that [nvim_get_mode] can return, and
     (2) the string representations of these modes and the modes returned by
@@ -30,10 +32,8 @@ module Mode = struct
     | "x" -> Visual
     | "l" -> Language
     | "t" -> Terminal
-    | mode -> raise_s [%message "Unrecognized mode" (mode : string)]
+    | mode -> raise_s [%message "Unrecognized mode" (mode : string)] [@nontail]
   ;;
-
-  let of_string_or_error t = Or_error.try_with (fun () -> of_string t)
 
   let to_string = function
     | Normal -> "n"
@@ -50,64 +50,63 @@ module Mode = struct
   ;;
 end
 
-let scope_of_msgpack msg =
+let scope_of_msgpack msgpack =
   (* Buffer indexing starts at 1, so a buffer number of 0 indicates a global mapping. *)
-  match (msg : Msgpack.t) with
-  | Integer 0 -> Ok `Global
+  match (msgpack : Msgpack.t) with
+  | Int 0 -> Ok `Global
   | _ ->
     let open Or_error.Let_syntax in
-    let%map buffer = Extract.value Buffer msg in
+    let%map buffer = Type.of_msgpack Buffer msgpack in
     `Buffer_local buffer
 ;;
 
+(* Fields are ordered in the way that would be most useful for reading a sorted list of
+   mappings. *)
 type t =
-  { description : string option [@sexp.option]
-  ; lhs : string
-  ; rhs : string
+  { lhs : string
   ; mode : Mode.t
   ; scope : [ `Global | `Buffer_local of Nvim_internal.Buffer.t ]
-  ; expr : bool
+  ; description : string option [@sexp.option]
+  ; rhs : string
+  ; expr : [ `Replace_keycodes of bool ] option [@sexp.option]
   ; nowait : bool
   ; silent : bool
   ; recursive : bool
-  ; sid : int
+  ; script_id : int
   }
-[@@deriving sexp_of]
+[@@deriving compare, sexp_of]
 
-let of_msgpack msg =
+let of_msgpack_map map =
   let open Or_error.Let_syntax in
-  let to_or_error = function
-    | Some i -> Ok i
-    | None -> Or_error.error_string "malformed keycommand message"
-  in
-  let%bind result = Extract.map_of_msgpack_map msg in
-  let lookup_exn key extract = Map.find result key |> to_or_error >>= extract in
+  let find_key = find_or_error_and_convert in
   let%bind modes =
-    lookup_exn "mode" (fun msg ->
-      let%bind modes = Extract.string msg in
-      List.map (String.to_list modes) ~f:(fun mode ->
-        Mode.of_string_or_error (Char.to_string mode))
-      |> Or_error.combine_errors)
+    let%bind modes = find_key map "mode" (Type.of_msgpack String) in
+    List.map (String.to_list modes) ~f:(fun mode ->
+      Or_error.try_with (fun () -> Mode.of_string (Char.to_string mode)))
+    |> Or_error.combine_errors
   in
-  let%bind silent = lookup_exn "silent" Extract.bool in
-  let%bind noremap = lookup_exn "noremap" Extract.bool in
-  let%bind nowait = lookup_exn "nowait" Extract.bool in
-  let%bind expr = lookup_exn "expr" Extract.bool in
-  let%bind sid = lookup_exn "sid" Extract.int in
-  let%bind lhs = lookup_exn "lhs" Extract.string in
-  let%bind rhs = lookup_exn "rhs" Extract.string in
-  let%bind description =
-    match Map.find result "desc" with
-    | None -> Ok None
-    | Some description ->
-      let%map description = Extract.string description in
-      Some description
+  let%bind silent = find_key map "silent" (Type.of_msgpack Bool) in
+  let%bind noremap = find_key map "noremap" (Type.of_msgpack Bool) in
+  let%bind nowait = find_key map "nowait" (Type.of_msgpack Bool) in
+  let%bind expr =
+    match%bind find_key map "expr" (Type.of_msgpack Bool) with
+    | false -> return None
+    | true ->
+      let%map replace_keycodes =
+        find_and_convert map "replace_keycodes" (Type.of_msgpack Bool)
+        >>| Option.value ~default:false
+      in
+      Some (`Replace_keycodes replace_keycodes)
   in
-  let%bind scope = lookup_exn "buffer" scope_of_msgpack in
+  let%bind script_id = find_key map "sid" (Type.of_msgpack Int) in
+  let%bind lhs = find_key map "lhs" (Type.of_msgpack String) in
+  let%bind rhs = find_key map "rhs" (Type.of_msgpack String) in
+  let%bind description = find_and_convert map "desc" (Type.of_msgpack String) in
+  let%bind scope = find_key map "buffer" scope_of_msgpack in
   let recursive = not noremap in
   let keymaps =
     List.map modes ~f:(fun mode ->
-      { description; lhs; rhs; mode; scope; expr; nowait; silent; recursive; sid })
+      { description; lhs; rhs; mode; scope; expr; nowait; silent; recursive; script_id })
   in
   return keymaps
 ;;
@@ -125,7 +124,7 @@ let of_msgpack msg =
    mappings for mapmode-nvo by default. '!' is not a recognized mode, so it silently
    returns mappings for 'nvo' instead of 'ic'. To fix this, we need to individually
    query for 'i' and 'c' (and 'l') and join the results together. *)
-let get ~scope ~mode =
+let get here client ~scope ~mode =
   let query =
     match scope with
     | `Global -> Nvim_internal.nvim_get_keymap
@@ -145,23 +144,25 @@ let get ~scope ~mode =
     | Cmd_line -> [ Cmd_line; Language ]
     | Insert_and_command_line -> [ Insert; Cmd_line; Language ]
   in
-  let open Api_call.Or_error.Let_syntax in
   modes
-  |> List.map ~f:(fun mode -> query ~mode:(Mode.to_string mode) |> Api_call.of_api_result)
-  |> Api_call.Or_error.all
-  >>| List.concat
+  |> Deferred.Or_error.List.concat_map ~how:`Sequential ~f:(fun mode ->
+    query ~mode:(Mode.to_string mode)
+    |> map_witness ~f:(fun keymaps ->
+      keymaps
+      |> List.map ~f:of_msgpack_map
+      |> Or_error.combine_errors
+      |> Or_error.map ~f:List.concat)
+    |> run here client)
   (* Because 'i' and 'c' will produce duplicate entries for '!' mappings, we need to
      dedup the results after querying each. *)
-  >>| List.dedup_and_sort ~compare:[%compare: Msgpack.t]
-  >>| List.map ~f:of_msgpack
-  >>| Or_error.combine_errors
-  >>| Or_error.map ~f:List.concat
-  |> Api_call.map ~f:Or_error.join
+  >>|? List.dedup_and_sort ~compare
 ;;
 
 let set
+      here
+      client
       ?(recursive = false)
-      ?(expr = false)
+      ?expr
       ?(unique = false)
       ?(nowait = false)
       ?(silent = false)
@@ -179,28 +180,30 @@ let set
   in
   let mode = Mode.to_string mode in
   let opts =
+    let expr =
+      match expr with
+      | None -> [ "expr", false ]
+      | Some (`Replace_keycodes false) -> [ "expr", true ]
+      | Some (`Replace_keycodes true) -> [ "expr", true; "replace_keycodes", true ]
+    in
     let boolean_opts =
-      [ "noremap", not recursive
-      ; "expr", expr
-      ; "unique", unique
-      ; "nowait", nowait
-      ; "silent", silent
-      ]
-      |> List.map ~f:(fun (key, value) -> Msgpack.String key, Msgpack.Boolean value)
+      [ "noremap", not recursive; "unique", unique; "nowait", nowait; "silent", silent ]
+      @ expr
+      |> List.map ~f:(fun (key, value) -> key, Msgpack.Bool value)
     in
     match description with
     | "" -> boolean_opts
-    | _ -> (String "desc", String description) :: boolean_opts
+    | _ -> ("desc", String description) :: boolean_opts
   in
-  query ~mode ~lhs ~rhs ~opts |> Api_call.of_api_result
+  query ~mode ~lhs ~rhs ~opts:(String.Map.of_alist_exn opts) |> run here client
 ;;
 
-let unset ~scope ~lhs ~mode =
+let unset here client ~scope ~lhs ~mode =
   let query =
     match scope with
     | `Global -> Nvim_internal.nvim_del_keymap
     | `Buffer_local buffer -> Nvim_internal.nvim_buf_del_keymap ~buffer
   in
   let mode = Mode.to_string mode in
-  query ~mode ~lhs |> Api_call.of_api_result
+  query ~mode ~lhs |> run here client
 ;;

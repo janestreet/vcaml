@@ -20,13 +20,13 @@ let rec jsonaf_of_msgpack msgpack =
   let open Jsonaf.Export in
   match (msgpack : Msgpack.t) with
   | Nil -> jsonaf_of_unit ()
-  | Boolean bool -> jsonaf_of_bool bool
+  | Bool bool -> jsonaf_of_bool bool
   | String string -> jsonaf_of_string string
   | Binary bytes -> jsonaf_of_bytes bytes
-  | Integer int -> jsonaf_of_int int
+  | Int int -> jsonaf_of_int int
   | Int64 int64 -> `Number (Printf.sprintf "%Ld" int64)
-  | UInt64 uint64 -> `Number (Printf.sprintf "%Lu" uint64)
-  | Floating float -> jsonaf_of_float float
+  | Uint64 uint64 -> `Number (Printf.sprintf "%Lu" uint64)
+  | Float float -> jsonaf_of_float float
   | Array ts -> `Array (List.map ts ~f:jsonaf_of_msgpack)
   | Map alist ->
     `Object
@@ -38,30 +38,30 @@ let rec jsonaf_of_msgpack msgpack =
              [%message
                "Cannot convert Msgpack map key to JSON map key - not a string"
                  (key : Msgpack.t)]))
-  | Extension { type_id; data } ->
+  | Ext { type_id; data } ->
     `Object [ "type", jsonaf_of_int type_id; "data", jsonaf_of_bytes data ]
 ;;
 
 let rec msgpack_of_jsonaf : Jsonaf.t -> Msgpack.t = function
   | `Null -> Nil
-  | `False -> Boolean false
-  | `True -> Boolean true
+  | `False -> Bool false
+  | `True -> Bool true
   | `String string -> String string
   | `Number string ->
     (match Int.of_string string with
-     | int -> Integer int
+     | int -> Int int
      | exception _ ->
        (match Scanf.sscanf string "%Ld%!" Fn.id with
         | int64 -> Int64 int64
         | exception _ ->
           (match Scanf.sscanf string "%Lu%!" Fn.id with
-           | uint64 -> UInt64 uint64
+           | uint64 -> Uint64 uint64
            | exception _ ->
              (match Float.of_string string with
-              | float -> Floating float
+              | float -> Float float
               | exception _ -> raise_s [%message "Failed to parse number" ~_:string]))))
   | `Object [ ("type", `Number type_id); ("data", `String data) ] ->
-    Extension { type_id = Int.of_string type_id; data = Bytes.of_string data }
+    Ext { type_id = Int.of_string type_id; data = Bytes.of_string data }
   | `Object alist ->
     alist
     |> List.map ~f:(fun (key, value) -> Msgpack.String key, msgpack_of_jsonaf value)
@@ -75,36 +75,36 @@ let rec effectively_equivalent_msgpack m1 m2 =
   match (m1 : Msgpack.t), (m2 : Msgpack.t) with
   | Nil, Nil -> true
   | Nil, _ -> false
-  | Boolean b1, Boolean b2 -> Bool.equal b1 b2
-  | Boolean _, _ -> false
+  | Bool b1, Bool b2 -> Bool.equal b1 b2
+  | Bool _, _ -> false
   | String s1, String s2 -> String.equal s1 s2
   | String s1, Binary s2 -> String.equal s1 (Bytes.to_string s2)
   | String _, _ -> false
   | Binary s1, String s2 -> String.equal (Bytes.to_string s1) s2
   | Binary s1, Binary s2 -> Bytes.equal s1 s2
   | Binary _, _ -> false
-  | Integer i1, Integer i2 -> Int.equal i1 i2
-  | Integer i1, Int64 i2 -> Int64.equal (Int64.of_int i1) i2
-  | Integer i1, UInt64 i2 -> i1 >= 0 && Int64.equal (Int64.of_int i1) i2
-  | Integer i1, Floating i2 -> Float.is_integer i2 && i1 = Float.to_int i2
-  | Integer _, _ -> false
-  | Int64 i1, Integer i2 -> Int64.equal i1 (Int64.of_int i2)
+  | Int i1, Int i2 -> Int.equal i1 i2
+  | Int i1, Int64 i2 -> Int64.equal (Int64.of_int i1) i2
+  | Int i1, Uint64 i2 -> i1 >= 0 && Int64.equal (Int64.of_int i1) i2
+  | Int i1, Float i2 -> Float.is_integer i2 && i1 = Float.to_int i2
+  | Int _, _ -> false
+  | Int64 i1, Int i2 -> Int64.equal i1 (Int64.of_int i2)
   | Int64 i1, Int64 i2 -> Int64.equal i1 i2
-  | Int64 i1, UInt64 i2 -> Int64.(i1 > zero) && Int64.equal i1 i2
-  | Int64 i1, Floating i2 -> Float.is_integer i2 && Int64.equal i1 (Float.to_int64 i2)
+  | Int64 i1, Uint64 i2 -> Int64.(i1 > zero) && Int64.equal i1 i2
+  | Int64 i1, Float i2 -> Float.is_integer i2 && Int64.equal i1 (Float.to_int64 i2)
   | Int64 _, _ -> false
-  | UInt64 i1, Integer i2 -> i2 >= 0 && Int64.equal i1 (Int64.of_int i2)
-  | UInt64 i1, Int64 i2 -> Int64.(i2 > zero) && Int64.equal i1 i2
-  | UInt64 i1, UInt64 i2 -> Int64.equal i1 i2
-  | UInt64 i1, Floating i2 ->
+  | Uint64 i1, Int i2 -> i2 >= 0 && Int64.equal i1 (Int64.of_int i2)
+  | Uint64 i1, Int64 i2 -> Int64.(i2 > zero) && Int64.equal i1 i2
+  | Uint64 i1, Uint64 i2 -> Int64.equal i1 i2
+  | Uint64 i1, Float i2 ->
     Float.is_integer i2 && Float.is_positive i2 && Int64.equal i1 (Float.to_int64 i2)
-  | UInt64 _, _ -> false
-  | Floating i1, Integer i2 -> Float.is_integer i1 && Float.to_int i1 = i2
-  | Floating i1, Int64 i2 -> Float.is_integer i1 && Int64.equal (Float.to_int64 i1) i2
-  | Floating i1, UInt64 i2 ->
+  | Uint64 _, _ -> false
+  | Float i1, Int i2 -> Float.is_integer i1 && Float.to_int i1 = i2
+  | Float i1, Int64 i2 -> Float.is_integer i1 && Int64.equal (Float.to_int64 i1) i2
+  | Float i1, Uint64 i2 ->
     Float.is_integer i1 && Float.is_positive i1 && Int64.equal (Float.to_int64 i1) i2
-  | Floating f1, Floating f2 -> Float.equal f1 f2
-  | Floating _, _ -> false
+  | Float f1, Float f2 -> Float.equal f1 f2
+  | Float _, _ -> false
   | Array a1, Array a2 -> List.equal effectively_equivalent_msgpack a1 a2
   | Array _, _ -> false
   | Map a1, Map a2 ->
@@ -113,8 +113,8 @@ let rec effectively_equivalent_msgpack m1 m2 =
     in
     List.equal effectively_equivalent_msgpack_maps a1 a2
   | Map _, _ -> false
-  | Extension e1, Extension e2 -> e1.type_id = e2.type_id && Bytes.equal e1.data e2.data
-  | Extension _, _ -> false
+  | Ext e1, Ext e2 -> e1.type_id = e2.type_id && Bytes.equal e1.data e2.data
+  | Ext _, _ -> false
 ;;
 
 let hex_of_bytes bytes =

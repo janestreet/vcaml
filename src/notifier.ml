@@ -1,74 +1,64 @@
 open Core
-module Error_type = Nvim_internal.Error_type
+open Async
+open Import
 
-module Notification = struct
-  type t = T : _ Nvim_internal.Api_result.t -> t [@@unboxed]
+module Func = struct
+  type 'fn t =
+    | Unit : unit Deferred.Or_error.t t
+    | Cons : 'a Type.t * 'b t -> ('a -> 'b) t
 
-  module Defun = struct
-    module Vim = struct
-      type notification = t
+  let unit = Unit
+  let ( @-> ) typ t = Cons (typ, t)
 
-      type ('fn, 'leftmost_input) t =
-        | Unit : (notification, notification) t
-        | Cons : 'a Nvim_internal.Phantom.t * ('b, _) t -> ('a -> 'b, 'a) t
-
-      let unit = Unit
-      let ( @-> ) a t = Cons (a, t)
-    end
-  end
-
-  let custom ~type_ ~function_name =
-    let rec custom
-      : type fn i. (fn, i) Defun.Vim.t -> (Msgpack.t list -> Msgpack.t list) -> fn
-      =
-      fun arity f ->
-      (* Due to the fact that OCaml does not (easily) support higher-ranked
-         polymorphism, we need to construct the function [to_msgpack] *after* we unpack
-         this GADT, so it can have the type [i -> Msgpack.t] (which is fixed by [arity]
-         in this function). Otherwise, it needs the type [forall 'a . 'a witness -> 'a
-         -> Msgpack.t], which is not that easily expressible. *)
-      match arity with
-      | Unit -> T (Nvim_internal.nvim_call_function ~fn:function_name ~args:(f []))
-      | Cons (typ, rest) ->
-        fun i ->
-          let to_msgpack = Extract.inject typ in
-          custom rest (fun args -> f (to_msgpack i :: args))
-    in
-    custom type_ Fn.id
+  let rec apply_fn : type fn. fn t -> (Msgpack.t list -> unit Deferred.Or_error.t) -> fn =
+    fun t f ->
+    (* Due to the fact that OCaml does not (easily) support higher-ranked polymorphism, we
+       need to construct the function [to_msgpack] *after* we unpack this GADT, so it can
+       have the type [i -> Msgpack.t] (which is fixed by [t] in this function). Otherwise,
+       it needs the type [forall 'a . 'a witness -> 'a -> Msgpack.t], which is not that
+       easily expressible. *)
+    match t with
+    | Unit -> f []
+    | Cons (typ, rest) ->
+      fun arg -> apply_fn rest (fun args -> f (Type.to_msgpack typ arg :: args))
   ;;
+end
 
-  let err_writeln ~str = T (Nvim_internal.nvim_err_writeln ~str)
+(* Changes here should probably have analogous changes in [Nvim.call_function]. *)
+let notify here client ~name ~type_ =
+  let client = Type_equal.conv Client.Private.eq client in
+  Func.apply_fn type_ (fun args ->
+    (match name with
+     | `Viml name -> Nvim_internal.nvim_call_function ~fn:name ~args
+     | `Lua name ->
+       Nvim_internal.nvim_exec_lua
+         (* We surround [name] with parentheses to support anonymous functions. We assign
+            it to [result] before returning it to ensure [name] appears in the stack trace
+            if it raises an error. *)
+         ~code:[%string {| local result = (%{name})(...); return result |}]
+         ~args)
+    |> client.call_nvim_api_fn here Notification)
+;;
 
-  module Untested = struct
-    let nvim_buf_add_highlight buffer ~namespace ~hl_group ~line ~col_start ~col_end =
-      Nvim_internal.nvim_buf_add_highlight
-        ~buffer
-        ~ns_id:(Namespace.id namespace)
+module Untested = struct
+  let nvim_buf_add_highlight
+        here
+        client
+        buffer
+        ~namespace
         ~hl_group
         ~line
         ~col_start
         ~col_end
-      |> T
-    ;;
-  end
-end
-
-let notify client (Notification.T notification) =
-  let client = Type_equal.conv Client.Private.eq client in
-  let (Connected state) = client.state in
-  state.call_nvim_api_fn notification Notification
-;;
-
-let error client error =
-  let notification = Notification.err_writeln ~str:(Error.to_string_hum error) in
-  notify client notification
-;;
-
-module For_testing = struct
-  let send_raw client ~function_name:name ~params =
+    =
     let client = Type_equal.conv Client.Private.eq client in
-    let (Connected state) = client.state in
-    let notification = { Nvim_internal.Api_result.name; params; witness = Nil } in
-    state.call_nvim_api_fn notification Notification
+    Nvim_internal.nvim_buf_add_highlight
+      ~buffer
+      ~ns_id:(Namespace.id namespace)
+      ~hl_group
+      ~line
+      ~col_start
+      ~col_end
+    |> client.call_nvim_api_fn here Notification
   ;;
 end

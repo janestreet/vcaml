@@ -1,19 +1,27 @@
 open Core
 
 module type Nvim_id = sig
+  type 'a phantom
   type t = private int [@@deriving sexp_of]
 
   include Comparable.S_plain with type t := t
   include Hashable.S_plain with type t := t
   include Msgpack.Msgpackable with type t := t
 
+  val t : t phantom
+
   module Or_current : sig
+    type nvim_id := t
+
     type nonrec t =
       | Current
       | Id of t
     [@@deriving sexp_of]
 
     include Msgpack.Msgpackable with type t := t
+
+    val to_id : t -> nvim_id option
+    val t : t phantom
   end
 end
 
@@ -21,14 +29,20 @@ let make_nvim_id ~type_id ~name =
   (module struct
     include Int
 
+    (* This definition is overridden later with destructive substitution. *)
+    type 'a phantom = 'a option
+
+    (* This value is overridden later. *)
+    let t = None
+
     let rec of_msgpack =
       let expected_type_id = type_id in
       function
-      | Msgpack.Extension { type_id; data } when type_id = expected_type_id ->
+      | Msgpack.Ext { type_id; data } when type_id = expected_type_id ->
         let open Or_error in
         Msgpack.t_of_string (Bytes.to_string data) >>= of_msgpack
-      | Integer i -> Ok i
-      | Int64 i | UInt64 i ->
+      | Int i -> Ok i
+      | Int64 i | Uint64 i ->
         (match Int64.to_int i with
          | Some i -> Ok i
          | None ->
@@ -39,13 +53,21 @@ let make_nvim_id ~type_id ~name =
           [%message (Printf.sprintf "not a %s message!" name) (msg : Msgpack.t)]
     ;;
 
-    let to_msgpack t = Msgpack.Integer t
+    let to_msgpack t = Msgpack.Int t
 
     module Or_current = struct
       type nonrec t =
         | Current
         | Id of t
       [@@deriving sexp_of]
+
+      (* This value is overridden later. *)
+      let t = None
+
+      let to_id = function
+        | Current -> None
+        | Id t -> Some t
+      ;;
 
       let of_msgpack msgpack =
         match%map.Or_error of_msgpack msgpack with

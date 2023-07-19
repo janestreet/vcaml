@@ -58,22 +58,20 @@ let send t message =
 
 let request t method_name params =
   t.msgid <- t.msgid + 1;
-  let message =
-    Msgpack.Array [ Integer 0; Integer t.msgid; String method_name; Array params ]
-  in
+  let message = Msgpack.Array [ Int 0; Int t.msgid; String method_name; Array params ] in
   send t message
 ;;
 
 let notify t method_name params =
-  let message = Msgpack.Array [ Integer 2; String method_name; Array params ] in
+  let message = Msgpack.Array [ Int 2; String method_name; Array params ] in
   send t message
 ;;
 
 let respond t ~msgid response =
   let message =
     match response with
-    | Ok result -> Msgpack.Array [ Integer 1; Integer msgid; Nil; result ]
-    | Error error -> Msgpack.Array [ Integer 1; Integer msgid; error; Nil ]
+    | Ok result -> Msgpack.Array [ Int 1; Int msgid; Nil; result ]
+    | Error error -> Msgpack.Array [ Int 1; Int msgid; error; Nil ]
   in
   send t message
 ;;
@@ -156,7 +154,7 @@ let open_ socketname =
   in
   let channel =
     match wait_for_response t 10 with
-    | Array [ Integer 1; Integer msgid; Nil; Array [ Integer channel; _metadata ] ]
+    | Array [ Int 1; Int msgid; Nil; Array [ Int channel; _metadata ] ]
       when t.msgid = msgid -> channel
     | message ->
       raise_s
