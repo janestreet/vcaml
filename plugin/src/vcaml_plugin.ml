@@ -68,8 +68,7 @@ module Oneshot = struct
       List.iter rpcs ~f:(fun (Rpc.Blocking_rpc { here; name; type_; f }) ->
         Ocaml_from_nvim.Private.register_request_blocking
           here
-          Not_connected
-          client
+          (Not_connected client)
           ~name
           ~type_
           ~f:(fun () ~run_in_background ->
@@ -149,36 +148,51 @@ module Persistent = struct
     ;;
   end
 
-  let register_handlers
-        (type client)
-        (client_kind : client Ocaml_from_nvim.Client_kind.t)
-        ~(client : client)
-        ~state
-        rpcs
-    =
+  let register_handlers ~client ~state rpcs =
+    let get_state state ~name =
+      match Set_once.get state with
+      | Some state -> state
+      | None ->
+        (* This error indicates a bug in the plugin's initialization logic. Under normal
+           circumstances, Neovim won't learn about the plugin's channel until [notify_fn]
+           is invoked, which happens after [on_startup] returns, but it is possible that
+           [on_startup] gave Neovim a way to invoke the plugin's RPCs, e.g., by
+           registering autocommands. Any logic that does this must be moved into
+           [after_startup] so that the state is guaranteed to be initialized before RPCs
+           are invoked. *)
+        raise_s [%message "Called RPC before plugin finished initializing." name]
+    in
+    let client = Client.Maybe_connected.Not_connected client in
     List.iter rpcs ~f:(function
       | Rpc.Blocking_rpc { here; name; type_; f; on_keyboard_interrupt } ->
         Ocaml_from_nvim.Private.register_request_blocking
           ?on_keyboard_interrupt
           here
-          client_kind
           client
           ~name
           ~type_
           ~f
-          ~wrap_f:(fun f -> f (Set_once.get_exn state [%here]))
+          ~wrap_f:(fun f -> f (get_state state ~name))
       | Async_rpc { here; name; type_; f } ->
         Ocaml_from_nvim.Private.register_request_async
           here
-          client_kind
           client
           ~name
           ~type_
           ~f
-          ~wrap_f:(fun f -> f (Set_once.get_exn state [%here])))
+          ~wrap_f:(fun f -> f (get_state state ~name)))
   ;;
 
-  let create' ?on_crash ~name ~description ~param ~on_startup ~notify_fn rpcs =
+  let create'
+        ?on_crash
+        ?after_startup
+        ~name
+        ~description
+        ~param
+        ~on_startup
+        ~notify_fn
+        rpcs
+    =
     let f ~param =
       behave_nicely_when_called_from_nvim ~stdout_is_used_for_msgpack:false;
       let state = Set_once.create () in
@@ -231,7 +245,7 @@ module Persistent = struct
       in
       let client = Client.create ~name ~on_error:(`Call on_error) in
       let rpc_registration_failure = ref None in
-      (try register_handlers Not_connected ~client ~state rpcs with
+      (try register_handlers ~client ~state rpcs with
        | exn -> rpc_registration_failure := Some exn);
       let%bind client =
         Private.attach_client client (Socket `Infer_from_parent_nvim) >>| ok_exn
@@ -254,31 +268,41 @@ module Persistent = struct
         (* It's important that we set [state] before notifying Neovim that the plugin
            is ready, since at that point Neovim has the green light to call RPCs. *)
         Set_once.set_exn state [%here] state';
-        let%bind () =
-          match%bind
-            Nvim.call_function
-              [%here]
-              client
-              ~name:notify_fn
-              ~type_:Nvim.Func.(Int @-> return Object)
-              (Client.channel client)
-          with
-          | Error error ->
-            let%bind () = Private.notify_nvim_of_error client [%here] error in
-            Error.raise error
-          | Ok value ->
-            (match value, notify_fn with
-             | Int 0, `Viml _ | Nil, `Lua _ -> return ()
-             | _, (`Viml function_name | `Lua function_name) ->
-               let error =
-                 Error.create_s
-                   [%message
-                     (sprintf "%s returned a value" function_name) ~_:(value : Msgpack.t)]
-               in
+        (match%bind
+           match after_startup with
+           | None -> Deferred.Or_error.return ()
+           | Some f -> Monitor.try_with_join_or_error (fun () -> f state' ~client)
+         with
+         | Error error ->
+           let%bind () = Private.notify_nvim_of_error client [%here] error in
+           Error.raise error
+         | Ok () ->
+           let%bind () =
+             match%bind
+               Nvim.call_function
+                 [%here]
+                 client
+                 ~name:notify_fn
+                 ~type_:Nvim.Func.(Int @-> return Object)
+                 (Client.channel client)
+             with
+             | Error error ->
                let%bind () = Private.notify_nvim_of_error client [%here] error in
-               Error.raise error)
-        in
-        Deferred.never ()
+               Error.raise error
+             | Ok value ->
+               (match value, notify_fn with
+                | Int 0, `Viml _ | Nil, `Lua _ -> return ()
+                | _, (`Viml function_name | `Lua function_name) ->
+                  let error =
+                    Error.create_s
+                      [%message
+                        (sprintf "%s returned a value" function_name)
+                          ~_:(value : Msgpack.t)]
+                  in
+                  let%bind () = Private.notify_nvim_of_error client [%here] error in
+                  Error.raise error)
+           in
+           Deferred.never ())
     in
     Async.Command.async
       ~behave_nicely_in_pipeline:false
@@ -290,9 +314,10 @@ module Persistent = struct
          | Some on_crash -> run_with_crash_handler ~on_crash ~f:(fun () -> f ~param))
   ;;
 
-  let create ?on_crash ~name ~description ~on_startup ~notify_fn rpcs =
+  let create ?on_crash ?after_startup ~name ~description ~on_startup ~notify_fn rpcs =
     create'
       ?on_crash
+      ?after_startup
       ~name
       ~description
       ~param:(Async.Command.Param.return ())

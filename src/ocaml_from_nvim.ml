@@ -117,23 +117,7 @@ module Async = struct
   end
 end
 
-module Client_kind = struct
-  type 'a t =
-    | Not_connected : Client.Not_connected.t t
-    | Asynchronous : [ `asynchronous ] Client.t t
-    | Blocking : [ `blocking ] Client.t t
-end
-
-let register_request_async_internal
-      (type client)
-      here
-      (kind : client Client_kind.t)
-      (client : client)
-      ~name
-      ~type_
-      ~f
-      ~wrap_f
-  =
+let register_request_async_internal here client ~name ~type_ ~f ~wrap_f =
   let f client params =
     match Async.valid_number_of_args type_ (List.length params) with
     | false ->
@@ -149,23 +133,18 @@ let register_request_async_internal
                  [%message "Failed to parse" ~method_name:name (params : Msgpack.t list)]
           |> Deferred.Or_error.fail)
   in
-  match kind with
-  | Not_connected ->
+  match (client : _ Client.Maybe_connected.t) with
+  | Not_connected client ->
     Client.Private.Not_connected.register_request_async here client ~name ~f
-  | Asynchronous ->
-    let client = Type_equal.conv Client.Private.eq client in
-    client.register_request_async here ~name ~f
-  | Blocking ->
+  | Connected client ->
     let client = Type_equal.conv Client.Private.eq client in
     client.register_request_async here ~name ~f
 ;;
 
 let register_request_blocking_internal
-      (type client)
       ?(on_keyboard_interrupt = ignore)
       here
-      (kind : client Client_kind.t)
-      (client : client)
+      client
       ~name
       ~type_
       ~f
@@ -184,26 +163,22 @@ let register_request_blocking_internal
           |> Error.tag_s ~tag:[%message "Failed to parse" (params : Msgpack.t list)]
           |> Deferred.Or_error.fail)
   in
-  match kind with
-  | Not_connected ->
+  match (client : _ Client.Maybe_connected.t) with
+  | Not_connected client ->
     Client.Private.Not_connected.register_request_blocking
       here
       client
       ~name
       ~f
       ~on_keyboard_interrupt
-  | Asynchronous ->
-    let client = Type_equal.conv Client.Private.eq client in
-    client.register_request_blocking here ~name ~f ~on_keyboard_interrupt
-  | Blocking ->
+  | Connected client ->
     let client = Type_equal.conv Client.Private.eq client in
     client.register_request_blocking here ~name ~f ~on_keyboard_interrupt
 ;;
 
-let register_request_async here client_kind client ~name ~type_ ~f =
+let register_request_async here client ~name ~type_ ~f =
   register_request_async_internal
     here
-    client_kind
     client
     ~name
     ~type_
@@ -211,19 +186,10 @@ let register_request_async here client_kind client ~name ~type_ ~f =
     ~wrap_f:(fun f -> f ())
 ;;
 
-let register_request_blocking
-      ?on_keyboard_interrupt
-      here
-      client_kind
-      client
-      ~name
-      ~type_
-      ~f
-  =
+let register_request_blocking ?on_keyboard_interrupt here client ~name ~type_ ~f =
   register_request_blocking_internal
     ?on_keyboard_interrupt
     here
-    client_kind
     client
     ~name
     ~type_
@@ -239,7 +205,40 @@ let unsubscribe_from_broadcast here client ~name =
   Nvim_internal.nvim_unsubscribe ~event:name |> run here client
 ;;
 
+module Callback = struct
+  type 'a anon_rpc =
+    { on_keyboard_interrupt : (unit -> unit) option
+    ; f :
+        run_in_background:
+          (Source_code_position.t
+           -> f:([ `asynchronous ] Client.t -> unit Deferred.Or_error.t)
+           -> unit)
+        -> client:[ `blocking ] Client.t
+        -> 'a Deferred.Or_error.t
+    }
+
+  type 'a t =
+    | Viml of string
+    | Rpc of 'a anon_rpc
+
+  let anon_rpc ?on_keyboard_interrupt f = Rpc { on_keyboard_interrupt; f }
+end
+
 module Private = struct
+  let register_callback here client ~return_type { Callback.on_keyboard_interrupt; f } =
+    let name =
+      (Type_equal.conv Client.Private.eq client).name_anonymous_blocking_request ()
+    in
+    register_request_blocking
+      ?on_keyboard_interrupt
+      here
+      (Connected client)
+      ~name
+      ~type_:(Nullary return_type)
+      ~f;
+    name
+  ;;
+
   let register_request_async = register_request_async_internal
   let register_request_blocking = register_request_blocking_internal
 end

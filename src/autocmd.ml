@@ -1,4 +1,5 @@
 open Core
+open Async
 open Import
 module Id = Int
 
@@ -266,18 +267,37 @@ let get here client ?group ?events ?patterns_or_buffer () =
   |> run here client
 ;;
 
-let create
-      here
-      client
-      ?description
-      ?once
-      ?nested
-      ()
-      ~group
-      ~patterns_or_buffer
-      ~events
-      ~command
+let rec create
+          here
+          client
+          ?description
+          ?once
+          ?nested
+          ~group
+          ~patterns_or_buffer
+          ~events
+          command
   =
+  let open Deferred.Or_error.Let_syntax in
+  let%bind patterns_or_buffer =
+    match (patterns_or_buffer : Patterns_or_buffer.t) with
+    | Patterns _ | Buffer (Id _) -> return patterns_or_buffer
+    | Buffer Current ->
+      let%map buffer = Nvim.get_current_buf [%here] client in
+      Patterns_or_buffer.Buffer (Id buffer)
+  in
+  let viml_or_rpc_name =
+    match (command : unit Ocaml_from_nvim.Callback.t) with
+    | Viml command -> `Viml command
+    | Rpc rpc ->
+      `Rpc (Ocaml_from_nvim.Private.register_callback here client ~return_type:Nil rpc)
+  in
+  let channel = Client.channel client in
+  let command =
+    match viml_or_rpc_name with
+    | `Viml command -> command
+    | `Rpc name -> [%string {|call rpcrequest(%{channel#Int}, "%{name}")|}]
+  in
   let event = events_to_msgpack events in
   let opts =
     let maybe name var conv = Option.map var ~f:(fun var -> name, conv var) in
@@ -291,7 +311,36 @@ let create
     |> List.filter_opt
     |> String.Map.of_alist_exn
   in
-  Nvim_internal.nvim_create_autocmd ~event ~opts |> run here client
+  let%bind id = Nvim_internal.nvim_create_autocmd ~event ~opts |> run here client in
+  let%bind () =
+    match viml_or_rpc_name, patterns_or_buffer with
+    | `Viml _, _ | _, Patterns _ -> return ()
+    | `Rpc name, Buffer _ ->
+      (* It's important that we create the RPC-based autocmd before creating the autocmd
+         for unregistering the RPC. If we did this in the other order then an RPC-based
+         autocmd that runs on [BufWipeout] would fail to call the RPC since autocmds run
+         in the order they are defined. *)
+      let group =
+        let client = Type_equal.(conv Client.Private.eq) client in
+        Set_once.get_exn client.vcaml_internal_group [%here]
+      in
+      create
+        here
+        client
+        ~description:[%string "Unregister %{name}"]
+        ~once:true
+        ~patterns_or_buffer
+        ~group
+        (* Unlike buffer-local keymaps and buffer-local commands, buffer-local autocmds
+           are only removed on wipeout, not on buffer deletion. *)
+        ~events:[ BufWipeout ]
+        (Viml
+           [%string
+             {| call rpcnotify(%{channel#Int}, "%{Client.Private.unregister_blocking_rpc}", "%{name}") |}])
+      |> Deferred.ignore_m
+      |> Deferred.ok
+  in
+  return id
 ;;
 
 let delete here client id = Nvim_internal.nvim_del_autocmd ~id |> run here client
@@ -328,3 +377,10 @@ let exec here client ?group ?patterns_or_buffer ?modeline ?data () ~events =
   in
   Nvim_internal.nvim_exec_autocmds ~event ~opts |> run here client
 ;;
+
+module Private = struct
+  let vcaml_internal_group client =
+    let client = Type_equal.(conv Client.Private.eq) client in
+    Set_once.get_exn client.vcaml_internal_group [%here]
+  ;;
+end

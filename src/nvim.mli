@@ -33,7 +33,10 @@ val set_current_tab
   -> Tabpage.t
   -> unit Deferred.Or_error.t
 
+(** List all valid buffers, irrespective of whether they are 'buflisted' (and irrespective
+    of whether they are loaded). *)
 val list_bufs : Source_code_position.t -> _ Client.t -> Buffer.t list Deferred.Or_error.t
+
 val list_wins : Source_code_position.t -> _ Client.t -> Window.t list Deferred.Or_error.t
 val list_tabs : Source_code_position.t -> _ Client.t -> Tabpage.t list Deferred.Or_error.t
 

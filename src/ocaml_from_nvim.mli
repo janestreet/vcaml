@@ -31,13 +31,6 @@ module Async : sig
   end
 end
 
-module Client_kind : sig
-  type 'a t =
-    | Not_connected : Client.Not_connected.t t
-    | Asynchronous : [ `asynchronous ] Client.t t
-    | Blocking : [ `blocking ] Client.t t
-end
-
 (** [register_request_blocking] registers a blocking RPC that can be called from Neovim
     via [rpcrequest]. Neovim will be blocked from processing user input or communicating
     with other channels until a response is returned. Neovim will continue to process
@@ -55,8 +48,7 @@ end
 val register_request_blocking
   :  ?on_keyboard_interrupt:(unit -> unit)
   -> Source_code_position.t
-  -> 'a Client_kind.t
-  -> 'a
+  -> _ Client.Maybe_connected.t
   -> name:string
   -> type_:'fn Blocking.t
   -> f:
@@ -74,8 +66,7 @@ val register_request_blocking
     time when the request was made. *)
 val register_request_async
   :  Source_code_position.t
-  -> 'a Client_kind.t
-  -> 'a
+  -> _ Client.Maybe_connected.t
   -> name:string
   -> type_:'fn Async.t
   -> f:(client:[ `asynchronous ] Client.t -> 'fn)
@@ -96,12 +87,37 @@ val unsubscribe_from_broadcast
   -> name:string
   -> unit Deferred.Or_error.t
 
+module Callback : sig
+  type 'a anon_rpc
+
+  (** This type is used by certain API functions that accept a VimL expression or command
+      as a body, e.g., when defining a command or keymap. Instead of providing VimL, you
+      can provide an OCaml-based implementation via an anonymous RPC. *)
+  type 'a t =
+    | Viml of string
+    | Rpc of 'a anon_rpc
+
+  (** An anonymous blocking RPC that is provided as a callback to an API function. It will
+      be registered before the API function is invoked (i.e., before the command or keymap
+      is defined). If the API function is scoped to a buffer, the RPC will be freed when
+      the buffer is deleted; if it is globally scoped, the RPC will never be freed.
+      Returns a ['a t] instead of ['a anon_rpc] for ergonomics. *)
+  val anon_rpc
+    :  ?on_keyboard_interrupt:(unit -> unit)
+    -> (run_in_background:
+          (Source_code_position.t
+           -> f:([ `asynchronous ] Client.t -> unit Deferred.Or_error.t)
+           -> unit)
+        -> client:[ `blocking ] Client.t
+        -> 'a Deferred.Or_error.t)
+    -> 'a t
+end
+
 module Private : sig
   val register_request_blocking
     :  ?on_keyboard_interrupt:(unit -> unit)
     -> Source_code_position.t
-    -> 'a Client_kind.t
-    -> 'a
+    -> _ Client.Maybe_connected.t
     -> name:string
     -> type_:'fn Blocking.t
     -> f:
@@ -117,12 +133,18 @@ module Private : sig
 
   val register_request_async
     :  Source_code_position.t
-    -> 'a Client_kind.t
-    -> 'a
+    -> _ Client.Maybe_connected.t
     -> name:string
     -> type_:'fn Async.t
     -> f:('b -> client:[ `asynchronous ] Client.t -> 'fn)
     -> wrap_f:(('b -> unit Deferred.Or_error.t) -> (unit, Error.t) result Deferred.t)
     -> unit
+
+  val register_callback
+    :  Source_code_position.t
+    -> _ Client.t
+    -> return_type:'a Type.t
+    -> 'a Callback.anon_rpc
+    -> string
 end
 [@@alert vcaml_private "This module is for internal VCaml use."]

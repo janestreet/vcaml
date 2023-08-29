@@ -18,7 +18,7 @@ val with_client
   -> ?links:(string * [ `In_path_as | `In_temp_as ] * string) list
   -> ?time_source:Time_source.t (** Informs when to send heartbeats. *)
   -> ?on_error:[ `Raise | `Call of Vcaml_error.t -> unit ]
-  -> ?before_connecting:(Client.Not_connected.t -> unit)
+  -> ?before_connecting:(Client.Not_connected.t -> unit Deferred.t)
   -> ?verbose:bool (** default: [false] *)
   -> ?warn_if_neovim_exits_early:bool (** default: [true] *)
   -> ([ `asynchronous ] Client.t -> 'a Deferred.Or_error.t)
@@ -41,7 +41,7 @@ val with_ui_client
   -> ?links:(string * [ `In_path_as | `In_temp_as ] * string) list
   -> ?time_source:Time_source.t
   -> ?on_error:[ `Raise | `Call of Vcaml_error.t -> unit ]
-  -> ?before_connecting:(Client.Not_connected.t -> unit)
+  -> ?before_connecting:(Client.Not_connected.t -> unit Deferred.t)
   -> ?verbose:bool
   -> ([ `asynchronous ] Client.t -> Test_ui.t -> 'a Deferred.Or_error.t)
   -> 'a Deferred.t
@@ -65,7 +65,7 @@ val wait_until_text
 val socket_client
   :  ?time_source:Time_source.t
   -> ?on_error:[ `Raise | `Call of Vcaml_error.t -> unit ]
-  -> ?before_connecting:(Client.Not_connected.t -> unit)
+  -> ?before_connecting:(Client.Not_connected.t -> unit Deferred.t)
   -> ?verbose:bool
   -> string
   -> [ `asynchronous ] Client.t Deferred.Or_error.t
@@ -78,7 +78,7 @@ module For_debugging : sig
   val with_ui_client
     :  ?time_source:Time_source.t
     -> ?on_error:[ `Raise | `Call of Vcaml_error.t -> unit ]
-    -> ?before_connecting:(Client.Not_connected.t -> unit)
+    -> ?before_connecting:(Client.Not_connected.t -> unit Deferred.t)
     -> ?verbose:bool
     -> socket:string
     -> ([ `asynchronous ] Client.t -> Test_ui.t -> 'a Deferred.Or_error.t)

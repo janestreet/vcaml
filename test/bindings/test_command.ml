@@ -17,7 +17,7 @@ let%expect_test "create, delete, user_defined_commands" =
           ()
           ~name:"SayHi"
           ~scope
-          ~command:[%string {|echo "Hi, ".<q-args>|}]
+          (Viml [%string {|echo "Hi, ".<q-args>|}])
       in
       let%bind commands = Command.user_defined_commands [%here] client ~scope in
       print_s [%sexp (commands : Command.Definition.t Or_error.t String.Map.t)];
@@ -32,7 +32,7 @@ let%expect_test "create, delete, user_defined_commands" =
           ()
           ~name:"Foobar"
           ~scope
-          ~command:[%string {|call Foobar(<line1>, <line2>)|}]
+          (Viml [%string {|call Foobar(<line1>, <line2>)|}])
       in
       let%bind commands = Command.user_defined_commands [%here] client ~scope in
       print_s [%sexp (commands : Command.Definition.t Or_error.t String.Map.t)];
@@ -338,7 +338,7 @@ let%expect_test "[range_or_count] interpretation roundtrips in command definitio
     let scope = `Global in
     let test range_or_count =
       let%bind () =
-        Command.create [%here] client ?range_or_count () ~name ~scope ~command
+        Command.create [%here] client ?range_or_count () ~name ~scope (Viml command)
       in
       let expected = Option.map range_or_count ~f:Range_or_count.Spec.to_string in
       let%map commands = Command.user_defined_commands [%here] client ~scope in
@@ -413,7 +413,7 @@ let%expect_test "Successfully exec a [-range=N] command by passing a count" =
              { default = 0; can_be_passed = Only_in_line_number_position; of_ = Lines })
         ~name:"ShowCount"
         ~scope:`Global
-        ~command:"echo <count>"
+        (Viml "echo <count>")
     in
     let%bind () =
       Command.exec_and_capture_output [%here] client ~range_or_count:(Count 1) "ShowCount"

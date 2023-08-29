@@ -90,6 +90,7 @@ module Client : sig
   type 'kind t = 'kind Client.t
 
   module Not_connected = Client.Not_connected
+  module Maybe_connected = Client.Maybe_connected
 
   (** Most users should use the vcaml.plugin library (../plugin/src/vcaml_plugin.mli)
       instead of calling this function. It will set up the scaffolding for a plugin and

@@ -195,13 +195,14 @@ val create
   :  Source_code_position.t
   -> _ Client.t
   -> ?description:string
+  (** Provide [description] if you implement this autocmd with an RPC so the user will
+      understand what the autocmd does when they inspect it with [:autocmd]. *)
   -> ?once:bool
   -> ?nested:bool
-  -> unit
   -> group:Group.t
   -> patterns_or_buffer:Patterns_or_buffer.t
   -> events:Event.t Nonempty_list.t
-  -> command:string
+  -> unit Ocaml_from_nvim.Callback.t
   -> Id.t Deferred.Or_error.t
 
 (** Delete an auto-command. *)
@@ -228,3 +229,8 @@ val exec
   -> unit
   -> events:Event.t Nonempty_list.t
   -> unit Deferred.Or_error.t
+
+module Private : sig
+  val vcaml_internal_group : _ Client.t -> Group.t
+end
+[@@alert vcaml_private "This module is for internal VCaml use."]

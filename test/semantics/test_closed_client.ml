@@ -23,7 +23,7 @@ let%expect_test "Sending request with a closed client" =
     (("Failed to send Msgpack RPC message: writer is closed"
       (Array (
         (Int    0)
-        (Int    4)
+        (Int    5)
         (String nvim_get_current_buf)
         (Array ()))))
      (("Called from" lib/vcaml/test/semantics/test_closed_client.ml:LINE:COL))) |}]
@@ -65,8 +65,7 @@ let%expect_test "Sending response with a closed client" =
       let () =
         Ocaml_from_nvim.register_request_blocking
           [%here]
-          Asynchronous
-          client
+          (Connected client)
           ~name:function_name
           ~type_:Ocaml_from_nvim.Blocking.(return Nil)
           ~f:(fun ~run_in_background:_ ~client:_ -> Deferred.Or_error.return ())
@@ -91,7 +90,7 @@ let%expect_test "Sending response with a closed client" =
        request (
          Array (
            (Int    0)
-           (Int    3)
+           (Int    4)
            (String nvim_call_function)
            (Array (
              (String rpcrequest)
@@ -109,8 +108,7 @@ let%expect_test "Client closes inside RPC" =
       let () =
         Ocaml_from_nvim.register_request_blocking
           [%here]
-          Asynchronous
-          client
+          (Connected client)
           ~name:function_name
           ~type_:Ocaml_from_nvim.Blocking.(return Nil)
           ~f:(fun ~run_in_background:_ ~client -> Client.close client |> Deferred.ok)
@@ -134,7 +132,7 @@ let%expect_test "Client closes inside RPC" =
        request (
          Array (
            (Int    0)
-           (Int    3)
+           (Int    4)
            (String nvim_call_function)
            (Array (
              (String rpcrequest)

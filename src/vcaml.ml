@@ -138,11 +138,6 @@ module Client = struct
     client.close ()
   ;;
 
-  let channel client =
-    let client = Type_equal.conv Private.eq client in
-    Set_once.get_exn client.channel [%here]
-  ;;
-
   let name client =
     let client = Type_equal.conv Private.eq client in
     client.name

@@ -204,8 +204,7 @@ let%expect_test "Naively calling [echo] from inside [rpcrequest] fails" =
           let () =
             Ocaml_from_nvim.register_request_blocking
               [%here]
-              Asynchronous
-              client
+              (Connected client)
               ~name:"rpc"
               ~type_:Ocaml_from_nvim.Blocking.(return String)
               ~f:(rpc ui)
@@ -270,8 +269,7 @@ let%expect_test "[echo_in_rpcrequest] hack" =
       let () =
         Ocaml_from_nvim.register_request_blocking
           [%here]
-          Asynchronous
-          client
+          (Connected client)
           ~name:"rpc"
           ~type_:Ocaml_from_nvim.Blocking.(return Nil)
           ~f:(rpc ui)

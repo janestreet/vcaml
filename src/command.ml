@@ -1,6 +1,11 @@
+module Unshadow = struct
+  module Buffer = Buffer
+end
+
 open Core
 open Async
 open Import
+open Unshadow
 
 (* To understand the logic around the serialization and deserialization of ranges and
    counts in this module, read https://github.com/neovim/neovim/issues/24081. The test
@@ -354,8 +359,42 @@ let create
       ()
       ~name
       ~scope
-      ~command
+      command
   =
+  let%bind.Deferred.Or_error scope =
+    match scope with
+    | `Global | `Buffer_local (Buffer.Or_current.Id _) -> Deferred.Or_error.return scope
+    | `Buffer_local Current ->
+      let%map.Deferred.Or_error buffer = Nvim.get_current_buf [%here] client in
+      `Buffer_local (Buffer.Or_current.Id buffer)
+  in
+  let%bind command =
+    match (command : unit Ocaml_from_nvim.Callback.t) with
+    | Viml command -> return command
+    | Rpc rpc ->
+      let name =
+        Ocaml_from_nvim.Private.register_callback here client ~return_type:Nil rpc
+      in
+      let channel = Client.channel client in
+      let%map () =
+        match scope with
+        | `Global -> return ()
+        | `Buffer_local buffer ->
+          Autocmd.create
+            here
+            client
+            ~description:[%string "Unregister %{name}"]
+            ~once:true
+            ~patterns_or_buffer:(Buffer buffer)
+            ~group:(Autocmd.Private.vcaml_internal_group client)
+            ~events:[ BufDelete; BufWipeout ]
+            (Viml
+               [%string
+                 {| call rpcnotify(%{channel#Int}, "%{Client.Private.unregister_blocking_rpc}", "%{name}") |}])
+          |> Deferred.ignore_m
+      in
+      [%string {|call rpcrequest(%{channel#Int}, "%{name}")|}]
+  in
   let opts =
     let map =
       let maybe name var conv = Option.map var ~f:(fun var -> name, conv var) in

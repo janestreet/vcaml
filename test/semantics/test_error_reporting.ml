@@ -87,8 +87,7 @@ let%expect_test "Failures parsing async requests" =
       in
       Ocaml_from_nvim.register_request_async
         [%here]
-        Asynchronous
-        client
+        (Connected client)
         ~name:"async_func"
         ~type_:Ocaml_from_nvim.Async.(Nil @-> unit)
         ~f:(fun ~client:_ () ->

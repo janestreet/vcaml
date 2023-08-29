@@ -17,26 +17,10 @@ let say_hello =
       Nvim.out_writeln [%here] client [%string "Hello, %{name}!"])
 ;;
 
-let say_goodbye =
-  Vcaml_plugin.Persistent.Rpc.create_blocking
-    [%here]
-    ~name:"goodbye"
-    ~type_:Ocaml_from_nvim.Blocking.(return Nil)
-    ~f:(fun state ~run_in_background ~client ->
-      run_in_background [%here] ~f:(fun (_ : [ `asynchronous ] Client.t) ->
-        (* This will only run after the RPC returns. *)
-        exit 0);
-      let message =
-        match state.most_recent_name with
-        | None -> "Goodbye!"
-        | Some name -> [%string "Goodbye, %{name}!"]
-      in
-      Nvim.out_writeln [%here] client message)
-;;
-
 let on_startup client =
   let open Deferred.Or_error.Let_syntax in
   let channel = Client.channel client in
+  let state = { most_recent_name = None } in
   let%bind () =
     Command.create
       [%here]
@@ -47,7 +31,10 @@ let on_startup client =
       ()
       ~name:"SayHello"
       ~scope:`Global
-      ~command:[%string {| call rpcrequest(%{channel#Int}, "hello", <q-args>) |}]
+      (* We cannot implement [:SayHello] with an anonymous RPC because we need to pass
+         an argument. Instead, we define an RPC named "hello" and invoke it from VimL
+         with the argument passed to the command. *)
+      (Viml [%string {| call rpcrequest(%{channel#Int}, "hello", <q-args>) |}])
   in
   let%bind () =
     Command.create
@@ -57,9 +44,18 @@ let on_startup client =
       ()
       ~name:"SayGoodbye"
       ~scope:`Global
-      ~command:[%string {| call rpcrequest(%{channel#Int}, "goodbye") |}]
+      (Ocaml_from_nvim.Callback.anon_rpc (fun ~run_in_background ~client ->
+         run_in_background [%here] ~f:(fun (_ : [ `asynchronous ] Client.t) ->
+           (* This will only run after the RPC returns. *)
+           exit 0);
+         let message =
+           match state.most_recent_name with
+           | None -> "Goodbye!"
+           | Some name -> [%string "Goodbye, %{name}!"]
+         in
+         Nvim.out_writeln [%here] client message))
   in
-  Deferred.Or_error.return { most_recent_name = None }
+  Deferred.Or_error.return state
 ;;
 
 let command =
@@ -68,5 +64,5 @@ let command =
     ~description:"Persistent plugin to say hello"
     ~on_startup
     ~notify_fn:(`Lua "function() end")
-    [ say_hello; say_goodbye ]
+    [ say_hello ]
 ;;

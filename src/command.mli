@@ -202,7 +202,9 @@ val create
   -> unit
   -> name:string
   -> scope:[ `Global | `Buffer_local of Nvim_internal.Buffer.Or_current.t ]
-  -> command:string
+  -> unit Ocaml_from_nvim.Callback.t
+  (** Anonymous RPCs do not have access to modifiers, arguments, or ranges provided to
+      commands, so they are only suitable for implementing simple commands. *)
   -> unit Deferred.Or_error.t
 
 (** Delete a user-defined command. *)

@@ -1,3 +1,0 @@
-(library (name vcaml_readme) (public_name vcaml.readme)
- (libraries async async_unix vcaml.test.helpers)
- (flags :standard -alert -vcaml_private) (preprocess (pps ppx_jane)))

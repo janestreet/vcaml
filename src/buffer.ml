@@ -294,7 +294,7 @@ module Untested = struct
         ; namespace : Namespace.t
         ; buffer : buffer
         }
-      [@@deriving compare, fields, hash, sexp_of]
+      [@@deriving compare, hash, sexp_of]
     end
 
     include T

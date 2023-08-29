@@ -221,23 +221,64 @@ let guess ~hint ~secret char =
   !guessed_a_letter
 ;;
 
-let remap_letter_keys here client ~buffer ~f =
-  Deferred.Or_error.repeat_until_finished 'a' (fun char ->
-    let%map.Deferred.Or_error () =
-      Keymap.set
-        here
-        client
-        ~nowait:true
-        ~silent:true
-        ~scope:(`Buffer_local (Id buffer))
-        ~lhs:(Char.to_string char)
-        ~rhs:(f char)
-        ~mode:Normal
-        ()
-    in
-    match char with
-    | 'z' -> `Finished ()
-    | _ -> `Repeat (char |> Char.to_int |> Int.succ |> Char.of_int_exn))
+let remap_letter_keys here client ~state =
+  let%tydi { buffer; secret; hint; bad_guesses; started_guessing = _ } = state in
+  let iter_a_to_z ~f =
+    Deferred.Or_error.repeat_until_finished 'a' (fun char ->
+      let%map.Deferred.Or_error () = f char in
+      match char with
+      | 'z' -> `Finished ()
+      | _ -> `Repeat (char |> Char.to_int |> Int.succ |> Char.of_int_exn))
+  in
+  iter_a_to_z ~f:(fun char ->
+    Keymap.set
+      here
+      client
+      ()
+      ~mode:Normal
+      ~nowait:true
+      ~silent:true
+      ~scope:(`Buffer_local (Id buffer))
+      ~lhs:(Char.to_string char)
+      ~rhs:
+        (Ocaml_from_nvim.Callback.anon_rpc (fun ~run_in_background ~client ->
+           let open Deferred.Or_error.Let_syntax in
+           let char = Char.uppercase char in
+           state.started_guessing <- true;
+           match Vec.mem bad_guesses char ~equal:Char.equal with
+           | true -> return ()
+           | false ->
+             let guessed_a_letter = guess ~hint ~secret char in
+             if not guessed_a_letter then Vec.push_back bad_guesses char;
+             let message =
+               match guessed_a_letter with
+               | true ->
+                 (match String.equal (String.of_array hint) secret with
+                  | false -> None
+                  | true -> Some "You guessed the secret!")
+               | false ->
+                 (match Vec.length bad_guesses = Array.length Art.states - 1 with
+                  | false -> None
+                  | true -> Some ("Failed to guess the secret: " ^ secret))
+             in
+             Option.iter message ~f:(fun _ ->
+               run_in_background [%here] ~f:(fun client ->
+                 let%bind () =
+                   (* Disable guessing. *)
+                   iter_a_to_z ~f:(fun char ->
+                     Keymap.set
+                       [%here]
+                       client
+                       ~mode:Normal
+                       ~nowait:true
+                       ~silent:true
+                       ~scope:(`Buffer_local (Id buffer))
+                       ~lhs:(Char.to_string char)
+                       ~rhs:(Viml "<Nop>")
+                       ())
+                 in
+                 exit 0));
+             draw_state state ~client ~message)))
 ;;
 
 let on_startup client =
@@ -277,16 +318,12 @@ let on_startup client =
     in
     let%bind buffer = Buffer.create [%here] client ~listed:false ~scratch:true in
     let%bind () = Buffer.Option.set [%here] client (Id buffer) Bufhidden "wipe" in
-    let%bind () =
-      let channel = Client.channel client in
-      remap_letter_keys [%here] client ~buffer ~f:(fun char ->
-        [%string "<Cmd>call rpcrequest(%{channel#Int}, 'guess', '%{char#Char}')<CR>"])
-    in
     let hint = Array.create ~len:(String.length secret) '_' in
     ignore (guess ~hint ~secret ' ' : bool);
     let state =
       { buffer; secret; hint; bad_guesses = Vec.create (); started_guessing = false }
     in
+    let%bind () = remap_letter_keys [%here] client ~state in
     let%bind () =
       block_nvim [%here] client ~f:(fun client -> draw_state state ~client ~message:None)
     in
@@ -305,54 +342,11 @@ let get_buffer_rpc =
       Deferred.Or_error.return buffer)
 ;;
 
-let guess_rpc =
-  Vcaml_plugin.Persistent.Rpc.create_blocking
-    [%here]
-    ~name:"guess"
-    ~type_:Ocaml_from_nvim.Blocking.(String @-> return Nil)
-    ~f:
-      (fun
-        ({ buffer; secret; hint; bad_guesses; _ } as state)
-        ~run_in_background
-        ~client
-        char
-        ->
-          let open Deferred.Or_error.Let_syntax in
-          if String.length char <> 1 then failwith "Guess must be a single character";
-          let char = Char.uppercase char.[0] in
-          if not (Char.is_alpha char) then failwith "Guess must be a letter";
-          state.started_guessing <- true;
-          match Vec.mem bad_guesses char ~equal:Char.equal with
-          | true -> return ()
-          | false ->
-            let guessed_a_letter = guess ~hint ~secret char in
-            if not guessed_a_letter then Vec.push_back bad_guesses char;
-            let message =
-              match guessed_a_letter with
-              | true ->
-                (match String.equal (String.of_array hint) secret with
-                 | false -> None
-                 | true -> Some "You guessed the secret!")
-              | false ->
-                (match Vec.length bad_guesses = Array.length Art.states - 1 with
-                 | false -> None
-                 | true -> Some ("Failed to guess the secret: " ^ secret))
-            in
-            Option.iter message ~f:(fun _ ->
-              run_in_background [%here] ~f:(fun client ->
-                let%bind () =
-                  (* Disable guessing. *)
-                  remap_letter_keys [%here] client ~buffer ~f:(fun _ -> "<Nop>")
-                in
-                exit 0));
-            draw_state state ~client ~message)
-;;
-
 let command =
   Vcaml_plugin.Persistent.create
     ~name:"hangman"
     ~description:"Play hangman in Neovim"
     ~on_startup
     ~notify_fn:(`Lua "hangman_setup")
-    [ get_buffer_rpc; guess_rpc ]
+    [ get_buffer_rpc ]
 ;;

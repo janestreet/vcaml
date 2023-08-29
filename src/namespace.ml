@@ -6,7 +6,7 @@ module T = struct
     { id : int
     ; name : string option
     }
-  [@@deriving compare, fields, hash, sexp_of]
+  [@@deriving compare, fields ~getters, hash, sexp_of]
 end
 
 include T

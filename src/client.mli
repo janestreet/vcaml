@@ -12,6 +12,12 @@ module Not_connected : sig
   val name : t -> string
 end
 
+module Maybe_connected : sig
+  type nonrec 'kind t =
+    | Connected of 'kind t
+    | Not_connected of Not_connected.t
+end
+
 val create : name:string -> on_error:(Vcaml_error.t -> unit) -> Not_connected.t
 
 val connect
@@ -32,6 +38,8 @@ val block_nvim'
   -> [ `asynchronous ] t
   -> f:([ `blocking ] t -> 'a Deferred.Or_error.t)
   -> [ `Ok of 'a | `Keyboard_interrupted | `Error of Error.t ] Deferred.t
+
+val channel : _ t -> int
 
 module Private : sig
   type 'kind public := 'kind t
@@ -90,6 +98,7 @@ module Private : sig
         -> on_keyboard_interrupt:(unit -> unit)
         -> unit
     ; unregister_request_blocking : name:string -> unit
+    ; name_anonymous_blocking_request : unit -> string
     ; registered_methods : unit -> Method_info.t String.Map.t
     ; call_nvim_api_fn :
         'a 'b.
@@ -102,6 +111,7 @@ module Private : sig
     ; notify_nvim_of_error : Source_code_position.t -> Error.t -> unit Deferred.t
     ; subscription_manager : Subscription_manager.t
     ; close : unit -> unit Deferred.t
+    ; vcaml_internal_group : int Set_once.t
     }
 
   val eq : ('kind public, 'kind t) Type_equal.t
@@ -120,5 +130,6 @@ module Private : sig
     -> _ t
     -> Channel_info.t list Deferred.Or_error.t
 
+  val unregister_blocking_rpc : string
   val before_sending_response_hook_for_tests : (unit -> unit Deferred.t) option ref
 end

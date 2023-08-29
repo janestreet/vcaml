@@ -2,7 +2,7 @@ type t =
   { row : int
   ; col : int
   }
-[@@deriving fields, sexp_of]
+[@@deriving sexp_of]
 
 module One_indexed_row : sig
   type zero_indexed_row := t
@@ -11,7 +11,7 @@ module One_indexed_row : sig
     { row : int
     ; col : int
     }
-  [@@deriving fields, sexp_of]
+  [@@deriving sexp_of]
 
   val to_zero : t -> zero_indexed_row
   val of_zero : zero_indexed_row -> t

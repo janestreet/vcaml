@@ -18,6 +18,7 @@ let default_args = [ "--clean"; "-n" ]
    in `:h limits). *)
 let required_args = [ "--headless"; "--embed"; "--listen"; "./socket" ]
 let verbose_env_var = "VCAML_VERBOSE"
+let elide_backtraces_env_var = "VCAML_ELIDE_BACKTRACES"
 
 type verbose_debugging =
   { wrap_connection : (Reader.t -> Writer.t -> (Reader.t * Writer.t) Deferred.t) option
@@ -81,7 +82,7 @@ let with_client
       ?links
       ?(time_source = time_source_at_epoch)
       ?(on_error = `Raise)
-      ?(before_connecting = ignore)
+      ?(before_connecting = fun _ -> return ())
       ?(verbose = false)
       ?(warn_if_neovim_exits_early = true)
       f
@@ -100,7 +101,10 @@ let with_client
         let base =
           Core_unix.Env.expand
             (`Extend
-               [ "NVIM_LOG_FILE", nvim_log_file; "NVIM_RPLUGIN_MANIFEST", "rplugin.vim" ])
+               [ "NVIM_LOG_FILE", nvim_log_file
+               ; "NVIM_RPLUGIN_MANIFEST", "rplugin.vim"
+               ; elide_backtraces_env_var, [%string "%{!Backtrace.elide#Bool}"]
+               ])
         in
         match env with
         | None -> base
@@ -110,7 +114,7 @@ let with_client
       `Replace_raw env
     in
     let client = Client.create ~name:"test-client" ~on_error in
-    before_connecting client;
+    let%bind () = before_connecting client in
     let { wrap_connection; done_logging } = verbose_debugging ~verbose in
     let%bind client, process =
       Private.attach_client
@@ -142,19 +146,28 @@ let with_client
         | false -> return []
         | true ->
           Reader.file_lines nvim_log_file
-          >>| List.map ~f:(fun line ->
-            match String.split line ~on:' ' with
-            | "WARN" :: "" :: _timestamp :: _pid :: message ->
-              message
-              |> List.drop_while ~f:String.is_empty
-              |> List.cons "WARN"
-              |> String.concat ~sep:" "
-            | "ERROR" :: _timestamp :: _pid :: message ->
-              message
-              |> List.drop_while ~f:String.is_empty
-              |> List.cons "ERROR"
-              |> String.concat ~sep:" "
-            | _ -> line)
+          >>| List.filter ~f:(Fn.non String.is_empty)
+          >>| (function
+            | [] -> []
+            | lines ->
+              let is_timestamp timestamp =
+                (* [Time_ns] is able to parse the Neovim timestamp format. *)
+                match Time_ns_unix.of_string timestamp with
+                | _ -> true
+                | exception _ -> false
+              in
+              let lines =
+                List.map lines ~f:(fun line ->
+                  match String.split line ~on:' ' with
+                  | log_level :: timestamp :: message when is_timestamp timestamp ->
+                    String.concat (log_level :: "{TIMESTAMP}" :: message) ~sep:" "
+                  | _ -> line)
+              in
+              [ [ "-----  NVIM_LOG_FILE  -----" ]
+              ; lines
+              ; [ "---------------------------" ]
+              ]
+              |> List.concat)
       and verbose_log =
         (* This file will be populated by VCaml plugins that are launched during
            integration tests under verbose mode (in other words, when the test setup is
@@ -428,12 +441,12 @@ let with_ui_client
 let socket_client
       ?(time_source = time_source_at_epoch)
       ?(on_error = `Raise)
-      ?(before_connecting = ignore)
+      ?(before_connecting = fun _ -> return ())
       ?(verbose = false)
       socket
   =
   let client = Client.create ~name:"test-client" ~on_error in
-  before_connecting client;
+  let%bind () = before_connecting client in
   (* There's nothing we can do with [done_logging] here and it's not clear that it's worth
      cluttering the interface by returning it. *)
   let { wrap_connection; done_logging = _ } = verbose_debugging ~verbose in
@@ -444,7 +457,7 @@ module For_debugging = struct
   let with_ui_client
         ?(time_source = time_source_at_epoch)
         ?(on_error = `Raise)
-        ?(before_connecting = ignore)
+        ?(before_connecting = fun _ -> return ())
         ?(verbose = false)
         ~socket
         f
@@ -452,7 +465,7 @@ module For_debugging = struct
     let { wrap_connection; done_logging } = verbose_debugging ~verbose in
     let%bind client =
       let client = Client.create ~name:"test-client" ~on_error in
-      before_connecting client;
+      let%bind () = before_connecting client in
       Private.attach_client
         ?wrap_connection
         client
@@ -488,6 +501,12 @@ module Private = struct
      confusing. The dependency is real - we want plugins to have support for running in
      tests with the verbose logging defined in this library. *)
   let attach_client ?stdio_override ?time_source client connection_type =
+    let () =
+      match Sys.getenv elide_backtraces_env_var with
+      | Some "true" -> Backtrace.elide := true
+      | Some "false" -> Backtrace.elide := false
+      | _ -> ()
+    in
     let wrap_connection =
       match Sys.getenv verbose_env_var with
       | None -> None
@@ -523,8 +542,7 @@ let%expect_test "We cannot have two blocking RPCs with the same name" =
   let register_dummy_rpc_handler ~name client =
     Ocaml_from_nvim.register_request_blocking
       [%here]
-      Asynchronous
-      client
+      (Connected client)
       ~name
       ~type_:Ocaml_from_nvim.Blocking.(return Nil)
       ~f:(fun ~run_in_background:_ ~client:_ -> Deferred.Or_error.return ())
@@ -543,8 +561,7 @@ let%expect_test "We cannot have two async RPCs with the same name" =
   let register_dummy_rpc_handler ~name client =
     Ocaml_from_nvim.register_request_async
       [%here]
-      Asynchronous
-      client
+      (Connected client)
       ~name
       ~type_:Ocaml_from_nvim.Async.(unit)
       ~f:(fun ~client:_ -> Deferred.Or_error.return ())
@@ -567,15 +584,13 @@ let%expect_test "We can have an async RPC and a blocking RPC with the same name"
       let name = "test" in
       Ocaml_from_nvim.register_request_blocking
         [%here]
-        Asynchronous
-        client
+        (Connected client)
         ~name
         ~type_:Ocaml_from_nvim.Blocking.(return Nil)
         ~f:(fun ~run_in_background:_ ~client:_ -> Deferred.Or_error.return ());
       Ocaml_from_nvim.register_request_async
         [%here]
-        Asynchronous
-        client
+        (Connected client)
         ~name
         ~type_:Ocaml_from_nvim.Async.(unit)
         ~f:(fun ~client:_ -> Deferred.Or_error.return ());
@@ -590,8 +605,7 @@ let%expect_test "We can have two separate Embedded connections with RPC handlers
   let register_dummy_rpc_handler ~name client =
     Ocaml_from_nvim.register_request_blocking
       [%here]
-      Asynchronous
-      client
+      (Connected client)
       ~name
       ~type_:Ocaml_from_nvim.Blocking.(return Nil)
       ~f:(fun ~run_in_background:_ ~client:_ -> Deferred.Or_error.return ());

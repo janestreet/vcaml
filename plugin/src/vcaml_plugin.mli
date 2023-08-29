@@ -82,12 +82,21 @@ module Persistent : sig
       will not shut down on its own - you must call [exit] or let Neovim SIGTERM the
       plugin when it exits. The [on_crash] handler can be used to do something with an
       unexpected error just before the plugin crashes - you may want to use this to send
-      the error to some logging service. [notify_fn] specifies a function that will be
-      called after [on_startup]. It is used to communicate to Neovim that the plugin is
-      ready. The function is passed the channel ID as an argument, which is needed to send
-      RPC requests to the plugin. *)
+      the error to some logging service.
+
+      [notify_fn] specifies a function that will be called after [on_startup]. It is used
+      to communicate to Neovim that the plugin is ready. The function is passed the
+      channel ID as an argument, which is needed to send RPC requests to the plugin.
+
+      Any RPCs that are invoked before [on_startup] has returned will return an error.
+      This can happen if there is logic inside [on_startup] that enables Neovim to invoke
+      RPCs (a common example is setting up autocmds that invoke RPCs on certain events).
+      Any such logic should be moved to [after_startup] to avoid racing with state
+      initialization. *)
   val create
     :  ?on_crash:(Error.t -> unit Deferred.t)
+    -> ?after_startup:
+         ('state -> client:[ `asynchronous ] Client.t -> unit Deferred.Or_error.t)
     -> name:string
     -> description:string
     -> on_startup:([ `asynchronous ] Client.t -> 'state Deferred.Or_error.t)
@@ -98,6 +107,8 @@ module Persistent : sig
   (** Same as [create] but allows you to specify parameters for the generated command. *)
   val create'
     :  ?on_crash:(Error.t -> unit Deferred.t)
+    -> ?after_startup:
+         ('state -> client:[ `asynchronous ] Client.t -> unit Deferred.Or_error.t)
     -> name:string
     -> description:string
     -> param:'param Core.Command.Param.t

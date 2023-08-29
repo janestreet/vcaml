@@ -31,13 +31,22 @@ let with_process_cleanup ~name pid ~f =
 let spin_until_nvim_creates_socket_file pid ~socket =
   Deferred.repeat_until_finished 1 (fun attempt ->
     match attempt with
-    | 10000 -> return (`Finished `Socket_missing)
+    | 10000 -> failwith "Socket was not created"
     | _ ->
       (match Core_unix.wait_nohang (`Pid pid) with
        | Some (_, exit_or_signal) -> return (`Finished (`Nvim_crashed exit_or_signal))
        | None ->
          (match%bind Sys.file_exists_exn socket with
-          | true -> return (`Finished `Socket_created)
+          | true ->
+            (* Test that we can establish a connection. Raises on timeout. *)
+            Monitor.try_with ~extract_exn:true (fun () ->
+              Tcp.connect_sock (Tcp.Where_to_connect.of_unix_address (`Unix socket)))
+            >>| (function
+              | Ok socket ->
+                Socket.shutdown socket `Both;
+                `Finished `Socket_created
+              | Error (Unix.Unix_error (ECONNREFUSED, _, _)) -> `Repeat (attempt + 1)
+              | Error exn -> raise exn)
           | false ->
             let%bind () = Clock_ns.after Time_ns.Span.millisecond in
             return (`Repeat (attempt + 1)))))

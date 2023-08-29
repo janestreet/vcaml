@@ -28,7 +28,6 @@ let%expect_test "[rpcrequest] blocks other channels" =
       with_process_cleanup ~name:"nvim" (Process.pid nvim) ~f:(fun () ->
         match%bind spin_until_nvim_creates_socket_file (Process.pid nvim) ~socket with
         | `Nvim_crashed exit_or_signal -> return (`Already_reaped exit_or_signal)
-        | `Socket_missing -> raise_s [%message "Socket was not created"]
         | `Socket_created ->
           let block_nvim here ~client =
             let blocking = Ivar.create () in
@@ -104,7 +103,6 @@ let%expect_test "A -[rpcrequest]-> Neovim -[rpcrequest]-> B lets B communicate w
       with_process_cleanup ~name:"nvim" (Process.pid nvim) ~f:(fun () ->
         match%bind spin_until_nvim_creates_socket_file (Process.pid nvim) ~socket with
         | `Nvim_crashed exit_or_signal -> return (`Already_reaped exit_or_signal)
-        | `Socket_missing -> raise_s [%message "Socket was not created"]
         | `Socket_created ->
           let%bind client1 = socket_client socket >>| ok_exn in
           let%bind client2 = socket_client socket >>| ok_exn in
@@ -112,8 +110,7 @@ let%expect_test "A -[rpcrequest]-> Neovim -[rpcrequest]-> B lets B communicate w
           let tried_to_use_client1 = Ivar.create () in
           Ocaml_from_nvim.register_request_blocking
             [%here]
-            Asynchronous
-            client2
+            (Connected client2)
             ~name:"rpc"
             ~type_:Ocaml_from_nvim.Blocking.(return Nil)
             ~f:(fun ~run_in_background:_ ~client ->
@@ -172,7 +169,6 @@ let%expect_test "Plugin dying during [rpcrequest] does not bring down Neovim" =
       with_process_cleanup ~name:"nvim" (Process.pid nvim) ~f:(fun () ->
         match%bind spin_until_nvim_creates_socket_file (Process.pid nvim) ~socket with
         | `Nvim_crashed exit_or_signal -> return (`Already_reaped exit_or_signal)
-        | `Socket_missing -> raise_s [%message "Socket was not created"]
         | `Socket_created ->
           let block_nvim here ~client =
             let blocking = Ivar.create () in
@@ -232,8 +228,7 @@ let%expect_test "Nested [rpcrequest]s are supported" =
       in
       Ocaml_from_nvim.register_request_blocking
         [%here]
-        Asynchronous
-        client
+        (Connected client)
         ~name:"factorial"
         ~type_:Ocaml_from_nvim.Blocking.(Int @-> return Int)
         ~f:(fun ~run_in_background:_ ~client n ->

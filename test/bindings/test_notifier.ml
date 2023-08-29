@@ -21,8 +21,7 @@ let%expect_test "Simple asynchronous notification" =
       let name = "async_func" in
       Ocaml_from_nvim.register_request_async
         [%here]
-        Asynchronous
-        client
+        (Connected client)
         ~name
         ~type_:Ocaml_from_nvim.Async.unit
         ~f:(fun ~client:_ -> Deferred.Or_error.return (Ivar.fill_exn result "Called!"));

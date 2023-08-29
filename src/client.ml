@@ -14,6 +14,7 @@ open Async
 open Import0
 
 let nvim_error_event = "nvim_error_event"
+let unregister_blocking_rpc = "unregister_blocking_rpc"
 let before_sending_response_hook_for_tests = ref None
 
 module Helpers = struct
@@ -115,7 +116,9 @@ module Helpers = struct
   end
 
   let registered_methods ~rpc =
-    let subscribed_events = nvim_error_event :: Subscription_manager.events in
+    let subscribed_events =
+      nvim_error_event :: unregister_blocking_rpc :: Subscription_manager.events
+    in
     let async_methods =
       Msgpack_rpc.Expert.registered_notification_handlers rpc
       |> List.filter ~f:(Fn.non (List.mem subscribed_events ~equal:String.equal))
@@ -143,6 +146,7 @@ open Helpers
 open Error_pattern_helpers
 
 module Private = struct
+  let unregister_blocking_rpc = unregister_blocking_rpc
   let before_sending_response_hook_for_tests = before_sending_response_hook_for_tests
   let heartbeat_interval = Time_ns.Span.of_int_ms 100
 
@@ -183,6 +187,7 @@ module Private = struct
           -> on_keyboard_interrupt:(unit -> unit)
           -> unit
       ; unregister_request_blocking : name:string -> unit
+      ; name_anonymous_blocking_request : unit -> string
       ; registered_methods : unit -> Method_info.t String.Map.t
       ; call_nvim_api_fn :
           'a 'b.
@@ -195,6 +200,7 @@ module Private = struct
       ; notify_nvim_of_error : Source_code_position.t -> Error.t -> unit Deferred.t
       ; subscription_manager : Subscription_manager.t
       ; close : unit -> unit Deferred.t
+      ; vcaml_internal_group : int Set_once.t
       }
 
     type 'kind public = 'kind t
@@ -472,6 +478,14 @@ let connect
     ; register_request_async
     ; register_request_blocking
     ; unregister_request_blocking
+    ; name_anonymous_blocking_request =
+        (* [Unique_id.Int63] does not give uniqueness between clients, but this isn't
+           necessary as RPCs need only be unique per-client (i.e. per-channel in
+           Neovim). *)
+        (let module Id = Unique_id.Int63 () in
+         fun () ->
+           let id = Id.create () in
+           [%string "anon_rpc__%{id#Id}"])
     ; registered_methods = (fun () -> registered_methods ~rpc)
     ; call_nvim_api_fn =
         call_nvim_api_fn
@@ -483,6 +497,7 @@ let connect
     ; notify_nvim_of_error
     ; subscription_manager = Subscription_manager.create rpc ~on_error
     ; close
+    ; vcaml_internal_group = Set_once.create ()
     }
   and run_in_background here ~f =
     don't_wait_for
@@ -624,6 +639,16 @@ let connect
     | `Ok -> ()
     | `Duplicate -> failwithf "BUG: Already registered %s handler" method_name ()
   in
+  let () =
+    let method_name = unregister_blocking_rpc in
+    Msgpack_rpc.register_notification_handler rpc ~name:method_name ~f:(fun params ->
+      match params with
+      | [ String name ] -> unregister_request_blocking ~name
+      | _ -> ())
+    |> function
+    | `Ok -> ()
+    | `Duplicate -> failwithf "BUG: Already registered %s handler" method_name ()
+  in
   Msgpack_rpc.set_default_notification_handler rpc ~f:(fun ~name _ ->
     don't_wait_for
       (notify_nvim_of_error [%here] (Error.of_string [%string "Unknown method %{name}"])));
@@ -659,6 +684,13 @@ let connect
   | Some channel_id ->
     Set_once.set_exn t.channel [%here] channel_id;
     let%bind.Deferred.Or_error () = nvim_set_client_info [%here] t () in
+    let%bind.Deferred.Or_error vcaml_internal_group =
+      Nvim_internal.nvim_create_augroup
+        ~name:[%string "vcaml_internal__%{name}__%{uuid}"]
+        ~opts:String.Map.empty
+      |> t.call_nvim_api_fn [%here] Request
+    in
+    Set_once.set_exn t.vcaml_internal_group [%here] vcaml_internal_group;
     Ivar.fill_exn client_is_ready ();
     Deferred.Or_error.return t
 ;;
@@ -687,7 +719,7 @@ let flatten_vcaml_errors error ~anticipated_header =
 
 let block_nvim' here t ~f =
   let channel = Set_once.get_exn t.channel [%here] in
-  let name = Uuid_unix.create () |> Uuid.to_string in
+  let name = t.name_anonymous_blocking_request () in
   let result = Set_once.create () in
   t.register_request_blocking
     transparent_pos
@@ -724,6 +756,14 @@ let block_nvim here t ~f =
   | `Keyboard_interrupted ->
     Error (vim_error Exception (Atom "Keyboard interrupt") |> tag_callsite here)
 ;;
+
+let channel t = Set_once.get_exn t.channel [%here]
+
+module Maybe_connected = struct
+  type nonrec 'kind t =
+    | Connected of 'kind t
+    | Not_connected of Not_connected.t
+end
 
 (* --------------------------- Tests of internal functions --------------------------- *)
 open struct

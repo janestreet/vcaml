@@ -43,7 +43,6 @@ let run_neovim_with_pty ~time_source ~f =
       with_process_cleanup ~name:"nvim" nvim ~f:(fun () ->
         match%bind spin_until_nvim_creates_socket_file nvim ~socket with
         | `Nvim_crashed exit_or_signal -> return (`Already_reaped exit_or_signal)
-        | `Socket_missing -> raise_s [%message "Socket was not created"]
         | `Socket_created ->
           let%bind client = socket_client socket ?time_source >>| ok_exn in
           let send_keys bytes =

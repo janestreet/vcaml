@@ -43,8 +43,7 @@ let%expect_test "Varargs" =
         in
         Ocaml_from_nvim.register_request_blocking
           [%here]
-          Asynchronous
-          client
+          (Connected client)
           ~name:"call"
           ~type_:
             Ocaml_from_nvim.Blocking.(
@@ -94,8 +93,7 @@ let%expect_test "Varargs (async)" =
         let%bind () = Command.exec [%here] client "source" ~args:[ "%" ] in
         Ocaml_from_nvim.register_request_async
           [%here]
-          Asynchronous
-          client
+          (Connected client)
           ~name:"print"
           ~type_:Ocaml_from_nvim.Async.(String @-> Expert.varargs Object)
           ~f:(fun ~client:_ name args ->

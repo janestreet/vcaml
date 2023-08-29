@@ -1,6 +1,11 @@
+module Unshadow = struct
+  module Buffer = Buffer
+end
+
 open Core
 open Async
 open Import
+open Unshadow
 
 (** Note that (1) this is not the full set of modes that [nvim_get_mode] can return, and
     (2) the string representations of these modes and the modes returned by
@@ -158,21 +163,58 @@ let get here client ~scope ~mode =
   >>|? List.dedup_and_sort ~compare
 ;;
 
-let set
+let set_internal
+      (type a)
+      ~(return_type : a Type.t)
+      ~expr
       here
       client
+      ?(replace_keycodes = true)
       ?(recursive = false)
-      ?expr
       ?(unique = false)
       ?(nowait = false)
       ?(silent = false)
       ?(description = "")
+      ~mode
       ~scope
       ~lhs
-      ~rhs
-      ~mode
+      ~(rhs : a Ocaml_from_nvim.Callback.t)
       ()
   =
+  let%bind.Deferred.Or_error scope =
+    match scope with
+    | `Global | `Buffer_local (Buffer.Or_current.Id _) -> Deferred.Or_error.return scope
+    | `Buffer_local Current ->
+      let%map.Deferred.Or_error buffer = Nvim.get_current_buf [%here] client in
+      `Buffer_local (Buffer.Or_current.Id buffer)
+  in
+  let%bind rhs =
+    match (rhs : a Ocaml_from_nvim.Callback.t) with
+    | Viml rhs -> return rhs
+    | Rpc rpc ->
+      let name = Ocaml_from_nvim.Private.register_callback here client ~return_type rpc in
+      let channel = Client.channel client in
+      let%map () =
+        match scope with
+        | `Global -> return ()
+        | `Buffer_local buffer ->
+          Autocmd.create
+            here
+            client
+            ~description:[%string "Unregister %{name}"]
+            ~once:true
+            ~patterns_or_buffer:(Buffer buffer)
+            ~group:(Autocmd.Private.vcaml_internal_group client)
+            ~events:[ BufDelete; BufWipeout ]
+            (Viml
+               [%string
+                 {| call rpcnotify(%{channel#Int}, "%{Client.Private.unregister_blocking_rpc}", "%{name}") |}])
+          |> Deferred.ignore_m
+      in
+      (match expr with
+       | true -> [%string {|rpcrequest(%{channel#Int}, "%{name}")|}]
+       | false -> [%string {|<Cmd>call rpcrequest(%{channel#Int}, "%{name}")<CR>|}])
+  in
   let query =
     match scope with
     | `Global -> Nvim_internal.nvim_set_keymap
@@ -180,16 +222,21 @@ let set
   in
   let mode = Mode.to_string mode in
   let opts =
-    let expr =
-      match expr with
-      | None -> [ "expr", false ]
-      | Some (`Replace_keycodes false) -> [ "expr", true ]
-      | Some (`Replace_keycodes true) -> [ "expr", true; "replace_keycodes", true ]
-    in
     let boolean_opts =
-      [ "noremap", not recursive; "unique", unique; "nowait", nowait; "silent", silent ]
-      @ expr
-      |> List.map ~f:(fun (key, value) -> key, Msgpack.Bool value)
+      let opts =
+        [ "expr", expr
+        ; "noremap", not recursive
+        ; "nowait", nowait
+        ; "silent", silent
+        ; "unique", unique
+        ]
+      in
+      let opts =
+        match expr with
+        | false -> opts
+        | true -> ("replace_keycodes", replace_keycodes) :: opts
+      in
+      List.map opts ~f:(fun (key, value) -> key, Msgpack.Bool value)
     in
     match description with
     | "" -> boolean_opts
@@ -197,6 +244,12 @@ let set
   in
   query ~mode ~lhs ~rhs ~opts:(String.Map.of_alist_exn opts) |> run here client
 ;;
+
+let set here client =
+  set_internal ~return_type:Nil ~expr:false here client ?replace_keycodes:None
+;;
+
+let set_expr here client = set_internal ~return_type:String ~expr:true here client
 
 let unset here client ~scope ~lhs ~mode =
   let query =

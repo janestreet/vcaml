@@ -19,53 +19,99 @@ let rec omit_unstable_writer_info : Sexp.t -> Sexp.t = function
   | List sexps -> List (List.map sexps ~f:omit_unstable_writer_info)
 ;;
 
-let%expect_test "Asynchronous write failure is returned to outstanding requests" =
-  Backtrace.elide := true;
-  let%bind () =
-    Expect_test_helpers_async.within_temp_dir (fun () ->
-      let%bind working_dir = Sys.getcwd () in
-      let%bind client, nvim =
-        let client = Client.create ~name:"test-client" ~on_error:`Raise in
-        Private.attach_client
-          client
-          (Embed
-             { prog = Private.neovim_path
-             ; args = [ "--headless"; "-n"; "--embed"; "--clean"; "--listen"; "./socket" ]
-             ; working_dir
-             ; env = `Extend [ "NVIM_RPLUGIN_MANIFEST", "rplugin.vim" ]
-             })
-          ~time_source:(Time_source.read_only (Time_source.create ~now:Time_ns.epoch ()))
-        >>| ok_exn
-      in
-      Process.send_signal nvim Signal.term;
-      let%bind exit_or_signal = Process.wait nvim in
-      print_s [%message "nvim exited" (exit_or_signal : Unix.Exit_or_signal.t)];
-      (* Wait for Msgpack RPC to close the writer. *)
-      let%bind () = Scheduler.yield_until_no_jobs_remain () in
-      let write_after_termination = Command.exec [%here] client "echo" ~args:[ "'hi'" ] in
-      let%bind result = write_after_termination in
-      print_s (omit_unstable_writer_info [%sexp (result : unit Or_error.t)]);
-      Client.close client)
-  in
-  [%expect
-    {|
-    ("nvim exited" (exit_or_signal (Error (Exit_non_zero 1))))
-    (Error
-     (("Failed to send Msgpack RPC message: writer is closed"
-       (Array
-        ((Int 0) (Int 3) (String nvim_cmd)
-         (Array
-          ((Map
-            (((String args) (Array ((String 'hi'))))
-             ((String cmd) (String echo))))
-           (Map (((String output) (Bool false)))))))))
-      (("Called from" lib/vcaml/test/semantics/test_nvim_crash.ml:LINE:COL)))) |}];
-  Backtrace.elide := false;
-  return ()
+let%expect_test "Crash before sending a request results in an error" =
+  Expect_test_helpers_async.within_temp_dir (fun () ->
+    Backtrace.elide := true;
+    let%bind working_dir = Sys.getcwd () in
+    let%bind client, nvim =
+      let client = Client.create ~name:"test-client" ~on_error:`Raise in
+      Private.attach_client
+        client
+        (Embed
+           { prog = Private.neovim_path
+           ; args = [ "--headless"; "-n"; "--embed"; "--clean"; "--listen"; "./socket" ]
+           ; working_dir
+           ; env = `Extend [ "NVIM_RPLUGIN_MANIFEST", "rplugin.vim" ]
+           })
+        ~time_source:(Time_source.read_only (Time_source.create ~now:Time_ns.epoch ()))
+      >>| ok_exn
+    in
+    Process.send_signal nvim Signal.term;
+    let%bind exit_or_signal = Process.wait nvim in
+    print_s [%message "nvim exited" (exit_or_signal : Unix.Exit_or_signal.t)];
+    [%expect {| ("nvim exited" (exit_or_signal (Error (Exit_non_zero 1)))) |}];
+    let%bind result = Nvim.get_current_buf [%here] client in
+    let error = omit_unstable_writer_info [%sexp (result : Buffer.t Or_error.t)] in
+    let expected_errors =
+      (* There are some races around trying to send requests to Neovim as the writer is
+         closing due to a closed connection - we really just want to test that some error
+         is returned in this case, so both of these are fine. If an entry in this list
+         needs to be modified, consider whether analogous modifications need to be made to
+         the other entries. *)
+      [ {|
+        (Error
+         (("Failed to send Msgpack RPC message: writer is closed"
+           (Array ((Int 0) (Int 4) (String nvim_get_current_buf) (Array ()))))
+          (("Called from" lib/vcaml/test/semantics/test_nvim_crash.ml:LINE:COL)))) |}
+      ; {|
+        (Error
+         (("Failed to send Msgpack RPC message"
+           (Array ((Int 0) (Int 4) (String nvim_get_current_buf) (Array ())))
+           (error
+            ("Writer error from inner_monitor"
+             (Unix.Unix_error "Broken pipe" writev_assume_fd_is_nonblocking "")
+             (writer ((file_descr _) (info <omitted>) (kind Fifo))))))
+          (("Called from" lib/vcaml/test/semantics/test_nvim_crash.ml:LINE:COL)))) |}
+      ]
+      |> List.map ~f:Sexp.of_string
+    in
+    if not (List.mem expected_errors error ~equal:Sexp.equal) then print_s error;
+    [%expect {| |}];
+    Backtrace.elide := false;
+    Client.close client)
+;;
+
+let%expect_test "Crash while waiting for a response results in an error" =
+  Expect_test_helpers_async.within_temp_dir (fun () ->
+    Backtrace.elide := true;
+    let%bind working_dir = Sys.getcwd () in
+    let%bind client, nvim =
+      let client = Client.create ~name:"test-client" ~on_error:`Raise in
+      Private.attach_client
+        client
+        (Embed
+           { prog = Private.neovim_path
+           ; args = [ "--headless"; "-n"; "--embed"; "--clean"; "--listen"; "./socket" ]
+           ; working_dir
+           ; env = `Extend [ "NVIM_RPLUGIN_MANIFEST", "rplugin.vim" ]
+           })
+        ~time_source:(Time_source.read_only (Time_source.create ~now:Time_ns.epoch ()))
+      >>| ok_exn
+    in
+    let result = Command.exec [%here] client "quit" in
+    let%bind exit_or_signal = Process.wait nvim in
+    print_s [%message "nvim exited" (exit_or_signal : Unix.Exit_or_signal.t)];
+    [%expect {| ("nvim exited" (exit_or_signal (Ok ()))) |}];
+    let%bind result = result in
+    print_s (omit_unstable_writer_info [%sexp (result : unit Or_error.t)]);
+    [%expect
+      {|
+      (Error
+       (("Consumer left without responding"
+         (request
+          (Array
+           ((Int 0) (Int 4) (String nvim_cmd)
+            (Array
+             ((Map (((String cmd) (String quit))))
+              (Map (((String output) (Bool false))))))))))
+        (("Called from" lib/vcaml/test/semantics/test_nvim_crash.ml:LINE:COL)))) |}];
+    Backtrace.elide := false;
+    Client.close client)
 ;;
 
 let%expect_test "Crash during an RPC does not cause failure when sending response" =
   Expect_test_helpers_async.within_temp_dir (fun () ->
+    Backtrace.elide := true;
     let%bind working_dir = Sys.getcwd () in
     let%bind client, nvim =
       let client = Client.create ~name:"test-client" ~on_error:`Raise in
@@ -82,7 +128,7 @@ let%expect_test "Crash during an RPC does not cause failure when sending respons
     in
     let entered = Ivar.create () in
     let exited = Ivar.create () in
-    let (_ : unit Deferred.Or_error.t) =
+    let result =
       block_nvim [%here] client ~f:(fun _ ->
         Ivar.fill_exn entered ();
         Ivar.read exited |> Deferred.ok)
@@ -95,11 +141,17 @@ let%expect_test "Crash during an RPC does not cause failure when sending respons
     let%bind () = Scheduler.yield_until_no_jobs_remain () in
     [%expect {| ("nvim exited" (exit_or_signal (Error (Exit_non_zero 1)))) |}];
     Ivar.fill_exn exited ();
-    (* Wait for RPC to attempt to return the response. *)
-    let%bind () = Scheduler.yield_until_no_jobs_remain () in
-    [%expect {||}];
-    let%bind () = Client.close client in
-    let%bind () = Scheduler.yield_until_no_jobs_remain () in
-    [%expect {||}];
-    return ())
+    let%bind result = result in
+    print_s [%sexp (result : unit Or_error.t)];
+    [%expect
+      {|
+      (Error
+       (("Consumer left without responding"
+         (request
+          (Array
+           ((Int 0) (Int 4) (String nvim_call_function)
+            (Array ((String rpcrequest) (Array ((Int 1) (String anon_rpc__0)))))))))
+        (("Called from" lib/vcaml/test/semantics/test_nvim_crash.ml:LINE:COL)))) |}];
+    Backtrace.elide := false;
+    Client.close client)
 ;;

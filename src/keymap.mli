@@ -59,16 +59,40 @@ val get
 val set
   :  Source_code_position.t
   -> _ Client.t
-  -> ?recursive:bool (** default: [false]. *)
-  -> ?expr:[ `Replace_keycodes of bool ]
+  -> ?recursive:bool (** default: [false] *)
   -> ?unique:bool (** default: [false] *)
   -> ?nowait:bool (** default: [false] *)
   -> ?silent:bool (** default: [false] *)
   -> ?description:string
+  (** Provide [description] if you use an RPC for [rhs] so the user will understand what
+      the mapping does when they inspect it with [:map lhs]. *)
+  -> mode:Mode.t
+  -> scope:[ `Global | `Buffer_local of Nvim_internal.Buffer.Or_current.t ]
+  -> lhs:string (** The "left-hand side" of the mapping (the key sequence to map). *)
+  -> rhs:unit Ocaml_from_nvim.Callback.t
+  (** The "right-hand side" of the mapping (what key sequence to run). If you provide an
+      RPC, a key sequence will be run that will invoke it. *)
+  -> unit
+  -> unit Deferred.Or_error.t
+
+(** Similar to [set], but adds an expression keymapping (see `:h map-expression`). These
+    are indirect key mappings where the right-hand side is an expression that evaluates to
+    a sequence of keys (if an RPC is provided it should return the key sequence to run).
+    [replace_keycodes] determines whether keycodes in the resulting string will be
+    interpreted before being run. *)
+val set_expr
+  :  Source_code_position.t
+  -> _ Client.t
+  -> ?replace_keycodes:bool (** default: [true] *)
+  -> ?recursive:bool (** default: [false] *)
+  -> ?unique:bool (** default: [false] *)
+  -> ?nowait:bool (** default: [false] *)
+  -> ?silent:bool (** default: [false] *)
+  -> ?description:string
+  -> mode:Mode.t
   -> scope:[ `Global | `Buffer_local of Nvim_internal.Buffer.Or_current.t ]
   -> lhs:string
-  -> rhs:string
-  -> mode:Mode.t
+  -> rhs:string Ocaml_from_nvim.Callback.t
   -> unit
   -> unit Deferred.Or_error.t
 

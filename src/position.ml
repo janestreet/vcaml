@@ -5,7 +5,7 @@ module T = struct
     { row : int
     ; col : int
     }
-  [@@deriving fields, sexp_of]
+  [@@deriving sexp_of]
 end
 
 include T

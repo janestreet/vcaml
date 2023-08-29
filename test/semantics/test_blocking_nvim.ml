@@ -24,8 +24,7 @@ let%expect_test "Client given to synchronous callback cannot be used outside cal
       in
       Ocaml_from_nvim.register_request_blocking
         [%here]
-        Asynchronous
-        async_client
+        (Connected async_client)
         ~name:function_name
         ~type_:Ocaml_from_nvim.Blocking.(return Nil)
         ~f:(fun ~run_in_background:_ ~client ->
@@ -108,8 +107,7 @@ let%expect_test "Jobs started with async client or with [run_in_background] wait
       in
       Ocaml_from_nvim.register_request_blocking
         [%here]
-        Asynchronous
-        async_client
+        (Connected async_client)
         ~name:function_name
         ~type_:Ocaml_from_nvim.Blocking.(return Nil)
         ~f:(fun ~run_in_background ~client:blocking_client ->
@@ -160,8 +158,7 @@ let%expect_test "Plugin shutdown during [run_in_background] does not interfere w
                 in
                 Ocaml_from_nvim.register_request_blocking
                   [%here]
-                  Asynchronous
-                  client
+                  (Connected client)
                   ~name:function_name
                   ~type_:Ocaml_from_nvim.Blocking.(return Nil)
                   ~f:(fun ~run_in_background ~client:_ ->
@@ -236,8 +233,7 @@ let%expect_test "The most recent blocking context has exclusive permission to ru
       let ivars = Array.init 6 ~f:(fun _ -> Ivar.create ()) in
       Ocaml_from_nvim.register_request_blocking
         [%here]
-        Asynchronous
-        client
+        (Connected client)
         ~name:"factorial"
         ~type_:Ocaml_from_nvim.Blocking.(Int @-> return Int)
         ~f:(fun ~run_in_background:_ ~client n ->
@@ -302,8 +298,7 @@ let%expect_test "Simultaneous requests are sequenced." =
       in
       Ocaml_from_nvim.register_request_blocking
         [%here]
-        Asynchronous
-        client
+        (Connected client)
         ~name:function_name
         ~type_:Ocaml_from_nvim.Blocking.(Int @-> return Nil)
         ~f:(fun ~run_in_background:_ ~client:_ id ->
@@ -365,8 +360,7 @@ let%expect_test "Nested calls that all return at the same time does not cause co
       let nested_results = Queue.create () in
       Ocaml_from_nvim.register_request_blocking
         [%here]
-        Asynchronous
-        client
+        (Connected client)
         ~name:function_name
         ~type_:Ocaml_from_nvim.Blocking.(Int @-> return Nil)
         ~f:(fun ~run_in_background:_ ~client n ->
@@ -732,8 +726,7 @@ let run_spec ?warn_if_neovim_exits_early ?verbose spec =
            | Request ->
              Ocaml_from_nvim.register_request_blocking
                [%here]
-               Asynchronous
-               client
+               (Connected client)
                ~name
                ~type_:Ocaml_from_nvim.Blocking.(Event_tag.nvim_type @-> return Nil)
                ~f:(fun ~run_in_background:_ ~client prefix ->
@@ -748,8 +741,7 @@ let run_spec ?warn_if_neovim_exits_early ?verbose spec =
            | Notification ->
              Ocaml_from_nvim.register_request_async
                [%here]
-               Asynchronous
-               client
+               (Connected client)
                ~name
                ~type_:Ocaml_from_nvim.Async.unit
                ~f:(fun ~client ->
@@ -955,12 +947,20 @@ let%expect_test "Demonstrate disconnect induced by sleep" =
      during which sending the response becomes unsafe. *)
   Private.before_sending_response_hook_for_tests
   := Some (fun () -> Clock_ns.after (Time_ns.Span.of_int_ms 10));
+  let output = ref "" in
   let test ?verbose spec =
     Expect_test_helpers_async.show_raise_async (fun () ->
       (* In rare cases this test will not raise, so we run it up to 100 times. It will
          likely fail within the first 2. *)
       Deferred.for_ 1 ~to_:100 ~do_:(fun _ ->
-        run_spec_and_check_result ~warn_if_neovim_exits_early:false ?verbose spec))
+        match%map
+          Monitor.try_with (fun () ->
+            run_spec_and_check_result ~warn_if_neovim_exits_early:false ?verbose spec)
+        with
+        | Ok () -> ()
+        | Error exn ->
+          output := [%expect.output];
+          raise exn))
   in
   let%bind () =
     test
@@ -985,22 +985,22 @@ let%expect_test "Demonstrate disconnect induced by sleep" =
              ]
          })
   in
-  let output = [%expect.output] in
-  (match String.substr_index output ~pattern:"chan_close_with_error" with
-   | None -> raise_s [%message "Unexpected error" (output : string)]
-   | Some index -> print_endline (String.drop_prefix output index));
+  printf "\n%s\n" !output;
   [%expect
     {|
-    chan_close_with_error:646: RPC: ch 1 returned a response with an unknown request id. Ensure the client is properly synchronized
     (raised (
       ("Consumer left without responding" (
         request (
           Array (
             (Int    0)
-            (Int    6)
+            (Int    7)
             (String nvim_call_function)
             (Array ((String Rpc_1) (Array ((Array ())))))))))
-      (("Called from" lib/vcaml/test/semantics/test_blocking_nvim.ml:LINE:COL)))) |}];
+      (("Called from" lib/vcaml/test/semantics/test_blocking_nvim.ml:LINE:COL))))
+
+    -----  NVIM_LOG_FILE  -----
+    ERR {TIMESTAMP} socket     chan_close_with_error:646: RPC: ch 1 returned a response with an unknown request id. Ensure the client is properly synchronized
+    --------------------------- |}];
   Backtrace.elide := false;
   Private.before_sending_response_hook_for_tests := None;
   return ()

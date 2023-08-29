@@ -19,7 +19,7 @@ let%expect_test "Test keymaps" =
         [%here]
         client
         ~lhs:"a"
-        ~rhs:"a"
+        ~rhs:(Viml "a")
         ~mode
         ~scope:`Global
         ~description:"Test description"
@@ -30,7 +30,7 @@ let%expect_test "Test keymaps" =
         [%here]
         client
         ~lhs:"b"
-        ~rhs:"a"
+        ~rhs:(Viml "a")
         ~mode
         ~scope:`Global
         ~recursive:true
@@ -42,7 +42,7 @@ let%expect_test "Test keymaps" =
         [%here]
         client
         ~lhs:"c"
-        ~rhs:"c"
+        ~rhs:(Viml "c")
         ~mode
         ~scope:(`Buffer_local Current)
         ~nowait:true
@@ -167,7 +167,7 @@ let%expect_test "Test unsetting keymap in specific mode" =
           [%here]
           client
           ~lhs:"a"
-          ~rhs:"a"
+          ~rhs:(Viml "a")
           ~mode:Normal_and_visual_and_operator_pending
           ~scope:`Global
           ()
@@ -208,12 +208,12 @@ let%expect_test "Test replacing keycodes in an expr mapping" =
     in
     let test ~replace_keycodes =
       let%bind () =
-        Keymap.set
+        Keymap.set_expr
           [%here]
           client
           ~lhs:"X"
-          ~rhs:"SayHi()"
-          ~expr:(`Replace_keycodes replace_keycodes)
+          ~rhs:(Viml "SayHi()")
+          ~replace_keycodes
           ~mode:Normal
           ~scope:`Global
           ()

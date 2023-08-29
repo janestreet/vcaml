@@ -42,7 +42,7 @@ eval "\$(opam env)"
 dune runtest
 
 Then to get started, take a look at the READMEs:
-* https://github.com/janestreet/vcaml/blob/master/README.mdx
+* https://github.com/janestreet/vcaml/blob/master/README.md
 * https://github.com/janestreet/vcaml/blob/master/plugin/example/README.md
 HERE
 }

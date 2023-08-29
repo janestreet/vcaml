@@ -24,7 +24,6 @@ let%expect_test "Simple test of [Child] client" =
       with_process_cleanup ~name:"nvim" (Process.pid nvim) ~f:(fun () ->
         match%bind spin_until_nvim_creates_socket_file (Process.pid nvim) ~socket with
         | `Nvim_crashed exit_or_signal -> return (`Already_reaped exit_or_signal)
-        | `Socket_missing -> raise_s [%message "Socket was not created"]
         | `Socket_created ->
           let test () =
             Tcp.with_connection

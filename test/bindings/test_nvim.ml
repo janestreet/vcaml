@@ -124,8 +124,7 @@ let%expect_test "set_client_info" =
       let%bind client_before_setting_info = get_client_info () in
       Ocaml_from_nvim.register_request_blocking
         [%here]
-        Asynchronous
-        client
+        (Connected client)
         ~name:"test_method"
         ~type_:Ocaml_from_nvim.Blocking.(return Nil)
         ~f:(fun ~run_in_background:_ ~client:_ -> return ());
@@ -708,8 +707,7 @@ let%expect_test "subscribe_to_broadcast, unsubscribe_from_broadcast" =
     let name = "rpc" in
     Ocaml_from_nvim.register_request_async
       [%here]
-      Asynchronous
-      client
+      (Connected client)
       ~name
       ~type_:Ocaml_from_nvim.Async.(Int @-> unit)
       ~f:(fun ~client:_ count -> Mvar.put received_event count |> Deferred.ok);

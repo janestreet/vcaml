@@ -116,8 +116,24 @@ val find_by_name_or_create
   -> string
   -> t Deferred.Or_error.t
 
-(** Unload the buffer from memory, but keep the buffer in the buffer list. The buffer's
-    marks, settings, etc. are preserved. For details, see `:h bunload`. *)
+(** Unload the buffer from memory. The buffer's marks, settings, etc. are preserved. For
+    details, see `:h bunload`.
+
+    In Neovim, buffer "deletion" (see `:h bdelete`) refers to unloading the buffer,
+    "unlisting" the buffer, and clearing buffer-local option values, variables, mappings,
+    and commands.[^1] The buffer list is roughly the list of "discoverable" buffers.
+    Unloading and unlisting are two independent concepts, and there isn't usually a
+    situation in which you would want to do both of these together, since whether a buffer
+    should be discoverable usually depends more on the purpose of the buffer and whether
+    it should be loaded depends more on user activity. You can add/remove the buffer
+    to/from the buffer list by setting the [Buflisted] option. There's also a subtle
+    corner case: the last buffer cannot be unloaded unless it is unlisted (see `:h E90`).
+
+    Plugin authors who are just casually looking to delete a buffer they created and don't
+    want to think hard about these options should reach for [wipeout] below.
+
+    [^1]: However, the [BufDelete] event triggers solely in response to unlisting,
+    irrespective of whether the buffer is loaded (indeed, it may even be visible). *)
 val unload
   :  Source_code_position.t
   -> _ Client.t
@@ -125,7 +141,10 @@ val unload
   -> even_if_modified:bool
   -> unit Deferred.Or_error.t
 
-(** Totally delete the buffer and forget all settings related to it. See `:h bwipeout`. *)
+(** Totally delete the buffer (including some settings that would be preserved on normal
+    "deletion," such as marks, channels, and buffer-local autocmds). `:h bwipeout` has a
+    cautionary note about doing this, but that note applies more to regular users than to
+    plugin authors wiping out buffers created by their plugin. *)
 val wipeout
   :  Source_code_position.t
   -> _ Client.t
@@ -409,7 +428,7 @@ module Untested : sig
       ; namespace : Namespace.t
       ; buffer : buffer
       }
-    [@@deriving fields, sexp_of]
+    [@@deriving sexp_of]
 
     include Comparable.S_plain with type t := t
     include Hashable.S_plain with type t := t
