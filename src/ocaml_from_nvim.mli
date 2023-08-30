@@ -60,7 +60,6 @@ val register_request_blocking
         -> 'fn)
   -> unit
 
-
 (** [register_request_async] registers an asynchronous RPC that can be called from Neovim
     via [rpcnotify]. When [f] runs, Neovim may be in a different state than it was at the
     time when the request was made. *)

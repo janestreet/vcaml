@@ -9,7 +9,6 @@ let clear_mappings here client =
   |> Deferred.Or_error.List.iter ~how:`Parallel ~f:(Command.exec here client)
 ;;
 
-
 let%expect_test "Test keymaps" =
   let test ~client mode =
     let open Deferred.Or_error.Let_syntax in

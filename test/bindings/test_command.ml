@@ -543,43 +543,43 @@ let%expect_test "Compare native command invocations with range/count against str
         test_inputs
         ~how:(`Max_concurrent_jobs 1)
         ~f:(fun ({ range; arg } as input) ->
-          let exec_of_output output =
-            match String.split output ~on:',' with
-            | [ line1; line2; range; count ] ->
-              Ok
-                { Test.Output.Exec.line1 = Int.of_string line1
-                ; line2 = Int.of_string line2
-                ; range = Int.of_string range
-                ; count = Int.of_string count
-                }
-            | _ -> Or_error.error_s [%message "Unexpected output" output]
+        let exec_of_output output =
+          match String.split output ~on:',' with
+          | [ line1; line2; range; count ] ->
+            Ok
+              { Test.Output.Exec.line1 = Int.of_string line1
+              ; line2 = Int.of_string line2
+              ; range = Int.of_string range
+              ; count = Int.of_string count
+              }
+          | _ -> Or_error.error_s [%message "Unexpected output" output]
+        in
+        let command =
+          let range = range |> List.map ~f:Int.to_string |> String.concat ~sep:"," in
+          let arg =
+            match arg with
+            | None -> ""
+            | Some arg -> Int.to_string arg
           in
-          let command =
-            let range = range |> List.map ~f:Int.to_string |> String.concat ~sep:"," in
-            let arg =
-              match arg with
-              | None -> ""
-              | Some arg -> Int.to_string arg
-            in
-            [%string "%{range}%{name}%{arg}"]
-          in
-          let%bind parse =
-            match%map Command.Fast.parse [%here] client command with
-            | Error _ as error -> error
-            | Ok { range_or_count; args; _ } ->
-              Ok { Test.Output.Parse.range_or_count; args }
-          in
-          let%bind parse_exec =
-            match parse with
-            | Error _ -> return None
-            | Ok { range_or_count; args } ->
-              let (range_or_count : Range_or_count.t option) =
-                match range_or_count with
-                | None -> None
-                | Some (Range { start_inclusive; end_inclusive; of_ = _ }) ->
-                  Some (Range { start_inclusive; end_inclusive })
-                | Some (Ambiguous_count_or_singleton_range { value; of_ = _ }) ->
-                  (* This ambiguous case arises from [nvim_parse_cmd] returning a
+          [%string "%{range}%{name}%{arg}"]
+        in
+        let%bind parse =
+          match%map Command.Fast.parse [%here] client command with
+          | Error _ as error -> error
+          | Ok { range_or_count; args; _ } ->
+            Ok { Test.Output.Parse.range_or_count; args }
+        in
+        let%bind parse_exec =
+          match parse with
+          | Error _ -> return None
+          | Ok { range_or_count; args } ->
+            let (range_or_count : Range_or_count.t option) =
+              match range_or_count with
+              | None -> None
+              | Some (Range { start_inclusive; end_inclusive; of_ = _ }) ->
+                Some (Range { start_inclusive; end_inclusive })
+              | Some (Ambiguous_count_or_singleton_range { value; of_ = _ }) ->
+                (* This ambiguous case arises from [nvim_parse_cmd] returning a
                      singleton range and no count. While we don't know whether this value
                      should be interpreted as a count (if the command uses [-range=N]) or
                      a range (if the command uses [-range] or [-range=%]), we do know that
@@ -587,9 +587,9 @@ let%expect_test "Compare native command invocations with range/count against str
                      the output from [nvim_parse_cmd], so when invoking [exec] we pass the
                      value as a range ([exec] will collapse the 2-argument range into a
                      singleton range since the values are the same). *)
-                  Some (Range { start_inclusive = value; end_inclusive = value })
-                | Some (Count { count; source = _; of_ = _ }) ->
-                  (* When the count is specified on the command line (indicated by
+                Some (Range { start_inclusive = value; end_inclusive = value })
+              | Some (Count { count; source = _; of_ = _ }) ->
+                (* When the count is specified on the command line (indicated by
                      [source = `Specified]), [nvim_parse_cmd] populates both the [range]
                      and [count] fields (the range is always a singleton with the same
                      value as the count field). However, when we pass the count to
@@ -604,135 +604,135 @@ let%expect_test "Compare native command invocations with range/count against str
                      when we invoke [nvim_cmd] we only pass the count value. However, if
                      we pass [count = 3] and [range = [3]], then it will delete 3 lines
                      starting from line 3. *)
-                  Some (Count count)
-              in
-              Command.exec_and_capture_output ?range_or_count [%here] client name ~args
-              >>| Or_error.bind ~f:exec_of_output
-              >>| Option.return
-          in
-          let%bind native_exec =
-            Command.exec_and_capture_output
-              [%here]
-              client
-              "execute"
-              ~args:[ [%string {|"%{command}"|}] ]
+                Some (Count count)
+            in
+            Command.exec_and_capture_output ?range_or_count [%here] client name ~args
             >>| Or_error.bind ~f:exec_of_output
-          in
-          match parse, parse_exec, native_exec with
-          | Ok _, None, _ | Error _, Some _, _ -> assert false
-          | Error parse, None, native_exec ->
-            print_s
-              [%message
-                ""
-                  (input : Test.Input.t)
-                  (parse : Test.Output.Vim_error.t)
-                  (native_exec : Test.Output.Exec.t Test.Output.Or_vim_error.t)];
-            return ()
-          | Ok parse, Some (Error parse_exec), native_exec ->
-            print_s
-              [%message
-                ""
-                  (input : Test.Input.t)
-                  (parse : Test.Output.Parse.t)
-                  (parse_exec : Test.Output.Vim_error.t)
-                  (native_exec : Test.Output.Exec.t Test.Output.Or_vim_error.t)];
-            return ()
-          | Ok parse, Some (Ok parse_exec), Error native_exec ->
-            print_s
-              [%message
-                "Native failed when API succeeded - this is surprising! (probably a bug)"
-                  (input : Test.Input.t)
-                  (parse : Test.Output.Parse.t)
-                  (parse_exec : Test.Output.Exec.t)
-                  (native_exec : Test.Output.Vim_error.t)];
-            return ()
-          | Ok parse, Some (Ok parse_exec), Ok native_exec ->
-            (match [%equal: Test.Output.Exec.t] parse_exec native_exec with
-             | true ->
-               print_s
-                 [%message
-                   (input : Test.Input.t)
-                     (parse : Test.Output.Parse.t)
-                     ~exec:(parse_exec : Test.Output.Exec.t)];
-               return ()
-             | false ->
-               (* The behavior of Neovim and VCaml is inconsistent. This likely arises
+            >>| Option.return
+        in
+        let%bind native_exec =
+          Command.exec_and_capture_output
+            [%here]
+            client
+            "execute"
+            ~args:[ [%string {|"%{command}"|}] ]
+          >>| Or_error.bind ~f:exec_of_output
+        in
+        match parse, parse_exec, native_exec with
+        | Ok _, None, _ | Error _, Some _, _ -> assert false
+        | Error parse, None, native_exec ->
+          print_s
+            [%message
+              ""
+                (input : Test.Input.t)
+                (parse : Test.Output.Vim_error.t)
+                (native_exec : Test.Output.Exec.t Test.Output.Or_vim_error.t)];
+          return ()
+        | Ok parse, Some (Error parse_exec), native_exec ->
+          print_s
+            [%message
+              ""
+                (input : Test.Input.t)
+                (parse : Test.Output.Parse.t)
+                (parse_exec : Test.Output.Vim_error.t)
+                (native_exec : Test.Output.Exec.t Test.Output.Or_vim_error.t)];
+          return ()
+        | Ok parse, Some (Ok parse_exec), Error native_exec ->
+          print_s
+            [%message
+              "Native failed when API succeeded - this is surprising! (probably a bug)"
+                (input : Test.Input.t)
+                (parse : Test.Output.Parse.t)
+                (parse_exec : Test.Output.Exec.t)
+                (native_exec : Test.Output.Vim_error.t)];
+          return ()
+        | Ok parse, Some (Ok parse_exec), Ok native_exec ->
+          (match [%equal: Test.Output.Exec.t] parse_exec native_exec with
+           | true ->
+             print_s
+               [%message
+                 (input : Test.Input.t)
+                   (parse : Test.Output.Parse.t)
+                   ~exec:(parse_exec : Test.Output.Exec.t)];
+             return ()
+           | false ->
+             (* The behavior of Neovim and VCaml is inconsistent. This likely arises
                   from the known inconsistency in the specified count case (see comment
                   above), but may also be an inconsistency in Neovim. The logic that
                   follows teases out the cause. *)
-               let%bind parse_exec_faithful =
-                 let%tydi { range_or_count; args } = parse in
-                 (* Bypass the API to sidestep VCaml's modeling of commands so we know
+             let%bind parse_exec_faithful =
+               let%tydi { range_or_count; args } = parse in
+               (* Bypass the API to sidestep VCaml's modeling of commands so we know
                     that when this result departs from [native_exec], the inconsistency is
                     in Neovim, not in VCaml. *)
-                 let maybe name var conv = Option.map var ~f:(fun var -> name, conv var) in
-                 let range, count =
-                   match range_or_count with
-                   | None -> None, None
-                   | Some (Range { start_inclusive; end_inclusive; of_ = _ }) ->
-                     Some [ start_inclusive; end_inclusive ], None
-                   | Some (Count { count; source = `Default_when_omitted; of_ = _ }) ->
-                     None, Some count
-                   | Some (Count { count; source = `Specified; of_ = _ }) ->
-                     Some [ count ], Some count
-                   | Some (Ambiguous_count_or_singleton_range { value; of_ = _ }) ->
-                     Some [ value ], None
-                 in
-                 Nvim.call_function
-                   [%here]
-                   client
-                   ~name:(`Viml "nvim_cmd")
-                   ~type_:Nvim.Func.(Dict @-> Dict @-> return String)
-                   ([ Some ("cmd", Msgpack.String name)
-                    ; Some ("args", Type.to_msgpack (Array String) args)
-                    ; maybe "range" range (Type.to_msgpack (Array Int))
-                    ; maybe "count" count (Type.to_msgpack Int)
-                    ]
-                    |> List.filter_opt
-                    |> String.Map.of_alist_exn)
-                   (String.Map.singleton "output" (Msgpack.Bool true))
-                 >>| Or_error.bind ~f:exec_of_output
+               let maybe name var conv = Option.map var ~f:(fun var -> name, conv var) in
+               let range, count =
+                 match range_or_count with
+                 | None -> None, None
+                 | Some (Range { start_inclusive; end_inclusive; of_ = _ }) ->
+                   Some [ start_inclusive; end_inclusive ], None
+                 | Some (Count { count; source = `Default_when_omitted; of_ = _ }) ->
+                   None, Some count
+                 | Some (Count { count; source = `Specified; of_ = _ }) ->
+                   Some [ count ], Some count
+                 | Some (Ambiguous_count_or_singleton_range { value; of_ = _ }) ->
+                   Some [ value ], None
                in
-               (match parse_exec_faithful with
-                | Error parse_exec_faithful ->
-                  print_s
-                    [%message
-                      "Both structured and native execs succeeded but faithful exec failed \
-                       - this is surprising! (probably a bug)"
-                        (input : Test.Input.t)
-                        (parse : Test.Output.Parse.t)
-                        (parse_exec : Test.Output.Exec.t)
-                        (native_exec : Test.Output.Exec.t)
-                        (parse_exec_faithful : Test.Output.Vim_error.t)];
-                  return ()
-                | Ok parse_exec_faithful ->
-                  let parse_exec =
-                    match [%equal: Test.Output.Exec.t] parse_exec_faithful parse_exec with
-                    | true -> None
-                    | false -> Some parse_exec
-                  in
-                  let native_exec =
-                    match [%equal: Test.Output.Exec.t] parse_exec_faithful native_exec with
-                    | true -> None
-                    | false -> Some native_exec
-                  in
-                  let inconsistency_in =
-                    match parse_exec, native_exec with
-                    | None, None -> assert false (* We know they are different. *)
-                    | Some _, None -> [ "VCaml" ]
-                    | None, Some _ -> [ "Neovim" ]
-                    | Some _, Some _ -> [ "VCaml"; "Neovim" ]
-                  in
-                  print_s
-                    [%message.omit_nil
-                      ""
-                        ~input:(Some input : Test.Input.t option)
-                        (parse : Test.Output.Parse.t)
-                        (parse_exec : Test.Output.Exec.t option)
-                        (parse_exec_faithful : Test.Output.Exec.t)
-                        (native_exec : Test.Output.Exec.t option)
-                        (inconsistency_in : string list)];
-                  return ())))
+               Nvim.call_function
+                 [%here]
+                 client
+                 ~name:(`Viml "nvim_cmd")
+                 ~type_:Nvim.Func.(Dict @-> Dict @-> return String)
+                 ([ Some ("cmd", Msgpack.String name)
+                  ; Some ("args", Type.to_msgpack (Array String) args)
+                  ; maybe "range" range (Type.to_msgpack (Array Int))
+                  ; maybe "count" count (Type.to_msgpack Int)
+                  ]
+                  |> List.filter_opt
+                  |> String.Map.of_alist_exn)
+                 (String.Map.singleton "output" (Msgpack.Bool true))
+               >>| Or_error.bind ~f:exec_of_output
+             in
+             (match parse_exec_faithful with
+              | Error parse_exec_faithful ->
+                print_s
+                  [%message
+                    "Both structured and native execs succeeded but faithful exec failed \
+                     - this is surprising! (probably a bug)"
+                      (input : Test.Input.t)
+                      (parse : Test.Output.Parse.t)
+                      (parse_exec : Test.Output.Exec.t)
+                      (native_exec : Test.Output.Exec.t)
+                      (parse_exec_faithful : Test.Output.Vim_error.t)];
+                return ()
+              | Ok parse_exec_faithful ->
+                let parse_exec =
+                  match [%equal: Test.Output.Exec.t] parse_exec_faithful parse_exec with
+                  | true -> None
+                  | false -> Some parse_exec
+                in
+                let native_exec =
+                  match [%equal: Test.Output.Exec.t] parse_exec_faithful native_exec with
+                  | true -> None
+                  | false -> Some native_exec
+                in
+                let inconsistency_in =
+                  match parse_exec, native_exec with
+                  | None, None -> assert false (* We know they are different. *)
+                  | Some _, None -> [ "VCaml" ]
+                  | None, Some _ -> [ "Neovim" ]
+                  | Some _, Some _ -> [ "VCaml"; "Neovim" ]
+                in
+                print_s
+                  [%message.omit_nil
+                    ""
+                      ~input:(Some input : Test.Input.t option)
+                      (parse : Test.Output.Parse.t)
+                      (parse_exec : Test.Output.Exec.t option)
+                      (parse_exec_faithful : Test.Output.Exec.t)
+                      (native_exec : Test.Output.Exec.t option)
+                      (inconsistency_in : string list)];
+                return ())))
     in
     (* Each [test] below runs through several different kinds of invocations of a command
        defined with certain attributes ([attrs]). [input] indicates how the command was

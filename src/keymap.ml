@@ -151,35 +151,35 @@ let get here client ~scope ~mode =
   in
   modes
   |> Deferred.Or_error.List.concat_map ~how:`Sequential ~f:(fun mode ->
-    query ~mode:(Mode.to_string mode)
-    |> map_witness ~f:(fun keymaps ->
-      keymaps
-      |> List.map ~f:of_msgpack_map
-      |> Or_error.combine_errors
-      |> Or_error.map ~f:List.concat)
-    |> run here client)
+       query ~mode:(Mode.to_string mode)
+       |> map_witness ~f:(fun keymaps ->
+            keymaps
+            |> List.map ~f:of_msgpack_map
+            |> Or_error.combine_errors
+            |> Or_error.map ~f:List.concat)
+       |> run here client)
   (* Because 'i' and 'c' will produce duplicate entries for '!' mappings, we need to
      dedup the results after querying each. *)
   >>|? List.dedup_and_sort ~compare
 ;;
 
 let set_internal
-      (type a)
-      ~(return_type : a Type.t)
-      ~expr
-      here
-      client
-      ?(replace_keycodes = true)
-      ?(recursive = false)
-      ?(unique = false)
-      ?(nowait = false)
-      ?(silent = false)
-      ?(description = "")
-      ~mode
-      ~scope
-      ~lhs
-      ~(rhs : a Ocaml_from_nvim.Callback.t)
-      ()
+  (type a)
+  ~(return_type : a Type.t)
+  ~expr
+  here
+  client
+  ?(replace_keycodes = true)
+  ?(recursive = false)
+  ?(unique = false)
+  ?(nowait = false)
+  ?(silent = false)
+  ?(description = "")
+  ~mode
+  ~scope
+  ~lhs
+  ~(rhs : a Ocaml_from_nvim.Callback.t)
+  ()
   =
   let%bind.Deferred.Or_error scope =
     match scope with

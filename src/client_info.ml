@@ -97,8 +97,8 @@ module How_to_call_method = struct
       ~async:(conv (Type.to_msgpack Bool))
       ~nargs:
         (conv (function
-           | `Fixed n -> Msgpack.Int n
-           | `Inclusive_range (lo, hi) -> Array [ Int lo; Int hi ]))
+          | `Fixed n -> Msgpack.Int n
+          | `Inclusive_range (lo, hi) -> Array [ Int lo; Int hi ]))
     |> List.filter_opt
     |> String.Map.of_alist_exn
     |> Type.to_msgpack Dict

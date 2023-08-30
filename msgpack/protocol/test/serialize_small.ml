@@ -1,4 +1,3 @@
-
 (* tests automatically generated from a subset of
    https://github.com/vsergeev/u-msgpack-python/blob/master/test_umsgpack.py *)
 

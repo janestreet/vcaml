@@ -110,7 +110,6 @@ module Func : sig
 
   val return : 'a Type.t -> 'a Deferred.Or_error.t t
   val ( @-> ) : 'a Type.t -> 'b t -> ('a -> 'b) t
-
 end
 
 (** Given the name and type of a VimL or Lua function, return a type-checked function for
@@ -233,12 +232,11 @@ val feedkeys
   :  Source_code_position.t
   -> _ Client.t
   -> [ `Raw of string
-     (** This string is not escaped. To escape key codes, first call
+       (** This string is not escaped. To escape key codes, first call
          [replace_termcodes_and_keycodes], then pass the result with [`Keycodes]. *)
      | `Keycodes of keys_with_replaced_keycodes
      ]
-  -> mode:
-       string
+  -> mode:string
   -> unit Deferred.Or_error.t
 
 val get_color_map

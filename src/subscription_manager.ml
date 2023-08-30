@@ -29,7 +29,6 @@ module Buffer_event = struct
         }
   [@@deriving sexp_of]
 
-
   let buffer_of_msgpack_exn msg =
     match Buffer.of_msgpack msg with
     | Ok buffer -> buffer
@@ -134,7 +133,7 @@ end
 
 type t =
   { buffer_subscriptions : Buffer_event.t Pipe.Writer.t Buffer.Table.t
-  (* [pending_buffer_subscriptions] keeps track of subscriptions we still need to make
+      (* [pending_buffer_subscriptions] keeps track of subscriptions we still need to make
      that are blocked on [unsubscribe] cleaning up after a previous connection before we
      can re-establish the subscription. *)
   ; pending_buffer_subscriptions : Buffer_event.t Pipe.Reader.t Ivar.t Buffer.Table.t

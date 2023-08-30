@@ -102,7 +102,7 @@ module Private : sig
     ; registered_methods : unit -> Method_info.t String.Map.t
     ; call_nvim_api_fn :
         'a 'b.
-          Source_code_position.t
+        Source_code_position.t
         -> ('a, 'b) Message_type.t
         -> 'a Api_result.t
         -> 'b Deferred.Or_error.t

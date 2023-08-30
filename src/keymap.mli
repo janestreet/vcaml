@@ -64,13 +64,13 @@ val set
   -> ?nowait:bool (** default: [false] *)
   -> ?silent:bool (** default: [false] *)
   -> ?description:string
-  (** Provide [description] if you use an RPC for [rhs] so the user will understand what
+       (** Provide [description] if you use an RPC for [rhs] so the user will understand what
       the mapping does when they inspect it with [:map lhs]. *)
   -> mode:Mode.t
   -> scope:[ `Global | `Buffer_local of Nvim_internal.Buffer.Or_current.t ]
   -> lhs:string (** The "left-hand side" of the mapping (the key sequence to map). *)
   -> rhs:unit Ocaml_from_nvim.Callback.t
-  (** The "right-hand side" of the mapping (what key sequence to run). If you provide an
+       (** The "right-hand side" of the mapping (what key sequence to run). If you provide an
       RPC, a key sequence will be run that will invoke it. *)
   -> unit
   -> unit Deferred.Or_error.t

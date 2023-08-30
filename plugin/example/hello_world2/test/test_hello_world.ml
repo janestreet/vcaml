@@ -10,27 +10,27 @@ let test f =
       ; "../bin/main.exe", `In_path_as, "main.exe"
       ]
     (fun client ui ->
-       let open Deferred.Or_error.Let_syntax in
-       let%bind () = Command.exec [%here] client "source" ~args:[ "hello_world.lua" ] in
-       let%bind () =
-         Deferred.Or_error.repeat_until_finished () (fun () ->
-           match%bind
-             Nvim.call_function
-               [%here]
-               client
-               ~name:(`Viml "exists")
-               ~type_:Nvim.Func.(String @-> return Int)
-               ":SayGoodbye"
-           with
-           | 0 | 1 | 3 ->
-             let%map () = Clock_ns.after Time_ns.Span.millisecond |> Deferred.ok in
-             `Repeat ()
-           | 2 -> return (`Finished ())
-           | n ->
-             Deferred.Or_error.error_s
-               [%message "Unexpected return value from [exists]" ~_:(n : int)])
-       in
-       f client ui)
+      let open Deferred.Or_error.Let_syntax in
+      let%bind () = Command.exec [%here] client "source" ~args:[ "hello_world.lua" ] in
+      let%bind () =
+        Deferred.Or_error.repeat_until_finished () (fun () ->
+          match%bind
+            Nvim.call_function
+              [%here]
+              client
+              ~name:(`Viml "exists")
+              ~type_:Nvim.Func.(String @-> return Int)
+              ":SayGoodbye"
+          with
+          | 0 | 1 | 3 ->
+            let%map () = Clock_ns.after Time_ns.Span.millisecond |> Deferred.ok in
+            `Repeat ()
+          | 2 -> return (`Finished ())
+          | n ->
+            Deferred.Or_error.error_s
+              [%message "Unexpected return value from [exists]" ~_:(n : int)])
+      in
+      f client ui)
 ;;
 
 let%expect_test "Two hellos, one goodbye" =

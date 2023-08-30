@@ -32,7 +32,7 @@ let notify here client ~name ~type_ =
      | `Viml name -> Nvim_internal.nvim_call_function ~fn:name ~args
      | `Lua name ->
        Nvim_internal.nvim_exec_lua
-         (* We surround [name] with parentheses to support anonymous functions. We assign
+       (* We surround [name] with parentheses to support anonymous functions. We assign
             it to [result] before returning it to ensure [name] appears in the stack trace
             if it raises an error. *)
          ~code:[%string {| local result = (%{name})(...); return result |}]
@@ -42,14 +42,14 @@ let notify here client ~name ~type_ =
 
 module Untested = struct
   let nvim_buf_add_highlight
-        here
-        client
-        buffer
-        ~namespace
-        ~hl_group
-        ~line
-        ~col_start
-        ~col_end
+    here
+    client
+    buffer
+    ~namespace
+    ~hl_group
+    ~line
+    ~col_start
+    ~col_end
     =
     let client = Type_equal.conv Client.Private.eq client in
     Nvim_internal.nvim_buf_add_highlight

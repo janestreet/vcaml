@@ -44,8 +44,8 @@ let verbose_debugging' ~log =
         { name = peer_name; reader; writer }
         ~my_name
         ~f:(function
-          | `Sent -> sent
-          | `Received -> receive)
+        | `Sent -> sent
+        | `Received -> receive)
     in
     let announce_closed_connection angstrom_exit_status ~from ~to_ =
       [%message
@@ -77,15 +77,15 @@ let verbose_debugging ~verbose =
 ;;
 
 let with_client
-      ?(args = default_args)
-      ?env
-      ?links
-      ?(time_source = time_source_at_epoch)
-      ?(on_error = `Raise)
-      ?(before_connecting = fun _ -> return ())
-      ?(verbose = false)
-      ?(warn_if_neovim_exits_early = true)
-      f
+  ?(args = default_args)
+  ?env
+  ?links
+  ?(time_source = time_source_at_epoch)
+  ?(on_error = `Raise)
+  ?(before_connecting = fun _ -> return ())
+  ?(verbose = false)
+  ?(warn_if_neovim_exits_early = true)
+  f
   =
   Expect_test_helpers_async.within_temp_dir ?links (fun () ->
     let nvim_log_file = "nvim_low_level_log.txt" in
@@ -101,10 +101,10 @@ let with_client
         let base =
           Core_unix.Env.expand
             (`Extend
-               [ "NVIM_LOG_FILE", nvim_log_file
-               ; "NVIM_RPLUGIN_MANIFEST", "rplugin.vim"
-               ; elide_backtraces_env_var, [%string "%{!Backtrace.elide#Bool}"]
-               ])
+              [ "NVIM_LOG_FILE", nvim_log_file
+              ; "NVIM_RPLUGIN_MANIFEST", "rplugin.vim"
+              ; elide_backtraces_env_var, [%string "%{!Backtrace.elide#Bool}"]
+              ])
         in
         match env with
         | None -> base
@@ -148,26 +148,26 @@ let with_client
           Reader.file_lines nvim_log_file
           >>| List.filter ~f:(Fn.non String.is_empty)
           >>| (function
-            | [] -> []
-            | lines ->
-              let is_timestamp timestamp =
-                (* [Time_ns] is able to parse the Neovim timestamp format. *)
-                match Time_ns_unix.of_string timestamp with
-                | _ -> true
-                | exception _ -> false
-              in
-              let lines =
-                List.map lines ~f:(fun line ->
-                  match String.split line ~on:' ' with
-                  | log_level :: timestamp :: message when is_timestamp timestamp ->
-                    String.concat (log_level :: "{TIMESTAMP}" :: message) ~sep:" "
-                  | _ -> line)
-              in
-              [ [ "-----  NVIM_LOG_FILE  -----" ]
-              ; lines
-              ; [ "---------------------------" ]
-              ]
-              |> List.concat)
+          | [] -> []
+          | lines ->
+            let is_timestamp timestamp =
+              (* [Time_ns] is able to parse the Neovim timestamp format. *)
+              match Time_ns_unix.of_string timestamp with
+              | _ -> true
+              | exception _ -> false
+            in
+            let lines =
+              List.map lines ~f:(fun line ->
+                match String.split line ~on:' ' with
+                | log_level :: timestamp :: message when is_timestamp timestamp ->
+                  String.concat (log_level :: "{TIMESTAMP}" :: message) ~sep:" "
+                | _ -> line)
+            in
+            [ [ "-----  NVIM_LOG_FILE  -----" ]
+            ; lines
+            ; [ "---------------------------" ]
+            ]
+            |> List.concat)
       and verbose_log =
         (* This file will be populated by VCaml plugins that are launched during
            integration tests under verbose mode (in other words, when the test setup is
@@ -416,16 +416,16 @@ let wait_until_text ?(timeout = Time_ns.Span.of_int_sec 2) here ui ~f =
 ;;
 
 let with_ui_client
-      ?width
-      ?height
-      ?args
-      ?env
-      ?links
-      ?time_source
-      ?on_error
-      ?before_connecting
-      ?verbose
-      f
+  ?width
+  ?height
+  ?args
+  ?env
+  ?links
+  ?time_source
+  ?on_error
+  ?before_connecting
+  ?verbose
+  f
   =
   with_client
     ?args
@@ -439,11 +439,11 @@ let with_ui_client
 ;;
 
 let socket_client
-      ?(time_source = time_source_at_epoch)
-      ?(on_error = `Raise)
-      ?(before_connecting = fun _ -> return ())
-      ?(verbose = false)
-      socket
+  ?(time_source = time_source_at_epoch)
+  ?(on_error = `Raise)
+  ?(before_connecting = fun _ -> return ())
+  ?(verbose = false)
+  socket
   =
   let client = Client.create ~name:"test-client" ~on_error in
   let%bind () = before_connecting client in
@@ -455,12 +455,12 @@ let socket_client
 
 module For_debugging = struct
   let with_ui_client
-        ?(time_source = time_source_at_epoch)
-        ?(on_error = `Raise)
-        ?(before_connecting = fun _ -> return ())
-        ?(verbose = false)
-        ~socket
-        f
+    ?(time_source = time_source_at_epoch)
+    ?(on_error = `Raise)
+    ?(before_connecting = fun _ -> return ())
+    ?(verbose = false)
+    ~socket
+    f
     =
     let { wrap_connection; done_logging } = verbose_debugging ~verbose in
     let%bind client =
@@ -536,7 +536,6 @@ module Private = struct
       connection_type
   ;;
 end
-
 
 let%expect_test "We cannot have two blocking RPCs with the same name" =
   let register_dummy_rpc_handler ~name client =

@@ -11,10 +11,10 @@ let%expect_test "plugin echoes a message" =
         ; "../bin/main.exe", `In_path_as, "main.exe"
         ]
       (fun client ui ->
-         let open Deferred.Or_error.Let_syntax in
-         let%bind () = Command.exec [%here] client "source" ~args:[ "hello_world.lua" ] in
-         let%bind () = Command.exec [%here] client "SayHello" ~args:[ "world" ] in
-         get_screen_contents ui)
+        let open Deferred.Or_error.Let_syntax in
+        let%bind () = Command.exec [%here] client "source" ~args:[ "hello_world.lua" ] in
+        let%bind () = Command.exec [%here] client "SayHello" ~args:[ "world" ] in
+        get_screen_contents ui)
   in
   print_endline screen;
   [%expect

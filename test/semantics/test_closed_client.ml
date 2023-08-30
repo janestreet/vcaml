@@ -60,7 +60,7 @@ let%expect_test "Sending response with a closed client" =
          response message - if we do it inside the RPC, the flush message will be sent
          first. We test closing inside the RPC next. *)
       Private.before_sending_response_hook_for_tests
-      := Some (fun () -> Client.close client);
+        := Some (fun () -> Client.close client);
       let function_name = "rpc" in
       let () =
         Ocaml_from_nvim.register_request_blocking

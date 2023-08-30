@@ -121,14 +121,14 @@ module Config = struct
         let%map.Or_error border =
           custom
           |> List.mapi ~f:(fun index piece ->
-            match piece with
-            | String text | Array [ String text ] ->
-              Ok { Highlighted_text.Chunk.text; hl_group = None }
-            | Array [ String text; String hl_group ] ->
-              Ok { text; hl_group = Some hl_group }
-            | _ ->
-              Or_error.error_s
-                [%message "Malformed [border] piece" (index : int) (piece : Msgpack.t)])
+               match piece with
+               | String text | Array [ String text ] ->
+                 Ok { Highlighted_text.Chunk.text; hl_group = None }
+               | Array [ String text; String hl_group ] ->
+                 Ok { text; hl_group = Some hl_group }
+               | _ ->
+                 Or_error.error_s
+                   [%message "Malformed [border] piece" (index : int) (piece : Msgpack.t)])
           |> Or_error.combine_errors
         in
         Some (Custom border)
@@ -425,7 +425,7 @@ module Config = struct
         (String.Map.of_alist_exn map)
         (Title.to_msgpack_map t.title)
         ~combine:(fun ~key _ _ ->
-          raise_s [%message "BUG: Key appears twice in window config" key])
+        raise_s [%message "BUG: Key appears twice in window config" key])
     ;;
 
     let of_msgpack_map map =
@@ -528,14 +528,14 @@ module Fast = struct
   ;;
 
   let eval_statuscolumn
-        here
-        client
-        t
-        ?max_width
-        ?fill_char
-        ~include_highlights
-        ~one_indexed_row
-        statuscolumn
+    here
+    client
+    t
+    ?max_width
+    ?fill_char
+    ~include_highlights
+    ~one_indexed_row
+    statuscolumn
     =
     Statusline.eval
       here
@@ -864,5 +864,4 @@ module Option = struct
   let get_default here client t = get_global here client Current t
   let set_for_new_buffers_opened_in_window = set_global
   let get_for_new_buffers_opened_in_window = get_global
-
 end

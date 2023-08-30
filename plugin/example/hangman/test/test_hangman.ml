@@ -10,35 +10,35 @@ let play_hangman ~secret ~guesses =
       ; "../bin/main.exe", `In_path_as, "main.exe"
       ]
     (fun client ui ->
-       let open Deferred.Or_error.Let_syntax in
-       let%bind () = Command.exec [%here] client "source" ~args:[ "hangman.lua" ] in
-       let%bind () = Command.exec [%here] client "Hangman" in
-       let wait_for_text_and_print_screen here ~f =
-         wait_until_text ~timeout:Time_ns.Span.second here ui ~f >>| print_endline
-       in
-       let guess char =
-         let%bind () =
-           Nvim.feedkeys [%here] client (`Raw (Char.to_string char)) ~mode:"m"
-         in
-         wait_for_text_and_print_screen [%here] ~f:(fun output ->
-           let lines = String.split_lines output in
-           let bad_guesses = List.nth_exn lines 2 in
-           let hint = List.nth_exn lines 12 in
-           let char = Char.uppercase char in
-           String.mem bad_guesses char || String.mem hint char)
-       in
-       let%bind () =
-         wait_for_text_and_print_screen
-           [%here]
-           ~f:(String.is_substring ~substring:"Enter a word or phrase")
-       in
-       let%bind (_ : int) = Nvim.Fast.input [%here] client [%string "%{secret}<CR>"] in
-       let%bind () =
-         wait_for_text_and_print_screen [%here] ~f:(fun screen ->
-           String.is_substring screen ~substring:"___")
-       in
-       let%bind () = Deferred.Or_error.List.iter ~how:`Sequential guesses ~f:guess in
-       return ())
+      let open Deferred.Or_error.Let_syntax in
+      let%bind () = Command.exec [%here] client "source" ~args:[ "hangman.lua" ] in
+      let%bind () = Command.exec [%here] client "Hangman" in
+      let wait_for_text_and_print_screen here ~f =
+        wait_until_text ~timeout:Time_ns.Span.second here ui ~f >>| print_endline
+      in
+      let guess char =
+        let%bind () =
+          Nvim.feedkeys [%here] client (`Raw (Char.to_string char)) ~mode:"m"
+        in
+        wait_for_text_and_print_screen [%here] ~f:(fun output ->
+          let lines = String.split_lines output in
+          let bad_guesses = List.nth_exn lines 2 in
+          let hint = List.nth_exn lines 12 in
+          let char = Char.uppercase char in
+          String.mem bad_guesses char || String.mem hint char)
+      in
+      let%bind () =
+        wait_for_text_and_print_screen
+          [%here]
+          ~f:(String.is_substring ~substring:"Enter a word or phrase")
+      in
+      let%bind (_ : int) = Nvim.Fast.input [%here] client [%string "%{secret}<CR>"] in
+      let%bind () =
+        wait_for_text_and_print_screen [%here] ~f:(fun screen ->
+          String.is_substring screen ~substring:"___")
+      in
+      let%bind () = Deferred.Or_error.List.iter ~how:`Sequential guesses ~f:guess in
+      return ())
 ;;
 
 let%expect_test "winning game of hangman" =

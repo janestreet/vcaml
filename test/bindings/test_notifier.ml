@@ -49,18 +49,18 @@ let%expect_test "Bad asynchronous notification" =
     with_client
       ~on_error:
         (`Call
-           (fun error ->
-              print_s [%sexp (error : Vcaml_error.t)];
-              Ivar.fill_exn result "Received asynchronous failure message"))
+          (fun error ->
+            print_s [%sexp (error : Vcaml_error.t)];
+            Ivar.fill_exn result "Received asynchronous failure message"))
       (fun client ->
-         let%bind.Deferred.Or_error () =
-           Notifier.notify
-             [%here]
-             client
-             ~name:(`Viml "bad-function")
-             ~type_:Notifier.Func.unit
-         in
-         Ivar.read result |> Deferred.ok)
+        let%bind.Deferred.Or_error () =
+          Notifier.notify
+            [%here]
+            client
+            ~name:(`Viml "bad-function")
+            ~type_:Notifier.Func.unit
+        in
+        Ivar.read result |> Deferred.ok)
   in
   let%bind result = with_timeout (Time_float.Span.of_int_sec 3) result in
   print_s [%sexp (result : [ `Result of string | `Timeout ])];

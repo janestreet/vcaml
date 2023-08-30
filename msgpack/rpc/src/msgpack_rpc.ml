@@ -113,12 +113,12 @@ let event_loop t =
     Angstrom_async.parse_many
       Msgpack.Internal.Parser.msg
       (fun msg ->
-         (* Force synchronous message handling. Note that if a request or notification
+        (* Force synchronous message handling. Note that if a request or notification
             handler raises, we don't do anything special to handle it. Clients that want
             to prevent raising can use [Monitor.try_with] inside their handlers. If
             [handle_message] raises due to its own logic, that's a bug. *)
-         handle_message msg;
-         return ())
+        handle_message msg;
+        return ())
       (reader t)
   in
   let (reason : Connection_closed_reason.t) =

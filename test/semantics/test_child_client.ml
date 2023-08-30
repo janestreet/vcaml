@@ -29,25 +29,25 @@ let%expect_test "Simple test of [Child] client" =
             Tcp.with_connection
               (Tcp.Where_to_connect.of_unix_address (`Unix socket))
               (fun (_ : _ Socket.t) reader writer ->
-                 let open Deferred.Or_error.Let_syntax in
-                 let%bind client =
-                   let client = Client.create ~name:"buffer-clock" ~on_error:`Raise in
-                   Private.attach_client
-                     ~stdio_override:(reader, writer)
-                     ~time_source:
-                       (Time_source.read_only (Time_source.create ~now:Time_ns.epoch ()))
-                     client
-                     Stdio
-                 in
-                 let%bind result =
-                   Nvim.eval_viml_expression
-                     [%here]
-                     client
-                     "'Hello, world!'"
-                     ~result_type:String
-                 in
-                 let%map () = attempt_to_quit ~tmp_dir ~client |> Deferred.ok in
-                 result)
+                let open Deferred.Or_error.Let_syntax in
+                let%bind client =
+                  let client = Client.create ~name:"buffer-clock" ~on_error:`Raise in
+                  Private.attach_client
+                    ~stdio_override:(reader, writer)
+                    ~time_source:
+                      (Time_source.read_only (Time_source.create ~now:Time_ns.epoch ()))
+                    client
+                    Stdio
+                in
+                let%bind result =
+                  Nvim.eval_viml_expression
+                    [%here]
+                    client
+                    "'Hello, world!'"
+                    ~result_type:String
+                in
+                let%map () = attempt_to_quit ~tmp_dir ~client |> Deferred.ok in
+                result)
           in
           let%bind result = Deferred.Or_error.try_with_join test in
           print_s [%sexp (result : string Or_error.t)];

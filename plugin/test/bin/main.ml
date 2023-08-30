@@ -26,9 +26,9 @@ module Persistent = struct
         ~name:"async-rpc"
         ~type_:Ocaml_from_nvim.Async.unit
         ~f:(fun () ~client:_ ->
-          match async_rpc with
-          | Some f -> f ()
-          | None -> Deferred.Or_error.return ())
+        match async_rpc with
+        | Some f -> f ()
+        | None -> Deferred.Or_error.return ())
     in
     let blocking_rpc =
       Vcaml_plugin.Persistent.Rpc.create_blocking

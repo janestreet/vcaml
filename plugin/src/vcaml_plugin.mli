@@ -17,7 +17,6 @@ open Vcaml
     OCaml app from outside Neovim that needs to talk to a running Neovim instance), use
     the VCaml library directly to create and attach a client. *)
 
-
 module Oneshot : sig
   module Rpc : sig
     type t

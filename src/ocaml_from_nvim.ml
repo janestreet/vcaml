@@ -142,13 +142,13 @@ let register_request_async_internal here client ~name ~type_ ~f ~wrap_f =
 ;;
 
 let register_request_blocking_internal
-      ?(on_keyboard_interrupt = ignore)
-      here
-      client
-      ~name
-      ~type_
-      ~f
-      ~wrap_f
+  ?(on_keyboard_interrupt = ignore)
+  here
+  client
+  ~name
+  ~type_
+  ~f
+  ~wrap_f
   =
   let f ~run_in_background client params =
     match Blocking.valid_number_of_args type_ (List.length params) with

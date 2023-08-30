@@ -195,7 +195,7 @@ val create
   :  Source_code_position.t
   -> _ Client.t
   -> ?description:string
-  (** Provide [description] if you implement this autocmd with an RPC so the user will
+       (** Provide [description] if you implement this autocmd with an RPC so the user will
       understand what the autocmd does when they inspect it with [:autocmd]. *)
   -> ?once:bool
   -> ?nested:bool

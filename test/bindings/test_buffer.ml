@@ -10,8 +10,8 @@ let with_event_printing ~f =
     let%bind events = Buffer.subscribe [%here] client Current >>| ok_exn in
     Async.don't_wait_for
     @@ Async.Pipe.iter events ~f:(fun event ->
-      print_s [%message (event : Buffer.Event.t)];
-      Deferred.unit);
+         print_s [%message (event : Buffer.Event.t)];
+         Deferred.unit);
     f client)
 ;;
 

@@ -20,11 +20,11 @@ let create here client ?name () =
 let all_named here client =
   Nvim_internal.nvim_get_namespaces
   |> map_witness ~f:(fun map ->
-    map
-    |> Map.map ~f:(Type.of_msgpack Int)
-    |> Map.combine_errors
-    |> Or_error.map
-         ~f:(Map.mapi ~f:(fun ~key:name ~data:id -> { id; name = Some name })))
+       map
+       |> Map.map ~f:(Type.of_msgpack Int)
+       |> Map.combine_errors
+       |> Or_error.map
+            ~f:(Map.mapi ~f:(fun ~key:name ~data:id -> { id; name = Some name })))
   |> run here client
 ;;
 

@@ -28,7 +28,6 @@ type t
 (** Create a new Msgpack RPC instance. *)
 val create : on_error:(Error.t -> unit) -> t
 
-
 (** Once [connect] is called the counterparty can start calling methods and sending
     notifications. Any methods that should be callable at that time should be registered
     beforehand. Calling [connect] twice will raise. *)

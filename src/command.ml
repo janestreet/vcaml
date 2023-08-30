@@ -346,20 +346,20 @@ module Range_or_count = struct
 end
 
 let create
-      here
-      client
-      ?keepscript
-      ?bang
-      ?bar
-      ?register
-      ?nargs
-      ?range_or_count
-      ?completion
-      ?fail_if_exists
-      ()
-      ~name
-      ~scope
-      command
+  here
+  client
+  ?keepscript
+  ?bang
+  ?bar
+  ?register
+  ?nargs
+  ?range_or_count
+  ?completion
+  ?fail_if_exists
+  ()
+  ~name
+  ~scope
+  command
   =
   let%bind.Deferred.Or_error scope =
     match scope with
@@ -417,7 +417,7 @@ let create
         map
         (Range_or_count.Spec.to_msgpack_map range_or_count)
         ~combine:(fun ~key _ _ ->
-          raise_s [%message "BUG: Key appears twice in command specification" key])
+        raise_s [%message "BUG: Key appears twice in command specification" key])
   in
   let query =
     match scope with
@@ -437,35 +437,35 @@ let delete here client name ~scope =
 ;;
 
 let exec_internal
-      ~output
-      ~map_witness_f
-      here
-      client
-      ?range_or_count
-      ?bang
-      ?register
-      ?args
-      ?expand_args
-      ?filter
-      ?silent
-      ?unsilent
-      ?sandbox
-      ?noautocmd
-      ?browse
-      ?confirm
-      ?hide
-      ?horizontal
-      ?vertical
-      ?split
-      ?keepalt
-      ?keepjumps
-      ?keepmarks
-      ?keeppatterns
-      ?lockmarks
-      ?noswapfile
-      ?tab
-      ?verbose
-      name
+  ~output
+  ~map_witness_f
+  here
+  client
+  ?range_or_count
+  ?bang
+  ?register
+  ?args
+  ?expand_args
+  ?filter
+  ?silent
+  ?unsilent
+  ?sandbox
+  ?noautocmd
+  ?browse
+  ?confirm
+  ?hide
+  ?horizontal
+  ?vertical
+  ?split
+  ?keepalt
+  ?keepjumps
+  ?keepmarks
+  ?keeppatterns
+  ?lockmarks
+  ?noswapfile
+  ?tab
+  ?verbose
+  name
   =
   let maybe name var conv = Option.map var ~f:(fun var -> name, conv var) in
   let modifiers =
@@ -566,8 +566,8 @@ let exec_internal
           |> map_witness ~f:map_witness_f
           |> run here client
           >>| (function
-            | Ok _ as ok -> ok
-            | Error _ -> Error error)
+          | Ok _ as ok -> ok
+          | Error _ -> Error error)
         | _ -> return (Error error))
      | None | Some (Range _) -> return (Error error))
 ;;

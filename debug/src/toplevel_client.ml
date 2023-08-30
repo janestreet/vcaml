@@ -97,7 +97,7 @@ let rec receive t =
      | Partial _ as state ->
        (match
           (Unix.select ~read:[ t.socket ] ~write:[] ~except:[] ~timeout:`Immediately ())
-          .read
+            .read
         with
         | [] -> `Waiting_for_neovim
         | _ :: _ ->
@@ -112,9 +112,9 @@ let rec receive t =
        debug_receive t message;
        let remaining_input = Bigstring.sub buf ~pos:off ~len in
        t.state
-       <- Parser.feed
-            (Parser.parse Msgpack.Internal.Parser.msg)
-            (`Bigstring remaining_input);
+         <- Parser.feed
+              (Parser.parse Msgpack.Internal.Parser.msg)
+              (`Bigstring remaining_input);
        `Message message)
 ;;
 

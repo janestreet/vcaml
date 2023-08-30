@@ -1,7 +1,6 @@
 open Core
 open Async
 
-
 (** This module models the construction and execution of Neovim commands. All of this is
     described in `:h user-commands`, but names have been changed to make the model more
     intuitive. *)
@@ -203,7 +202,7 @@ val create
   -> name:string
   -> scope:[ `Global | `Buffer_local of Nvim_internal.Buffer.Or_current.t ]
   -> unit Ocaml_from_nvim.Callback.t
-  (** Anonymous RPCs do not have access to modifiers, arguments, or ranges provided to
+     (** Anonymous RPCs do not have access to modifiers, arguments, or ranges provided to
       commands, so they are only suitable for implementing simple commands. *)
   -> unit Deferred.Or_error.t
 
@@ -246,7 +245,7 @@ type ('a, 'output) exec :=
   -> ?register:char
   -> ?args:string list
   -> ?expand_args:bool
-  (** default: [true]. When [true], expand the arguments (see `:h expand`). *)
+       (** default: [true]. When [true], expand the arguments (see `:h expand`). *)
   -> (string -> 'output Deferred.Or_error.t) with_command_modifiers
 
 (** Execute a native command. *)
@@ -299,7 +298,7 @@ module Parse_result : sig
           { value : int
           ; of_ : Range_or_count.Of.t
           }
-      (** For commands that are defined with [-range=N], the parse result only returns a
+          (** For commands that are defined with [-range=N], the parse result only returns a
           range value, not a count. This makes it impossible to distinguish a singleton
           range for a command with the [-range]/[-range=%] attribute from a count for a
           command with the [-range=N] attribute. *)

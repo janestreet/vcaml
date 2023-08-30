@@ -143,7 +143,6 @@ val get_position
   -> Or_current.t
   -> Position.t Deferred.Or_error.t
 
-
 (** This module represents the configuration of an external or floating window. An
     external window exists outside Neovim; a floating window is drawn in Neovim on top of
     normal windows. *)
@@ -192,7 +191,7 @@ module Config : sig
               }
           | Relative_to_cursor_in_current_window of { pos : Position.t }
           | Relative_to_mouse of { pos : Position.t }
-          (** Note that mouse updates will be infrequent unless the 'mousemoveevent'
+              (** Note that mouse updates will be infrequent unless the 'mousemoveevent'
               option is set. This option has overhead, and when it is enabled mouse
               movement can abort pending mappings. *)
       end

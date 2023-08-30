@@ -59,10 +59,10 @@ let channels here client =
 let exec_viml here client code =
   Nvim_internal.nvim_exec2 ~src:code ~opts:String.Map.empty
   |> map_witness ~f:(fun result ->
-    match Map.find result "output" with
-    | None -> Ok ()
-    | Some output ->
-      Or_error.error_s [%message "Unexpected output" (output : Msgpack.t)])
+       match Map.find result "output" with
+       | None -> Ok ()
+       | Some output ->
+         Or_error.error_s [%message "Unexpected output" (output : Msgpack.t)])
   |> run here client
 ;;
 
@@ -71,14 +71,14 @@ let exec_viml_and_capture_output here client code =
     ~src:code
     ~opts:(String.Map.singleton "output" (Msgpack.Bool true))
   |> map_witness ~f:(fun result ->
-    match Map.find result "output" with
-    | Some (String output) -> Ok output
-    | Some output ->
-      Or_error.error_s [%message "Unexpected non-string output" (output : Msgpack.t)]
-    | None ->
-      Or_error.error_s
-        [%message
-          "Unexpectedly missing output in result" (result : Msgpack.t String.Map.t)])
+       match Map.find result "output" with
+       | Some (String output) -> Ok output
+       | Some output ->
+         Or_error.error_s [%message "Unexpected non-string output" (output : Msgpack.t)]
+       | None ->
+         Or_error.error_s
+           [%message
+             "Unexpectedly missing output in result" (result : Msgpack.t String.Map.t)])
   |> run here client
 ;;
 
@@ -137,7 +137,7 @@ let call_function here client ~name ~type_ =
      | `Viml name -> Nvim_internal.nvim_call_function ~fn:name ~args
      | `Lua name ->
        Nvim_internal.nvim_exec_lua
-         (* We surround [name] with parentheses to support anonymous functions. We assign
+       (* We surround [name] with parentheses to support anonymous functions. We assign
             it to [result] before returning it to ensure [name] appears in the stack trace
             if it raises an error. *)
          ~code:[%string {| local result = (%{name})(...); return result |}]
@@ -211,26 +211,26 @@ let feedkeys here client keys ~mode =
 let get_color_by_name here client name =
   Nvim_internal.nvim_get_color_by_name ~name
   |> map_witness ~f:(function
-    | -1 -> Or_error.error_s [%message "Unrecognized color" (name : string)]
-    | color -> Color.True_color.of_24bit_int color)
+       | -1 -> Or_error.error_s [%message "Unrecognized color" (name : string)]
+       | color -> Color.True_color.of_24bit_int color)
   |> run here client
 ;;
 
 let get_color_map here client =
   Nvim_internal.nvim_get_color_map
   |> map_witness ~f:(fun color_map ->
-    color_map
-    |> Map.map ~f:(fun bits ->
-      let%bind.Or_error bits = Type.of_msgpack Int bits in
-      Color.True_color.of_24bit_int bits)
-    |> Map.combine_errors)
+       color_map
+       |> Map.map ~f:(fun bits ->
+            let%bind.Or_error bits = Type.of_msgpack Int bits in
+            Color.True_color.of_24bit_int bits)
+       |> Map.combine_errors)
   |> run here client
 ;;
 
 let parse_highlight
-      (type a)
-      (colors : Msgpack.t String.Map.t)
-      ~(color_depth : a Color.Depth.t)
+  (type a)
+  (colors : Msgpack.t String.Map.t)
+  ~(color_depth : a Color.Depth.t)
   : a Color.Highlight.t Or_error.t
   =
   let open Color in
@@ -266,12 +266,12 @@ let get_hl_id_by_name here client name =
 ;;
 
 let get_hl_by_name
-      (type a)
-      here
-      client
-      ?(ns_id = Color.Namespace.global)
-      name
-      ~(color_depth : a Color.Depth.t)
+  (type a)
+  here
+  client
+  ?(ns_id = Color.Namespace.global)
+  name
+  ~(color_depth : a Color.Depth.t)
   =
   Nvim_internal.nvim_get_hl
     ~ns_id:(Color.Namespace.to_int ns_id)
@@ -281,12 +281,12 @@ let get_hl_by_name
 ;;
 
 let get_hl_by_id
-      (type a)
-      here
-      client
-      ?(ns_id = Color.Namespace.global)
-      hl_id
-      ~(color_depth : a Color.Depth.t)
+  (type a)
+  here
+  client
+  ?(ns_id = Color.Namespace.global)
+  hl_id
+  ~(color_depth : a Color.Depth.t)
   =
   Nvim_internal.nvim_get_hl
     ~ns_id:(Color.Namespace.to_int ns_id)
@@ -350,30 +350,30 @@ module Fast = struct
   let get_mode here client =
     Nvim_internal.nvim_get_mode
     |> map_witness ~f:(fun mode_info ->
-      let open Or_error.Let_syntax in
-      let%bind mode =
-        let%bind mode =
-          find_or_error_and_convert mode_info "mode" (Type.of_msgpack String)
-        in
-        Mode.of_mode_symbol mode
-      in
-      let%bind blocking =
-        find_or_error_and_convert mode_info "blocking" (Type.of_msgpack Bool)
-      in
-      Ok { Mode.With_blocking_info.mode; blocking })
+         let open Or_error.Let_syntax in
+         let%bind mode =
+           let%bind mode =
+             find_or_error_and_convert mode_info "mode" (Type.of_msgpack String)
+           in
+           Mode.of_mode_symbol mode
+         in
+         let%bind blocking =
+           find_or_error_and_convert mode_info "blocking" (Type.of_msgpack Bool)
+         in
+         Ok { Mode.With_blocking_info.mode; blocking })
     |> run here client
   ;;
 
   let input here client keys = Nvim_internal.nvim_input ~keys |> run here client
 
   let input_mouse
-        here
-        client
-        ?(modifiers = Key_modifier.Set.empty)
-        ?(grid = 0)
-        action
-        ~row
-        ~col
+    here
+    client
+    ?(modifiers = Key_modifier.Set.empty)
+    ?(grid = 0)
+    action
+    ~row
+    ~col
     =
     let action, button =
       match (action : Mouse.Action.t) with
@@ -390,11 +390,11 @@ module Fast = struct
       modifiers
       |> Set.to_list
       |> List.map ~f:(fun modifier ->
-        match (modifier : Key_modifier.t) with
-        | Shift -> "S"
-        | Ctrl -> "C"
-        | Alt -> "A"
-        | Super -> "D")
+           match (modifier : Key_modifier.t) with
+           | Shift -> "S"
+           | Ctrl -> "C"
+           | Alt -> "A"
+           | Super -> "D")
       |> String.concat
     in
     Nvim_internal.nvim_input_mouse ~button ~action ~modifier ~grid ~row ~col
@@ -408,14 +408,14 @@ module Fast = struct
   let find_runtime_file_matching here client ~pattern =
     Nvim_internal.nvim_get_runtime_file ~name:pattern ~all:false
     |> map_witness ~f:(function
-      | [] -> Ok None
-      | [ file ] -> Ok (Some file)
-      | files ->
-        Or_error.error_s
-          [%message
-            "[nvim_get_runtime_file] returned multiple files when [all = false] was \
-             passed"
-              (files : string list)])
+         | [] -> Ok None
+         | [ file ] -> Ok (Some file)
+         | files ->
+           Or_error.error_s
+             [%message
+               "[nvim_get_runtime_file] returned multiple files when [all = false] was \
+                passed"
+                 (files : string list)])
     |> run here client
   ;;
 
@@ -469,8 +469,8 @@ let paste_stream here client =
           |> run here client
           >>| Or_error.ignore_m
           >>| (function
-            | Ok () -> ()
-            | Error _ as error -> Ivar.fill_exn flushed error)
+          | Ok () -> ()
+          | Error _ as error -> Ivar.fill_exn flushed error)
       in
       Ivar.fill_if_empty flushed (Ok ());
       return ())
@@ -604,14 +604,14 @@ let get_context here client context_types =
       context_types
       |> Set.to_list
       |> List.map ~f:(fun context_type ->
-        Msgpack.String (Context_type.to_string context_type))
+           Msgpack.String (Context_type.to_string context_type))
     in
     [ "types", Msgpack.Array context_types ] |> String.Map.of_alist_exn
   in
   Nvim_internal.nvim_get_context ~opts
   |> map_witness ~f:(fun map ->
-    Or_error.try_with (fun () ->
-      Map.map_keys_exn (module Context_type) map ~f:Context_type.of_string))
+       Or_error.try_with (fun () ->
+         Map.map_keys_exn (module Context_type) map ~f:Context_type.of_string))
   |> run here client
 ;;
 
@@ -628,22 +628,22 @@ let get_mark here client sym =
      [Msgpack.t] values. *)
   Nvim_internal.nvim_get_mark ~name:(Char.to_string sym) ~opts:String.Map.empty
   |> map_witness ~f:(function
-    | [ Msgpack.Int 0; Int 0; Int 0; String "" ] -> Ok None
-    | [ Msgpack.Int row; Int col; buffer; String _buffer_name ] ->
-      (match Buffer.of_msgpack buffer with
-       | Error _ as error -> error
-       | Ok buffer ->
-         let mark = { Mark.sym; pos = { row; col } } in
-         Ok (Some (buffer, mark)))
-    | _ -> failwith "Malformed result from [nvim_get_mark]")
+       | [ Msgpack.Int 0; Int 0; Int 0; String "" ] -> Ok None
+       | [ Msgpack.Int row; Int col; buffer; String _buffer_name ] ->
+         (match Buffer.of_msgpack buffer with
+          | Error _ as error -> error
+          | Ok buffer ->
+            let mark = { Mark.sym; pos = { row; col } } in
+            Ok (Some (buffer, mark)))
+       | _ -> failwith "Malformed result from [nvim_get_mark]")
   |> run here client
 ;;
 
 let delete_mark here client sym =
   Nvim_internal.nvim_del_mark ~name:(Char.to_string sym)
   |> map_witness ~f:(function
-    | true -> Ok ()
-    | false -> Or_error.error_s [%message "Failed to delete mark" (sym : char)])
+       | true -> Ok ()
+       | false -> Or_error.error_s [%message "Failed to delete mark" (sym : char)])
   |> run here client
 ;;
 

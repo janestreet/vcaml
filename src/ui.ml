@@ -20,12 +20,12 @@ module Description = struct
 end
 
 let attach
-      here
-      client
-      ~width
-      ~height
-      ~options
-      ~only_enable_options_supported_by_other_attached_uis
+  here
+  client
+  ~width
+  ~height
+  ~options
+  ~only_enable_options_supported_by_other_attached_uis
   =
   let open Deferred.Or_error.Let_syntax in
   let subscription_manager =
@@ -64,52 +64,52 @@ let attach
 let describe_attached_uis here client =
   Nvim_internal.nvim_list_uis
   |> map_witness ~f:(fun uis ->
-    uis
-    |> List.map ~f:(fun msgpack ->
-      let open Or_error.Let_syntax in
-      let%bind map = Type.of_msgpack Dict msgpack in
-      let%bind channel =
-        match%map find_and_convert map "chan" (Type.of_msgpack Int) with
-        | None | Some 0 -> `Tui
-        | Some i -> `Id i
-      in
-      let%bind width =
-        find_or_error_and_convert map "width" (Type.of_msgpack Int)
-      in
-      let%bind height =
-        find_or_error_and_convert map "height" (Type.of_msgpack Int)
-      in
-      let find_bool_or_error map key =
-        find_or_error_and_convert map key (Type.of_msgpack Bool)
-      in
-      let%bind ext_cmdline = find_bool_or_error map "ext_cmdline" in
-      let%bind ext_hlstate = find_bool_or_error map "ext_hlstate" in
-      let%bind ext_linegrid = find_bool_or_error map "ext_linegrid" in
-      let%bind ext_messages = find_bool_or_error map "ext_messages" in
-      let%bind ext_multigrid = find_bool_or_error map "ext_multigrid" in
-      let%bind ext_popupmenu = find_bool_or_error map "ext_popupmenu" in
-      let%bind ext_tabline = find_bool_or_error map "ext_tabline" in
-      let%bind ext_termcolors = find_bool_or_error map "ext_termcolors" in
-      let%bind ext_wildmenu = find_bool_or_error map "ext_wildmenu" in
-      let%bind rgb = find_bool_or_error map "rgb" in
-      return
-        { Description.channel
-        ; height
-        ; width
-        ; options =
-            { ext_cmdline
-            ; ext_hlstate
-            ; ext_linegrid
-            ; ext_messages
-            ; ext_multigrid
-            ; ext_popupmenu
-            ; ext_tabline
-            ; ext_termcolors
-            ; ext_wildmenu
-            ; rgb
-            }
-        })
-    |> Or_error.combine_errors)
+       uis
+       |> List.map ~f:(fun msgpack ->
+            let open Or_error.Let_syntax in
+            let%bind map = Type.of_msgpack Dict msgpack in
+            let%bind channel =
+              match%map find_and_convert map "chan" (Type.of_msgpack Int) with
+              | None | Some 0 -> `Tui
+              | Some i -> `Id i
+            in
+            let%bind width =
+              find_or_error_and_convert map "width" (Type.of_msgpack Int)
+            in
+            let%bind height =
+              find_or_error_and_convert map "height" (Type.of_msgpack Int)
+            in
+            let find_bool_or_error map key =
+              find_or_error_and_convert map key (Type.of_msgpack Bool)
+            in
+            let%bind ext_cmdline = find_bool_or_error map "ext_cmdline" in
+            let%bind ext_hlstate = find_bool_or_error map "ext_hlstate" in
+            let%bind ext_linegrid = find_bool_or_error map "ext_linegrid" in
+            let%bind ext_messages = find_bool_or_error map "ext_messages" in
+            let%bind ext_multigrid = find_bool_or_error map "ext_multigrid" in
+            let%bind ext_popupmenu = find_bool_or_error map "ext_popupmenu" in
+            let%bind ext_tabline = find_bool_or_error map "ext_tabline" in
+            let%bind ext_termcolors = find_bool_or_error map "ext_termcolors" in
+            let%bind ext_wildmenu = find_bool_or_error map "ext_wildmenu" in
+            let%bind rgb = find_bool_or_error map "rgb" in
+            return
+              { Description.channel
+              ; height
+              ; width
+              ; options =
+                  { ext_cmdline
+                  ; ext_hlstate
+                  ; ext_linegrid
+                  ; ext_messages
+                  ; ext_multigrid
+                  ; ext_popupmenu
+                  ; ext_tabline
+                  ; ext_termcolors
+                  ; ext_wildmenu
+                  ; rgb
+                  }
+              })
+       |> Or_error.combine_errors)
   |> run here client
 ;;
 

@@ -57,10 +57,10 @@ let advance_time_for_test =
     ~name:"advance-time"
     ~type_:Ocaml_from_nvim.Async.unit
     ~f:(fun state ~client:_ ->
-      match state with
-      | Prod -> Deferred.Or_error.error_string "This RPC can only be called from tests."
-      | Test { time_source } ->
-        Time_source.advance_by_alarms_by time_source Time_ns.Span.second |> Deferred.ok)
+    match state with
+    | Prod -> Deferred.Or_error.error_string "This RPC can only be called from tests."
+    | Test { time_source } ->
+      Time_source.advance_by_alarms_by time_source Time_ns.Span.second |> Deferred.ok)
 ;;
 
 let command =

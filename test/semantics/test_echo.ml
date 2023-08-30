@@ -7,15 +7,15 @@ let run_echo_tests ~f ~message =
   let tests =
     [ ( "native_echo"
       , fun here client ->
-        Command.exec here client "echo" ~args:[ [%string "'%{message}'"] ] )
+          Command.exec here client "echo" ~args:[ [%string "'%{message}'"] ] )
     ; ("api_out_write", fun here client -> Nvim.out_write here client (message ^ "\n"))
     ; ( "api_echo"
       , fun here client ->
-        Nvim.echo
-          here
-          client
-          [ { text = message; hl_group = None } ]
-          ~add_to_history:false )
+          Nvim.echo
+            here
+            client
+            [ { text = message; hl_group = None } ]
+            ~add_to_history:false )
     ; ("api_notify", fun here client -> Nvim.notify here client Info message)
     ]
   in
@@ -24,8 +24,8 @@ let run_echo_tests ~f ~message =
     output, name)
   >>| String.Map.of_alist_multi
   >>| Map.iteri ~f:(fun ~key:output ~data:names ->
-    let names = String.concat names ~sep:", " in
-    print_endline [%string "Output for: %{names}\n%{output}\n"])
+        let names = String.concat names ~sep:", " in
+        print_endline [%string "Output for: %{names}\n%{output}\n"])
 ;;
 
 let%expect_test "Show echoed content in command line" =
@@ -195,26 +195,26 @@ let%expect_test "Naively calling [echo] from inside [rpcrequest] fails" =
     run_echo_tests
       ~message:"If this message appears we should get rid of [echo_in_rpcrequest]"
       ~f:(fun ~echo ->
-        let open Deferred.Or_error.Let_syntax in
-        let rpc ~run_in_background:_ ~client ui =
-          let%bind () = echo [%here] client in
-          get_screen_contents ui
-        in
-        with_ui_client (fun client ui ->
-          let () =
-            Ocaml_from_nvim.register_request_blocking
-              [%here]
-              (Connected client)
-              ~name:"rpc"
-              ~type_:Ocaml_from_nvim.Blocking.(return String)
-              ~f:(rpc ui)
-          in
-          let channel = Client.channel client in
-          Nvim.eval_viml_expression
+      let open Deferred.Or_error.Let_syntax in
+      let rpc ~run_in_background:_ ~client ui =
+        let%bind () = echo [%here] client in
+        get_screen_contents ui
+      in
+      with_ui_client (fun client ui ->
+        let () =
+          Ocaml_from_nvim.register_request_blocking
             [%here]
-            client
-            (sprintf "rpcrequest(%d, 'rpc')" channel)
-            ~result_type:String))
+            (Connected client)
+            ~name:"rpc"
+            ~type_:Ocaml_from_nvim.Blocking.(return String)
+            ~f:(rpc ui)
+        in
+        let channel = Client.channel client in
+        Nvim.eval_viml_expression
+          [%here]
+          client
+          (sprintf "rpcrequest(%d, 'rpc')" channel)
+          ~result_type:String))
   in
   [%expect
     {|
@@ -323,8 +323,8 @@ let%expect_test "notify" =
       output, log_level)
     >>| String.Map.of_alist_multi
     >>| Map.iteri ~f:(fun ~key:output ~data:names ->
-      print_s [%message "Output for" (names : Nvim.Log_level.t list)];
-      print_endline output)
+          print_s [%message "Output for" (names : Nvim.Log_level.t list)];
+          print_endline output)
   in
   let%bind () = with_ui_client test in
   [%expect

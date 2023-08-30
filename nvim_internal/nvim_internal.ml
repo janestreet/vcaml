@@ -641,10 +641,10 @@ module Ui_event = struct
         | _ -> Or_error.error_string [%string "Failed to extract params for %{name}"])
       |> Or_error.combine_errors
       |> (function
-        | Ok _ as ok -> ok
-        | Error error ->
-          Or_error.error_s
-            [%message "Failed to parse UI event" (msg : Msgpack.t) (error : Error.t)])
+      | Ok _ as ok -> ok
+      | Error error ->
+        Or_error.error_s
+          [%message "Failed to parse UI event" (msg : Msgpack.t) (error : Error.t)])
     | _ -> Or_error.error_s [%message "Failed to parse UI event" (msg : Msgpack.t)]
   ;;
 end

@@ -3,7 +3,6 @@ open Core
 (** Parser and Serializer for Msgpack data.
     https://github.com/msgpack/msgpack/blob/master/spec.md *)
 
-
 include module type of Message
 
 module Internal : sig

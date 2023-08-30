@@ -1,7 +1,6 @@
 open Core
 open Async
 
-
 (** A [Namespace.t] allows you to group virtual text and highlights together so that they
     can be cleared in a single function call. *)
 type t = private

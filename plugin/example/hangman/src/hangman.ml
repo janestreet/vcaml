@@ -149,9 +149,9 @@ let append_line here ~client ~buffer line =
 (* We require a blocking client here to ensure that no unrelated logic interleaves the
    drawing commands. *)
 let draw_state
-      ({ buffer; hint; bad_guesses; _ } as state)
-      ~message
-      ~(client : [ `blocking ] Client.t)
+  ({ buffer; hint; bad_guesses; _ } as state)
+  ~message
+  ~(client : [ `blocking ] Client.t)
   =
   let open Deferred.Or_error.Let_syntax in
   let%bind () = Buffer.Option.set [%here] client (Id buffer) Readonly false in
@@ -313,8 +313,8 @@ let on_startup client =
         |> String.split ~on:' '
         |> List.filter ~f:(Fn.non String.is_empty)
         |> (function
-          | [] -> failwith "Secret must have at least one letter"
-          | words -> String.concat words ~sep:" ")
+        | [] -> failwith "Secret must have at least one letter"
+        | words -> String.concat words ~sep:" ")
     in
     let%bind buffer = Buffer.create [%here] client ~listed:false ~scratch:true in
     let%bind () = Buffer.Option.set [%here] client (Id buffer) Bufhidden "wipe" in

@@ -84,13 +84,13 @@ module Helpers = struct
         calls_and_results
         ~init:has_keyboard_interrupt
         ~f:(fun acc (call, response) ->
-          match acc with
-          | true -> true
-          | false ->
-            (match call with
-             | Msgpack.Array [ String name; Array params ] ->
-               nvim_call_atomic_response_has_keyboard_interrupt ~name ~params ~response
-             | _ -> false))
+        match acc with
+        | true -> true
+        | false ->
+          (match call with
+           | Msgpack.Array [ String name; Array params ] ->
+             nvim_call_atomic_response_has_keyboard_interrupt ~name ~params ~response
+           | _ -> false))
     | _ -> false
   ;;
 
@@ -191,7 +191,7 @@ module Private = struct
       ; registered_methods : unit -> Method_info.t String.Map.t
       ; call_nvim_api_fn :
           'a 'b.
-            Source_code_position.t
+          Source_code_position.t
           -> ('a, 'b) Message_type.t
           -> 'a Api_result.t
           -> 'b Deferred.Or_error.t
@@ -217,9 +217,9 @@ module Private = struct
       ; async_callbacks : (Source_code_position.t * Callbacks.async) String.Table.t
       ; blocking_callbacks :
           (Source_code_position.t
-           * Callbacks.blocking
-           * [ `on_keyboard_interrupt of unit -> unit ])
-            String.Table.t
+          * Callbacks.blocking
+          * [ `on_keyboard_interrupt of unit -> unit ])
+          String.Table.t
       ; on_error : Vcaml_error.t -> unit
       }
 
@@ -240,18 +240,18 @@ module Private = struct
   end
 
   let nvim_set_client_info
-        here
-        t
-        ?(version =
-          { Client_info.Version.major = None
-          ; minor = None
-          ; patch = None
-          ; prerelease = None
-          ; commit = None
-          })
-        ?(attributes = String.Map.empty)
-        ?(client_type = Client_info.Client_type.Remote)
-        ()
+    here
+    t
+    ?(version =
+      { Client_info.Version.major = None
+      ; minor = None
+      ; patch = None
+      ; prerelease = None
+      ; commit = None
+      })
+    ?(attributes = String.Map.empty)
+    ?(client_type = Client_info.Client_type.Remote)
+    ()
     =
     let module M = Msgpack in
     let version = Client_info.Version.to_msgpack_map version in
@@ -259,17 +259,17 @@ module Private = struct
     let methods =
       t.registered_methods ()
       |> Map.map ~f:(fun { callable_via } ->
-        let async =
-          (* There currently isn't a good way to communicate to Neovim that both Async and
+           let async =
+             (* There currently isn't a good way to communicate to Neovim that both Async and
              Sync calls are supported. We currently leave [async] unspecified when this
              happens, but the docs say that an unspecified [async] should be interpreted
              as [false]. Tracked in https://github.com/neovim/neovim/issues/23114. *)
-          match callable_via with
-          | Notification -> Some true
-          | Request -> Some false
-          | Request_or_notification -> None
-        in
-        Client_info.How_to_call_method.to_msgpack { async; nargs = None })
+             match callable_via with
+             | Notification -> Some true
+             | Request -> Some false
+             | Request_or_notification -> None
+           in
+           Client_info.How_to_call_method.to_msgpack { async; nargs = None })
     in
     let attributes = Map.map attributes ~f:(fun attribute -> M.String attribute) in
     Nvim_internal.nvim_set_client_info
@@ -284,17 +284,16 @@ module Private = struct
   let nvim_list_chans here t =
     Nvim_internal.nvim_list_chans
     |> map_witness ~f:(fun channels ->
-      channels
-      |> List.map ~f:(fun channel ->
-        let%bind.Or_error channel = Type.of_msgpack Dict channel in
-        Channel_info.of_msgpack_map channel)
-      |> Or_error.combine_errors)
+         channels
+         |> List.map ~f:(fun channel ->
+              let%bind.Or_error channel = Type.of_msgpack Dict channel in
+              Channel_info.of_msgpack_map channel)
+         |> Or_error.combine_errors)
     |> t.call_nvim_api_fn here Request
   ;;
 end
 
 include Private
-
 
 let create ~name ~on_error =
   { Not_connected.name
@@ -311,10 +310,10 @@ module Expiration_reason = struct
 end
 
 let connect
-      ?(time_source = Time_source.wall_clock ())
-      { Not_connected.name; async_callbacks; blocking_callbacks; on_error }
-      reader
-      writer
+  ?(time_source = Time_source.wall_clock ())
+  { Not_connected.name; async_callbacks; blocking_callbacks; on_error }
+  reader
+  writer
   =
   let keyboard_interrupts = Bvar.create () in
   let rpc =
@@ -378,12 +377,12 @@ let connect
          |> Result.map_error ~f:(tag_callsite here))
   in
   let call_nvim_api_fn
-        here
-        message_type
-        api_result
-        ~permission_to_run
-        ~request_sequencer
-        ~expiration_reason
+    here
+    message_type
+    api_result
+    ~permission_to_run
+    ~request_sequencer
+    ~expiration_reason
     =
     (* We cannot inline the sequencing because [call_nvim_api_fn_unthrottled] is
        recursive, and enqueueing recursively will deadlock. *)
@@ -410,27 +409,27 @@ let connect
       ~stop:(Writer.close_started writer)
       heartbeat_interval
       (fun () ->
-         let%bind () =
-           match Nvim_lock.Permission_to_run.peek permission_to_run_in_background with
-           | Some `Ok -> Nvim_lock.Permission_to_run.taken permission_to_run_in_background
-           | Some `Expired ->
-             failwith "Bug: Top-level [Permission_to_run.t] expired" [@nontail]
-           | None -> return ()
-         in
-         call_nvim_api_fn_unthrottled
-           [%here]
-           (* bfredl confirmed that if a request is sent immediately before a response,
+      let%bind () =
+        match Nvim_lock.Permission_to_run.peek permission_to_run_in_background with
+        | Some `Ok -> Nvim_lock.Permission_to_run.taken permission_to_run_in_background
+        | Some `Expired ->
+          failwith "Bug: Top-level [Permission_to_run.t] expired" [@nontail]
+        | None -> return ()
+      in
+      call_nvim_api_fn_unthrottled
+        [%here]
+        (* bfredl confirmed that if a request is sent immediately before a response,
               Neovim might process that response as part of the batch of messages it
               received before sending a reply to the request, and that would be considered
               invalid and Neovim would close the connection. To ensure this does not occur
               with heartbeats, we send them as notifications rather than as requests. *)
-           Notification
-           (* The method we call here seems to matter - some don't go through the code
+        Notification
+        (* The method we call here seems to matter - some don't go through the code
               path that would lead Neovim to notify us of a keyboard interrupt. *)
-           (Nvim_internal.nvim_eval ~expr:"0")
-           ~permission_to_run:permission_to_heartbeat
-           ~expiration_reason:Permission_expiration_is_a_bug
-         |> Deferred.ignore_m)
+        (Nvim_internal.nvim_eval ~expr:"0")
+        ~permission_to_run:permission_to_heartbeat
+        ~expiration_reason:Permission_expiration_is_a_bug
+      |> Deferred.ignore_m)
   in
   let close () =
     let%bind () =
@@ -483,9 +482,9 @@ let connect
            necessary as RPCs need only be unique per-client (i.e. per-channel in
            Neovim). *)
         (let module Id = Unique_id.Int63 () in
-         fun () ->
-           let id = Id.create () in
-           [%string "anon_rpc__%{id#Id}"])
+        fun () ->
+          let id = Id.create () in
+          [%string "anon_rpc__%{id#Id}"])
     ; registered_methods = (fun () -> registered_methods ~rpc)
     ; call_nvim_api_fn =
         call_nvim_api_fn
@@ -657,7 +656,7 @@ let connect
   Hashtbl.iteri
     blocking_callbacks
     ~f:(fun ~key:name ~data:(here, f, `on_keyboard_interrupt on_keyboard_interrupt) ->
-      register_request_blocking here ~name ~f ~on_keyboard_interrupt);
+    register_request_blocking here ~name ~f ~on_keyboard_interrupt);
   (* It's important that we not establish the connection until after we've registered the
      handlers. *)
   Msgpack_rpc.connect rpc reader writer;

@@ -77,12 +77,12 @@ module Client = struct
   ;;
 
   let attach'
-        (type a)
-        ?wrap_connection
-        ?stdio_override
-        ?time_source
-        client
-        (connection_type : a Connection_type.t)
+    (type a)
+    ?wrap_connection
+    ?stdio_override
+    ?time_source
+    client
+    (connection_type : a Connection_type.t)
     : a Deferred.Or_error.t
     =
     let connect reader writer =
