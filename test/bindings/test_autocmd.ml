@@ -84,7 +84,7 @@ let%expect_test "get, create, delete, clear" =
        ((group (6)) (count 1)) ((group (7)) (count 72)) ((group (8)) (count 9))
        ((group (9)) (count 3)) ((group (10)) (count 48)) ((group (11)) (count 12))
        ((group (12)) (count 20)) ((group (13)) (count 64)) ((group (14)) (count 3))
-       ((group (15)) (count 1))) |}];
+       ((group (15)) (count 1)) ((group (17)) (count 1))) |}];
     let%bind () =
       Autocmd.get [%here] client ()
       >>| List.map ~f:(fun event -> event.Autocmd.group)
@@ -143,36 +143,36 @@ let%expect_test "get, create, delete, clear" =
     let%bind () = get_and_print ~events:[ WinEnter ] () in
     [%expect
       {|
-      ((id (8)) (group (17)) (group_name (MyGroup1))
+      ((id (9)) (group (18)) (group_name (MyGroup1))
        (description ("First autocmd")) (event WinEnter)
        (pattern_or_buffer (Buffer 1)) (once true) (command "echo 'Hello!'")) |}];
     let%bind () = get_and_print ~group:group1 () in
     [%expect
       {|
-      ((id (8)) (group (17)) (group_name (MyGroup1))
+      ((id (9)) (group (18)) (group_name (MyGroup1))
        (description ("First autocmd")) (event WinEnter)
        (pattern_or_buffer (Buffer 1)) (once true) (command "echo 'Hello!'")) |}];
     let%bind () = get_and_print ~group:group2 () in
     [%expect
       {|
-      ((id (10)) (group (18)) (group_name (MyGroup2))
+      ((id (11)) (group (19)) (group_name (MyGroup2))
        (description ("Third autocmd")) (event BufWinEnter)
        (pattern_or_buffer (Pattern *)) (once false) (command "echo 'BufWinEnter'"))
-      ((id (9)) (group (18)) (group_name (MyGroup2))
+      ((id (10)) (group (19)) (group_name (MyGroup2))
        (description ("Second autocmd")) (event FileType)
        (pattern_or_buffer (Pattern *.lua)) (once false)
        (command "echo 'Hello, Lua!'")) |}];
     let%bind () = get_and_print ~patterns_or_buffer:(Patterns [ "*.lua" ]) () in
     [%expect
       {|
-      ((id (9)) (group (18)) (group_name (MyGroup2))
+      ((id (10)) (group (19)) (group_name (MyGroup2))
        (description ("Second autocmd")) (event FileType)
        (pattern_or_buffer (Pattern *.lua)) (once false)
        (command "echo 'Hello, Lua!'")) |}];
     let%bind () = get_and_print ~patterns_or_buffer:(Buffer Current) () in
     [%expect
       {|
-      ((id (8)) (group (17)) (group_name (MyGroup1))
+      ((id (9)) (group (18)) (group_name (MyGroup1))
        (description ("First autocmd")) (event WinEnter)
        (pattern_or_buffer (Buffer 1)) (once true) (command "echo 'Hello!'")) |}];
     let%bind () =
@@ -187,18 +187,18 @@ let%expect_test "get, create, delete, clear" =
     let%bind () = get_and_print () in
     [%expect
       {|
-      ((id (9)) (group (18)) (group_name (MyGroup2))
+      ((id (10)) (group (19)) (group_name (MyGroup2))
        (description ("Second autocmd")) (event FileType)
        (pattern_or_buffer (Pattern *.lua)) (once false)
        (command "echo 'Hello, Lua!'"))
-      ((id (8)) (group (17)) (group_name (MyGroup1))
+      ((id (9)) (group (18)) (group_name (MyGroup1))
        (description ("First autocmd")) (event WinEnter)
        (pattern_or_buffer (Buffer 1)) (once true) (command "echo 'Hello!'")) |}];
     let%bind () = Autocmd.Group.delete [%here] client group2 in
     let%bind () = get_and_print () in
     [%expect
       {|
-      ((id (8)) (group (17)) (group_name (MyGroup1))
+      ((id (9)) (group (18)) (group_name (MyGroup1))
        (description ("First autocmd")) (event WinEnter)
        (pattern_or_buffer (Buffer 1)) (once true) (command "echo 'Hello!'")) |}];
     let%bind () = Autocmd.delete [%here] client autocmd1 in

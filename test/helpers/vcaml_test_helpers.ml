@@ -88,9 +88,13 @@ let with_client
   f
   =
   Expect_test_helpers_async.within_temp_dir ?links (fun () ->
-    let nvim_log_file = "nvim_low_level_log.txt" in
     let args = required_args @ args in
     let%bind working_dir = Sys.getcwd () in
+    let xdg_cache_home = working_dir ^/ ".cache" in
+    let xdg_config_home = working_dir ^/ ".config" in
+    let xdg_data_home = working_dir ^/ ".local/share" in
+    let xdg_state_home = working_dir ^/ ".local/state" in
+    let nvim_log_file = xdg_state_home ^/ "nvim/log" in
     let verbose_log_file = Filename_unix.temp_file ~in_dir:working_dir "vcaml" ".log" in
     (* We set this variable in the current environment instead of just extending Neovim's
        environment so that clients that are attached with [attach_client] will also use
@@ -101,7 +105,14 @@ let with_client
         let base =
           Core_unix.Env.expand
             (`Extend
-              [ "NVIM_LOG_FILE", nvim_log_file
+              [ "XDG_CACHE_HOME", xdg_cache_home
+              ; "XDG_CONFIG_HOME", xdg_config_home
+              ; "XDG_DATA_HOME", xdg_data_home
+              ; "XDG_STATE_HOME", xdg_state_home
+                (* Not set:
+                  - XDG_RUNTIME_DIR, which is used for stdpath("run")
+                  - XDG_CONFIG_DIRS, which is used for stdpath("config_dirs")
+                  - XDG_DATA_DIRS,   which is used for stdpath("data_dirs") *)
               ; "NVIM_RPLUGIN_MANIFEST", "rplugin.vim"
               ; elide_backtraces_env_var, [%string "%{!Backtrace.elide#Bool}"]
               ])
@@ -133,7 +144,42 @@ let with_client
            [%message
              "Neovim exited before the test finished"
                (exit_or_signal : Unix.Exit_or_signal.t)]);
-    let%bind result = Monitor.try_with_join_or_error ~rest:`Log (fun () -> f client) in
+    let%bind result =
+      Monitor.try_with_join_or_error ~rest:`Log (fun () ->
+        let open Deferred.Or_error.Let_syntax in
+        let vim_did_enter = Ivar.create () in
+        let%bind (_ : Autocmd.Id.t) =
+          let%bind group =
+            Autocmd.Group.create [%here] client "vim-did-enter-can-start-test"
+          in
+          Autocmd.create
+            [%here]
+            client
+            ~description:"Vim finished initializing - can start test"
+            ~group
+            ~patterns_or_buffer:(Patterns [ "*" ])
+            ~events:[ VimEnter ]
+            (Ocaml_from_nvim.Callback.anon_rpc (fun ~run_in_background:_ ~client:_ ->
+               Ivar.fill_if_empty vim_did_enter ();
+               return ()))
+        in
+        let%bind () =
+          (* Neovim may have finished initializing before we registered the autocmd. *)
+          match%bind Nvim.get_vvar [%here] client "vim_did_enter" ~type_:Bool with
+          | false -> return ()
+          | true ->
+            Ivar.fill_if_empty vim_did_enter ();
+            return ()
+        in
+        let%bind () = Ivar.read vim_did_enter |> Deferred.ok in
+        let%bind () =
+          (* Check for startup errors. *)
+          match%bind Nvim.get_vvar [%here] client "errmsg" ~type_:String with
+          | "" -> return ()
+          | error -> Deferred.Or_error.error_string error
+        in
+        f client)
+    in
     exited_early := false;
     let%bind () = Client.close client in
     let%bind () = done_logging in

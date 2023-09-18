@@ -125,7 +125,9 @@ module Helpers = struct
       |> String.Set.of_list
     in
     let blocking_methods =
-      Msgpack_rpc.Expert.registered_request_handlers rpc |> String.Set.of_list
+      Msgpack_rpc.Expert.registered_request_handlers rpc
+      |> List.filter ~f:(Fn.non (String.is_prefix ~prefix:"anon_rpc__"))
+      |> String.Set.of_list
     in
     let dual_methods = Set.inter async_methods blocking_methods in
     let async_methods = Set.diff async_methods dual_methods in

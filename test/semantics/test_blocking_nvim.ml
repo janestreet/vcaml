@@ -993,7 +993,7 @@ let%expect_test "Demonstrate disconnect induced by sleep" =
         request (
           Array (
             (Int    0)
-            (Int    7)
+            (Int    11)
             (String nvim_call_function)
             (Array ((String Rpc_1) (Array ((Array ())))))))))
       (("Called from" lib/vcaml/test/semantics/test_blocking_nvim.ml:LINE:COL))))

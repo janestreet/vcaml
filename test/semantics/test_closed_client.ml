@@ -23,7 +23,7 @@ let%expect_test "Sending request with a closed client" =
     (("Failed to send Msgpack RPC message: writer is closed"
       (Array (
         (Int    0)
-        (Int    5)
+        (Int    9)
         (String nvim_get_current_buf)
         (Array ()))))
      (("Called from" lib/vcaml/test/semantics/test_closed_client.ml:LINE:COL))) |}]
@@ -90,7 +90,7 @@ let%expect_test "Sending response with a closed client" =
        request (
          Array (
            (Int    0)
-           (Int    4)
+           (Int    8)
            (String nvim_call_function)
            (Array (
              (String rpcrequest)
@@ -132,7 +132,7 @@ let%expect_test "Client closes inside RPC" =
        request (
          Array (
            (Int    0)
-           (Int    4)
+           (Int    8)
            (String nvim_call_function)
            (Array (
              (String rpcrequest)

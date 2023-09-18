@@ -4,9 +4,9 @@ open Import
 open Vcaml
 open Vcaml_test_helpers
 
-(* [Child] clients are used by oneshot plugins. *)
+(* [Stdio] clients are used by oneshot plugins. *)
 
-let%expect_test "Simple test of [Child] client" =
+let%expect_test "Simple test of [Stdio] client" =
   Expect_test_helpers_async.with_temp_dir (fun tmp_dir ->
     let socket = tmp_dir ^/ "socket" in
     let%bind nvim =
