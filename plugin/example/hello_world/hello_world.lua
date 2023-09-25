@@ -1,6 +1,6 @@
 -- This plugin provides a :SayHello command to say hello.
 
-local path_to_exe = vim.fn.expand("<sfile>:h") .. "/bin/main.exe"
+local path_to_exe = vim.fn.expand("<sfile>:h").."/bin/main.exe"
 
 vim.api.nvim_create_user_command(
   "SayHello",

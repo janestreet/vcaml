@@ -1,7 +1,7 @@
 -- This plugin provides a :Hangman command to start a game of Hangman. In the game window,
 -- the lowercase letter keys are remapped to guesses.
 
-local path_to_exe = vim.fn.expand("<sfile>:h") .. "/bin/main.exe"
+local path_to_exe = vim.fn.expand("<sfile>:h").."/bin/main.exe"
 
 local job
 local buffer
@@ -16,13 +16,13 @@ function hangman_setup(channel)
         job = nil
         buffer = nil
       end
-    end
+    end,
   })
 end
 
 vim.api.nvim_create_user_command("Hangman", function()
   if buffer then
-    if vim.fn.jobwait({job}, 0)[1] == -1 then
+    if vim.fn.jobwait({ job }, 0)[1] == -1 then
       vim.api.nvim_err_writeln("Already in the middle of a game!")
       return
     end
