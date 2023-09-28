@@ -3,8 +3,11 @@ open Import
 
 (** [Notifier] supports sending API calls as asynchronous notifications. In most cases you
     don't need this; you can just send a regular request and not wait for the result.
-    However, there are some API calls that are documented as being more performant when
-    sent as notifications. *)
+    Notifications can be helpful when you need to send a second request before the first
+    request completes; e.g., when the first request opens a prompt and the second request
+    responds to it (a pattern more likely to arise in tests). Requests are sequenced, so
+    this pattern requires the first request be sent as a notification. There are also some
+    API calls that are documented as being more performant when sent as notifications. *)
 
 (** This module is analogous to [Nvim.Func] but is used for wrapping VimL / Lua functions
     to invoke as notifications rather than as requests. *)
