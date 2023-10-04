@@ -173,7 +173,10 @@ let with_client
         in
         let%bind () = Ivar.read vim_did_enter |> Deferred.ok in
         let%bind () =
-          (* Check for startup errors. *)
+          (* This check has a sharp corner: if a plugin's startup includes a command
+             that would raise an error but is silenced with [:silent!], that will still
+             get flagged here because [:silent!] sets [v:errmsg]. As a work-around, save
+             [v:errmsg] before invoking [:silent!] and restore it afterward. *)
           match%bind Nvim.get_vvar [%here] client "errmsg" ~type_:String with
           | "" -> return ()
           | error -> Deferred.Or_error.error_string error
