@@ -474,6 +474,7 @@ let with_ui_client
   ?on_error
   ?before_connecting
   ?verbose
+  ?warn_if_neovim_exits_early
   f
   =
   with_client
@@ -484,6 +485,7 @@ let with_ui_client
     ?on_error
     ?before_connecting
     ?verbose
+    ?warn_if_neovim_exits_early
     (fun client -> Test_ui.with_ui [%here] ?width ?height client (fun ui -> f client ui))
 ;;
 

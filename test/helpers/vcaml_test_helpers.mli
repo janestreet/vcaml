@@ -43,6 +43,7 @@ val with_ui_client
   -> ?on_error:[ `Raise | `Call of Vcaml_error.t -> unit ]
   -> ?before_connecting:(Client.Not_connected.t -> unit Deferred.t)
   -> ?verbose:bool
+  -> ?warn_if_neovim_exits_early:bool
   -> ([ `asynchronous ] Client.t -> Test_ui.t -> 'a Deferred.Or_error.t)
   -> 'a Deferred.t
 
