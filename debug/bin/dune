@@ -1,3 +1,6 @@
-(executables (names main)
+(executables
+ (modes byte exe)
+ (names main)
  (libraries core_unix.command_unix msgpack_debug vcaml)
- (preprocess (pps ppx_jane)))
+ (preprocess
+  (pps ppx_jane)))

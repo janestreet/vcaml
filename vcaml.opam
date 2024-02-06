@@ -31,6 +31,7 @@ depends: [
   "angstrom-async"             {>= "0.15.0"}
   "dune"                       {>= "2.0.0"}
   "faraday"                    {>= "0.8.1"}
+  "re"                         {>= "1.8.0"}
 ]
 available: arch != "arm32" & arch != "x86_32"
 synopsis: "OCaml bindings for the Neovim API"

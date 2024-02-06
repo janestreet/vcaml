@@ -439,12 +439,16 @@ val send_to_channel
   -> string
   -> unit Deferred.Or_error.t
 
-(** If you want to access lines other than the current line, use [Buffer.get_lines]. The
-    character encoding is UTF-8. *)
-val get_current_line : Source_code_position.t -> _ Client.t -> string Deferred.Or_error.t
+(** If you want to access lines other than the current line, use [Buffer.get_lines]. *)
+val get_current_line
+  :  Source_code_position.t
+  -> _ Client.t
+  -> String.Utf8.t Deferred.Or_error.t
 
 (** If you want to modify lines other than the current line, use [Buffer.set_lines]. The
-    character encoding should be UTF-8. *)
+    character encoding should be UTF-8 (this function takes a [string] rather than a
+    [String.Utf8.t] for ergonomic reasons; validity can be tested with
+    [String.Utf8.is_valid]). *)
 val set_current_line
   :  Source_code_position.t
   -> _ Client.t

@@ -1,3 +1,6 @@
-(library (name msgpack_rpc) (public_name vcaml.msgpack.rpc)
+(library
+ (name msgpack_rpc)
+ (public_name vcaml.msgpack.rpc)
  (libraries angstrom angstrom-async async core_kernel.bus core msgpack)
- (preprocess (pps ppx_jane)))
+ (preprocess
+  (pps ppx_jane)))

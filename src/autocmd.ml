@@ -336,7 +336,10 @@ let rec create
         ~events:[ BufWipeout ]
         (Viml
            [%string
-             {| call rpcnotify(%{channel#Int}, "%{Client.Private.unregister_blocking_rpc}", "%{name}") |}])
+             {|
+if !empty(nvim_get_chan_info(%{channel#Int}))
+  call rpcnotify(%{channel#Int}, "%{Client.Private.unregister_blocking_rpc}", "%{name}")
+endif |}])
       |> Deferred.ignore_m
       |> Deferred.ok
   in

@@ -1,2 +1,5 @@
-(library (name msgpack_test_lib) (libraries core angstrom msgpack)
- (preprocess (pps ppx_jane)))
+(library
+ (name msgpack_test_lib)
+ (libraries core angstrom msgpack)
+ (preprocess
+  (pps ppx_jane)))

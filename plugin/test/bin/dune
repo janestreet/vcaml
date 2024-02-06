@@ -1,3 +1,7 @@
-(executables (names main)
+(executables
+ (modes byte exe)
+ (names main)
  (libraries async_unix core_unix.command_unix core vcaml vcaml.plugin)
- (flags :standard -alert -vcaml_private) (preprocess (pps ppx_jane)))
+ (flags :standard -alert -vcaml_private)
+ (preprocess
+  (pps ppx_jane)))

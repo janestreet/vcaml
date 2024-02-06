@@ -24,7 +24,7 @@ module Buffer_event = struct
         { changedtick : changedtick option
         ; firstline : int
         ; lastline : int
-        ; linedata : string list
+        ; linedata : String.Utf8.t list
         ; more : bool
         }
   [@@deriving sexp_of]
@@ -45,7 +45,7 @@ module Buffer_event = struct
           ->
           let linedata =
             List.map changes ~f:(function
-              | String s -> s
+              | String s -> String.Utf8.of_string_unchecked s
               | change ->
                 raise_s
                   [%message

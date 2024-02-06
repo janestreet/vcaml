@@ -12,7 +12,7 @@ let%expect_test "connecting over TCP works" =
           client
           ~name:(`Viml "serverstart")
           ~type_:Nvim.Func.(String @-> return String)
-          "localhost:0"
+          "127.0.0.1:0"
         >>| ok_exn
       in
       let client = Client.create ~name:"test-tcp-client" ~on_error:`Raise in

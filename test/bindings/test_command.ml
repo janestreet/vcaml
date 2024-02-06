@@ -89,7 +89,7 @@ let%expect_test "exec" =
       Buffer.get_lines [%here] client Current ~start:0 ~end_:(-1) ~strict_indexing:true
       >>| ok_exn
       >>| Buffer.With_changedtick.value
-      >>| List.map ~f:Int.of_string
+      >>| List.map ~f:(fun line -> Int.of_string (String.Utf8.to_string line))
       >>| [%sexp_of: int list]
       >>| print_s
     in

@@ -248,7 +248,7 @@ let%expect_test "replace_termcodes" =
       let%bind { value = lines; changedtick = _ } =
         Buffer.get_lines [%here] client Current ~start:0 ~end_:(-1) ~strict_indexing:false
       in
-      print_s [%message (lines : string list)];
+      print_s [%message (lines : String.Utf8.t list)];
       return ())
   in
   [%expect {| (lines (bar)) |}];
@@ -538,7 +538,8 @@ let%expect_test "Check that all modes documented in the help are covered by [Mod
       in
       let modes_in_help, new_modes =
         lines
-        |> List.filter ~f:(Fn.non (String.is_prefix ~prefix:"\t\t\t\t"))
+        |> List.filter ~f:(fun line ->
+             not (String.is_prefix (line :> string) ~prefix:"\t\t\t\t"))
         |> List.partition_map ~f:(fun line ->
              let lsplit2_whitespace_exn str =
                let is_space_or_tab = function
@@ -557,7 +558,9 @@ let%expect_test "Check that all modes documented in the help are covered by [Mod
                let word2 = String.subo str ~pos:start_of_second_word in
                word1, word2
              in
-             let symbol, description = line |> String.strip |> lsplit2_whitespace_exn in
+             let symbol, description =
+               (line :> string) |> String.strip |> lsplit2_whitespace_exn
+             in
              let symbol =
                match String.substr_index symbol ~pattern:"CTRL-" with
                | None -> symbol
@@ -670,6 +673,7 @@ let%expect_test "get_current_line, set_current_line, delete_current_line" =
     let print_lines () =
       Buffer.get_lines [%here] client Current ~start:0 ~end_:(-1) ~strict_indexing:true
       >>| Buffer.With_changedtick.value
+      >>| List.map ~f:String.Utf8.to_string
       >>| List.iter ~f:print_endline
     in
     let%bind () =
@@ -687,7 +691,7 @@ let%expect_test "get_current_line, set_current_line, delete_current_line" =
       foo
       bar |}];
     let%bind current_line = Nvim.get_current_line [%here] client in
-    print_endline current_line;
+    print_endline (current_line :> string);
     [%expect {| foo |}];
     let%bind () = Nvim.set_current_line [%here] client "baz" in
     let%bind () = print_lines () in
@@ -768,7 +772,7 @@ let%expect_test "get_mark, delete_mark" =
     let%bind mark = Nvim.get_mark [%here] client 'A' in
     print_s [%sexp (mark : (Buffer.t * Mark.t) option)];
     [%expect {| ((1 ((sym A) (pos ((row 1) (col 0)))))) |}];
-    let%bind () = Command.exec [%here] client "enew " in
+    let%bind () = Command.exec [%here] client "enew" in
     let%bind () = Command.exec [%here] client "bwipeout" ~range_or_count:(Count 1) in
     let%bind mark = Nvim.get_mark [%here] client 'A' in
     print_s [%sexp (mark : (Buffer.t * Mark.t) option)];
@@ -852,7 +856,7 @@ let%expect_test "[paste]" =
         Buffer.get_lines [%here] client Current ~start:0 ~end_:(-1) ~strict_indexing:false
       in
       let%bind cursor_pos = Window.get_cursor [%here] client Current in
-      print_s [%message (lines : string list)];
+      print_s [%message (lines : String.Utf8.t list)];
       print_s [%message (cursor_pos : Position.One_indexed_row.t)];
       return ())
   in
@@ -875,7 +879,7 @@ let%expect_test "[paste_stream]" =
         Buffer.get_lines [%here] client Current ~start:0 ~end_:(-1) ~strict_indexing:false
       in
       let%bind cursor_pos = Window.get_cursor [%here] client Current in
-      print_s [%message (lines : string list)];
+      print_s [%message (lines : String.Utf8.t list)];
       print_s [%message (cursor_pos : Position.One_indexed_row.t)];
       return ())
   in
@@ -912,14 +916,14 @@ let%expect_test "API calls work while a [paste_stream] is open" =
       let writer, flushed = Nvim.paste_stream [%here] client in
       let%bind () = Pipe.write writer "hello\n" |> Deferred.ok in
       let%bind lines = get_lines () in
-      print_s [%sexp (lines : string list)];
+      print_s [%sexp (lines : String.Utf8.t list)];
       let%bind alt_buf = Buffer.create [%here] client ~listed:true ~scratch:false in
       let%bind () = switch_buffers alt_buf |> Deferred.ok in
       let%bind () = Pipe.write writer "world!" |> Deferred.ok in
       Pipe.close writer;
       let%bind () = flushed in
       let%bind lines = get_lines () in
-      print_s [%sexp (lines : string list)];
+      print_s [%sexp (lines : String.Utf8.t list)];
       return ())
   in
   [%expect {|

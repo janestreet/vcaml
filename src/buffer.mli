@@ -44,8 +44,7 @@ val set_name
   -> string
   -> unit Deferred.Or_error.t
 
-(** Read a range of lines from a buffer. The character encoding is UTF-8. Indexing is
-    zero-based, end-exclusive. *)
+(** Read a range of lines from a buffer. Indexing is zero-based, end-exclusive. *)
 val get_lines
   :  Source_code_position.t
   -> _ Client.t
@@ -53,12 +52,13 @@ val get_lines
   -> start:int
   -> end_:int
   -> strict_indexing:bool
-  -> string list With_changedtick.t Deferred.Or_error.t
+  -> String.Utf8.t list With_changedtick.t Deferred.Or_error.t
 
 (** This function should only be used for linewise replacement when you don't care about
     preserving marks. If you want to preserve marks and/or want characterwise replacement,
-    prefer [set_text]. The character encoding should be UTF-8. Indexing is zero-based,
-    end-exclusive. *)
+    prefer [set_text]. Indexing is zero-based, end-exclusive. The character encoding
+    should be UTF-8 (this function takes a [string list] rather than a [String.Utf8.t
+    list] for ergonomic reasons; validity can be tested with [String.Utf8.is_valid]). *)
 val set_lines
   :  Source_code_position.t
   -> _ Client.t
@@ -71,8 +71,7 @@ val set_lines
   -> unit Deferred.Or_error.t
 
 (** Similar to [get_lines], but supports retrieving only portions of a line. If you only
-    need full lines, prefer [get_lines]. The character encoding is UTF-8. Indexing is
-    zero-based, end-exclusive. *)
+    need full lines, prefer [get_lines]. Indexing is zero-based, end-exclusive. *)
 val get_text
   :  Source_code_position.t
   -> _ Client.t
@@ -81,12 +80,14 @@ val get_text
   -> start_col:int
   -> end_row:int
   -> end_col:int
-  -> string list With_changedtick.t Deferred.Or_error.t
+  -> String.Utf8.t list With_changedtick.t Deferred.Or_error.t
 
 (** Replace text in a buffer. This supports setting portions of a line, which can help
     preserve marks. If you don't care about mark preservation and have an update expressed
-    in terms of full lines, prefer [set_lines]. The character encoding should be UTF-8.
-    Indexing is zero-based, end-exclusive. *)
+    in terms of full lines, prefer [set_lines]. Indexing is zero-based, end-exclusive. The
+    character encoding should be UTF-8 (this function takes a [string list] rather than a
+    [String.Utf8.t list] for ergonomic reasons; validity can be tested with
+    [String.Utf8.is_valid]). *)
 val set_text
   :  Source_code_position.t
   -> _ Client.t
@@ -230,7 +231,11 @@ val line_count
   -> Or_current.t
   -> int With_changedtick.t Deferred.Or_error.t
 
-(** Return the byte offset of the given line. N.B. this assumes UTF-8 text. *)
+(** Return the byte offset of the given line. Note that because Neovim buffers are encoded
+    in UTF-8 and files that are not encoded in UTF-8 are converted when reading/writing,
+    if a non-UTF-8 file is loaded into a buffer and then this function is called on a line
+    in the buffer the offset (which is w.r.t. the UTF-8 encoding) may be different from
+    the line's byte offset on disk. *)
 val get_byte_offset_of_line
   :  Source_code_position.t
   -> _ Client.t

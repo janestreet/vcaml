@@ -53,7 +53,7 @@ let%expect_test "feedkeys, get_lines, events for those edits" =
       let%map lines =
         Buffer.get_lines [%here] client Current ~start:0 ~end_:(-1) ~strict_indexing:true
       in
-      print_s [%message (lines : string list Buffer.With_changedtick.t)])
+      print_s [%message (lines : String.Utf8.t list Buffer.With_changedtick.t)])
   in
   [%expect
     {|
@@ -90,7 +90,7 @@ let%expect_test "set_lines, events for those edits" =
       let%bind lines =
         Buffer.get_lines [%here] client Current ~start:0 ~end_:(-1) ~strict_indexing:true
       in
-      print_s [%message (lines : string list Buffer.With_changedtick.t)];
+      print_s [%message (lines : String.Utf8.t list Buffer.With_changedtick.t)];
       return ())
   in
   [%expect
@@ -157,7 +157,8 @@ let%expect_test "changedtick, get_text, set_text" =
           ~end_row:0
           ~end_col:80
       in
-      print_s [%sexp (text_and_changedtick : string list Buffer.With_changedtick.t)];
+      print_s
+        [%sexp (text_and_changedtick : String.Utf8.t list Buffer.With_changedtick.t)];
       return ())
   in
   [%expect

@@ -1,5 +1,9 @@
-(library (name vcaml) (public_name vcaml)
+(library
+ (name vcaml)
+ (public_name vcaml)
  (libraries async core_kernel.bus core msgpack msgpack_rpc
-  core_kernel.nonempty_list nvim_internal core_kernel.reversed_list
-  semantic_version core_kernel.uuid core_unix.uuid core_kernel.vec)
- (flags :standard -alert -vcaml_private) (preprocess (pps ppx_jane)))
+   core_kernel.nonempty_list nvim_internal core_kernel.reversed_list
+   semantic_version core_kernel.uuid core_unix.uuid core_kernel.vec)
+ (flags :standard -alert -vcaml_private)
+ (preprocess
+  (pps ppx_jane)))

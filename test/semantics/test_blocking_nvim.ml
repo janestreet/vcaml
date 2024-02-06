@@ -712,8 +712,11 @@ let run_spec ?warn_if_neovim_exits_early ?verbose spec =
             match blocking with
             | false -> [%string "sleep %{milliseconds#Int}m"]
             | true ->
-              let microseconds = 1000 * milliseconds in
-              [%string {| call system(["usleep", %{microseconds#Int}]) |}]
+              let seconds = Float.of_int milliseconds /. 1000. in
+              (* The [xargs] hack here works around a bug in Neovim 0.9.1 where passing a
+                 float argument to [system] triggers "E806: using Float as a String". In
+                 Neovim 0.10.0 we should be able to call [sleep] directly. *)
+              [%string {| call system(["xargs", "sleep"], "%{seconds#Float}") |}]
           in
           return command
         | Call_plugin { name; how; specs } ->
@@ -999,7 +1002,7 @@ let%expect_test "Demonstrate disconnect induced by sleep" =
       (("Called from" lib/vcaml/test/semantics/test_blocking_nvim.ml:LINE:COL))))
 
     -----  NVIM_LOG_FILE  -----
-    ERR {TIMESTAMP} socket     chan_close_with_error:646: RPC: ch 1 returned a response with an unknown request id. Ensure the client is properly synchronized
+    ERR TIMESTAMP socket     chan_close_with_error:LINE: RPC: ch 1 returned a response with an unknown request id. Ensure the client is properly synchronized
     --------------------------- |}];
   Backtrace.elide := false;
   Private.before_sending_response_hook_for_tests := None;

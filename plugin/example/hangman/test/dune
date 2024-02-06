@@ -1,4 +1,7 @@
-(library (name vcaml_hangman_test)
+(library
+ (name vcaml_hangman_test)
  (libraries async core vcaml vcaml.test.helpers)
- (inline_tests (deps ../bin/main.exe ../hangman.lua))
- (preprocess (pps ppx_jane)))
+ (inline_tests
+  (deps ../bin/main.exe ../hangman.lua))
+ (preprocess
+  (pps ppx_jane)))

@@ -14,7 +14,7 @@ module Buffer_event : sig
         { changedtick : changedtick option
         ; firstline : int
         ; lastline : int
-        ; linedata : string list
+        ; linedata : String.Utf8.t list
         ; more : bool
         }
   [@@deriving sexp_of]

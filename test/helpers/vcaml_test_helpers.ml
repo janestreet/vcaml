@@ -76,6 +76,40 @@ let verbose_debugging ~verbose =
   | true -> verbose_debugging' ~log:stderr
 ;;
 
+let replace_timestamp_in_log_message =
+  let open Re in
+  let exact_digits n = repn digit n (Some n) in
+  let at_least_digits n = repn digit n None in
+  [ exact_digits 4
+  ; char '-'
+  ; exact_digits 2
+  ; char '-'
+  ; exact_digits 2
+  ; char 'T'
+  ; exact_digits 2
+  ; char ':'
+  ; exact_digits 2
+  ; char ':'
+  ; exact_digits 2
+  ; char '.'
+  ; at_least_digits 3
+  ]
+  |> seq
+  |> compile
+  |> replace ~all:false ~f:(fun _ -> "TIMESTAMP")
+;;
+
+let replace_line_numbers_in_log_message =
+  let open Re in
+  [ group (rep1 (diff any (set ": "))); char ':'; rep1 digit; char ':' ]
+  |> seq
+  |> compile
+  |> replace ~f:(fun group ->
+       match Group.get_opt group 1 with
+       | None -> Group.get group 0
+       | Some prefix -> prefix ^ ":LINE:")
+;;
+
 let with_client
   ?(args = default_args)
   ?env
@@ -199,18 +233,11 @@ let with_client
           >>| (function
           | [] -> []
           | lines ->
-            let is_timestamp timestamp =
-              (* [Time_ns] is able to parse the Neovim timestamp format. *)
-              match Time_ns_unix.of_string timestamp with
-              | _ -> true
-              | exception _ -> false
-            in
             let lines =
               List.map lines ~f:(fun line ->
-                match String.split line ~on:' ' with
-                | log_level :: timestamp :: message when is_timestamp timestamp ->
-                  String.concat (log_level :: "{TIMESTAMP}" :: message) ~sep:" "
-                | _ -> line)
+                line
+                |> replace_timestamp_in_log_message
+                |> replace_line_numbers_in_log_message)
             in
             [ [ "-----  NVIM_LOG_FILE  -----" ]
             ; lines
@@ -293,11 +320,11 @@ module Test_ui = struct
       | Some (`Flush _) -> ignore (Mvar.take_now_exn t.flushed : _)
     in
     match event with
-    | Flush ->
+    | Flush { unparsed_fields = _ } ->
       (match Mvar.peek t.flushed with
        | Some `Awaiting_first_flush -> ignore (Mvar.take_now_exn t.flushed : _)
        | None | Some (`Flush _) -> Mvar.set t.flushed (`Flush (ui_to_string t)))
-    | Grid_line { grid = 1; row; col_start; data } ->
+    | Grid_line { grid = 1; row; col_start; data; unparsed_fields = _ } ->
       unflush t;
       let col = ref col_start in
       let write str =
@@ -311,22 +338,24 @@ module Test_ui = struct
             write str
           done
         | _ -> raise_s [%message "Malformed gridline data" (data : Msgpack.t list)])
-    | Grid_clear { grid = 1 } ->
+    | Grid_clear { grid = 1; unparsed_fields = _ } ->
       unflush t;
       Array.iter t.buffer ~f:(fun row ->
         Array.fill row ~pos:0 ~len:(Array.length row) " ")
-    | Grid_cursor_goto { grid = 1; row; col } ->
+    | Grid_cursor_goto { grid = 1; row; col; unparsed_fields = _ } ->
       unflush t;
       t.cursor_col <- col;
       t.cursor_row <- row
-    | Grid_resize { grid = 1; width; height } ->
+    | Grid_resize { grid = 1; width; height; unparsed_fields = _ } ->
       unflush t;
       let new_array = Array.init height ~f:(fun _ -> Array.create ~len:width " ") in
       Array.iteri t.buffer ~f:(fun y row ->
         Array.iteri row ~f:(fun x c ->
           if x < width && y < height then new_array.(y).(x) <- c));
       t.buffer <- new_array
-    | Grid_scroll { grid = 1; top; bot; left = _; right = _; rows; cols = 0 } ->
+    | Grid_scroll
+        { grid = 1; top; bot; left = _; right = _; rows; cols = 0; unparsed_fields = _ }
+      ->
       (* In Neovim 0.9.1, [cols] is fixed at [0] so we never need [left] or [right]. *)
       unflush t;
       (* Establish our understanding of grid scrolling. If this is violated we are
@@ -346,16 +375,21 @@ module Test_ui = struct
       (* This only applies to ext_multigrid but is sent anyway due to a bug:
          https://github.com/neovim/neovim/issues/14956 *)
       ()
-    | Busy_start
-    | Busy_stop
+    | Unknown_event _ ->
+      (* [Unknown_event] can occur when VCaml is used with a more recent version of Neovim
+         than the one against which it was tested. `:h api-contract` says that new events
+         should be ignored by older clients. *)
+      ()
+    | Busy_start _
+    | Busy_stop _
     | Default_colors_set _
     | Highlight_set _
     | Hl_attr_define _
     | Hl_group_set _
     | Mode_change _
     | Mode_info_set _
-    | Mouse_off
-    | Mouse_on
+    | Mouse_off _
+    | Mouse_on _
     | Option_set _
     | Set_icon _
     | Set_title _

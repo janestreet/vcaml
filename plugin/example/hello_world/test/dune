@@ -1,4 +1,7 @@
-(library (name vcaml_hello_world_test)
+(library
+ (name vcaml_hello_world_test)
  (libraries async core vcaml vcaml.test.helpers)
- (inline_tests (deps ../bin/main.exe ../hello_world.lua))
- (preprocess (pps ppx_jane)))
+ (inline_tests
+  (deps ../bin/main.exe ../hello_world.lua))
+ (preprocess
+  (pps ppx_jane)))

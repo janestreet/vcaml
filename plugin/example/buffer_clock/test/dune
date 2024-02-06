@@ -1,4 +1,7 @@
-(library (name vcaml_buffer_clock_test)
+(library
+ (name vcaml_buffer_clock_test)
  (libraries async core vcaml vcaml.test.helpers)
- (inline_tests (deps ../bin/main.exe ../buffer_clock.lua))
- (preprocess (pps ppx_jane)))
+ (inline_tests
+  (deps ../bin/main.exe ../buffer_clock.lua))
+ (preprocess
+  (pps ppx_jane)))

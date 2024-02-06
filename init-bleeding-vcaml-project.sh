@@ -29,7 +29,7 @@ set -euo pipefail
   opam init --bare -n
   opam repository add --dont-select janestreet-bleeding https://ocaml.janestreet.com/opam-repository
   opam repository add --dont-select janestreet-bleeding-external https://github.com/janestreet/opam-repository.git#external-packages
-  opam switch create --repositories=janestreet-bleeding,janestreet-bleeding-external,default . 4.14.1
+  opam switch create --repositories=janestreet-bleeding,janestreet-bleeding-external,default . 5.1.1
   eval "$(opam env)"
   echo "Updating the repositories..."
   opam update -y

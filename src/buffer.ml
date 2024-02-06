@@ -72,6 +72,7 @@ let set_name here client t name =
 
 let get_lines here client t ~start ~end_ ~strict_indexing =
   Nvim_internal.nvim_buf_get_lines ~buffer:t ~start ~end_ ~strict_indexing
+  |> map_witness ~f:(fun lines -> Ok (List.map lines ~f:String.Utf8.of_string_unchecked))
   |> run_and_get_changedtick here client t
 ;;
 
@@ -91,6 +92,7 @@ let get_text here client t ~start_row ~start_col ~end_row ~end_col =
     ~end_row
     ~end_col
     ~opts:String.Map.empty
+  |> map_witness ~f:(fun lines -> Ok (List.map lines ~f:String.Utf8.of_string_unchecked))
   |> run_and_get_changedtick here client t
 ;;
 

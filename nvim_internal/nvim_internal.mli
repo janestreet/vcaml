@@ -89,86 +89,132 @@ module Error_type : sig
 end
 
 module Ui_event : sig
+  (** See `:h ui.txt` for details about these events. To be forwards-compatible with more
+      recent versions of Neovim than the version against which VCaml was tested, unknown
+      events are modeled with [Unknown_event] and fields added to known events are modeled
+      with [unparsed_fields]. See `:h api-contract` for compatibility details. *)
   type t =
     | Mode_info_set of
         { enabled : bool
         ; cursor_styles : Msgpack.t list
+        ; unparsed_fields : Msgpack.t list
         }
-    | Update_menu
-    | Busy_start
-    | Busy_stop
-    | Mouse_on
-    | Mouse_off
+    | Update_menu of { unparsed_fields : Msgpack.t list }
+    | Busy_start of { unparsed_fields : Msgpack.t list }
+    | Busy_stop of { unparsed_fields : Msgpack.t list }
+    | Mouse_on of { unparsed_fields : Msgpack.t list }
+    | Mouse_off of { unparsed_fields : Msgpack.t list }
     | Mode_change of
         { mode : string
         ; mode_idx : int
+        ; unparsed_fields : Msgpack.t list
         }
-    | Bell
-    | Visual_bell
-    | Flush
-    | Suspend
-    | Set_title of { title : string }
-    | Set_icon of { icon : string }
-    | Screenshot of { path : string }
+    | Bell of { unparsed_fields : Msgpack.t list }
+    | Visual_bell of { unparsed_fields : Msgpack.t list }
+    | Flush of { unparsed_fields : Msgpack.t list }
+    | Suspend of { unparsed_fields : Msgpack.t list }
+    | Set_title of
+        { title : string
+        ; unparsed_fields : Msgpack.t list
+        }
+    | Set_icon of
+        { icon : string
+        ; unparsed_fields : Msgpack.t list
+        }
+    | Screenshot of
+        { path : string
+        ; unparsed_fields : Msgpack.t list
+        }
     | Option_set of
         { name : string
         ; value : Msgpack.t
+        ; unparsed_fields : Msgpack.t list
         }
-    | Update_fg of { fg : int }
-    | Update_bg of { bg : int }
-    | Update_sp of { sp : int }
+    | Update_fg of
+        { fg : int
+        ; unparsed_fields : Msgpack.t list
+        }
+    | Update_bg of
+        { bg : int
+        ; unparsed_fields : Msgpack.t list
+        }
+    | Update_sp of
+        { sp : int
+        ; unparsed_fields : Msgpack.t list
+        }
     | Resize of
         { width : int
         ; height : int
+        ; unparsed_fields : Msgpack.t list
         }
-    | Clear
-    | Eol_clear
+    | Clear of { unparsed_fields : Msgpack.t list }
+    | Eol_clear of { unparsed_fields : Msgpack.t list }
     | Cursor_goto of
         { row : int
         ; col : int
+        ; unparsed_fields : Msgpack.t list
         }
-    | Highlight_set of { attrs : Msgpack.t String.Map.t }
-    | Put of { str : string }
+    | Highlight_set of
+        { attrs : Msgpack.t String.Map.t
+        ; unparsed_fields : Msgpack.t list
+        }
+    | Put of
+        { str : string
+        ; unparsed_fields : Msgpack.t list
+        }
     | Set_scroll_region of
         { top : int
         ; bot : int
         ; left : int
         ; right : int
+        ; unparsed_fields : Msgpack.t list
         }
-    | Scroll of { count : int }
+    | Scroll of
+        { count : int
+        ; unparsed_fields : Msgpack.t list
+        }
     | Default_colors_set of
         { rgb_fg : int
         ; rgb_bg : int
         ; rgb_sp : int
         ; cterm_fg : int
         ; cterm_bg : int
+        ; unparsed_fields : Msgpack.t list
         }
     | Hl_attr_define of
         { id : int
         ; rgb_attrs : Msgpack.t String.Map.t
         ; cterm_attrs : Msgpack.t String.Map.t
         ; info : Msgpack.t list
+        ; unparsed_fields : Msgpack.t list
         }
     | Hl_group_set of
         { name : string
         ; id : int
+        ; unparsed_fields : Msgpack.t list
         }
     | Grid_resize of
         { grid : int
         ; width : int
         ; height : int
+        ; unparsed_fields : Msgpack.t list
         }
-    | Grid_clear of { grid : int }
+    | Grid_clear of
+        { grid : int
+        ; unparsed_fields : Msgpack.t list
+        }
     | Grid_cursor_goto of
         { grid : int
         ; row : int
         ; col : int
+        ; unparsed_fields : Msgpack.t list
         }
     | Grid_line of
         { grid : int
         ; row : int
         ; col_start : int
         ; data : Msgpack.t list
+        ; unparsed_fields : Msgpack.t list
         }
     | Grid_scroll of
         { grid : int
@@ -178,8 +224,12 @@ module Ui_event : sig
         ; right : int
         ; rows : int
         ; cols : int
+        ; unparsed_fields : Msgpack.t list
         }
-    | Grid_destroy of { grid : int }
+    | Grid_destroy of
+        { grid : int
+        ; unparsed_fields : Msgpack.t list
+        }
     | Win_pos of
         { grid : int
         ; win : Window.t
@@ -187,6 +237,7 @@ module Ui_event : sig
         ; startcol : int
         ; width : int
         ; height : int
+        ; unparsed_fields : Msgpack.t list
         }
     | Win_float_pos of
         { grid : int
@@ -197,18 +248,27 @@ module Ui_event : sig
         ; anchor_col : float
         ; focusable : bool
         ; zindex : int
+        ; unparsed_fields : Msgpack.t list
         }
     | Win_external_pos of
         { grid : int
         ; win : Window.t
+        ; unparsed_fields : Msgpack.t list
         }
-    | Win_hide of { grid : int }
-    | Win_close of { grid : int }
+    | Win_hide of
+        { grid : int
+        ; unparsed_fields : Msgpack.t list
+        }
+    | Win_close of
+        { grid : int
+        ; unparsed_fields : Msgpack.t list
+        }
     | Msg_set_pos of
         { grid : int
         ; row : int
         ; scrolled : bool
         ; sep_char : string
+        ; unparsed_fields : Msgpack.t list
         }
     | Win_viewport of
         { grid : int
@@ -219,6 +279,7 @@ module Ui_event : sig
         ; curcol : int
         ; line_count : int
         ; scroll_delta : int
+        ; unparsed_fields : Msgpack.t list
         }
     | Win_extmark of
         { grid : int
@@ -227,6 +288,7 @@ module Ui_event : sig
         ; mark_id : int
         ; row : int
         ; col : int
+        ; unparsed_fields : Msgpack.t list
         }
     | Popupmenu_show of
         { items : Msgpack.t list
@@ -234,14 +296,19 @@ module Ui_event : sig
         ; row : int
         ; col : int
         ; grid : int
+        ; unparsed_fields : Msgpack.t list
         }
-    | Popupmenu_hide
-    | Popupmenu_select of { selected : int }
+    | Popupmenu_hide of { unparsed_fields : Msgpack.t list }
+    | Popupmenu_select of
+        { selected : int
+        ; unparsed_fields : Msgpack.t list
+        }
     | Tabline_update of
         { current : Tabpage.t
         ; tabs : Msgpack.t list
         ; current_buffer : Buffer.t
         ; buffers : Msgpack.t list
+        ; unparsed_fields : Msgpack.t list
         }
     | Cmdline_show of
         { content : Msgpack.t list
@@ -250,34 +317,69 @@ module Ui_event : sig
         ; prompt : string
         ; indent : int
         ; level : int
+        ; unparsed_fields : Msgpack.t list
         }
     | Cmdline_pos of
         { pos : int
         ; level : int
+        ; unparsed_fields : Msgpack.t list
         }
     | Cmdline_special_char of
         { c : string
         ; shift : bool
         ; level : int
+        ; unparsed_fields : Msgpack.t list
         }
-    | Cmdline_hide of { level : int }
-    | Cmdline_block_show of { lines : Msgpack.t list }
-    | Cmdline_block_append of { lines : Msgpack.t list }
-    | Cmdline_block_hide
-    | Wildmenu_show of { items : Msgpack.t list }
-    | Wildmenu_select of { selected : int }
-    | Wildmenu_hide
+    | Cmdline_hide of
+        { level : int
+        ; unparsed_fields : Msgpack.t list
+        }
+    | Cmdline_block_show of
+        { lines : Msgpack.t list
+        ; unparsed_fields : Msgpack.t list
+        }
+    | Cmdline_block_append of
+        { lines : Msgpack.t list
+        ; unparsed_fields : Msgpack.t list
+        }
+    | Cmdline_block_hide of { unparsed_fields : Msgpack.t list }
+    | Wildmenu_show of
+        { items : Msgpack.t list
+        ; unparsed_fields : Msgpack.t list
+        }
+    | Wildmenu_select of
+        { selected : int
+        ; unparsed_fields : Msgpack.t list
+        }
+    | Wildmenu_hide of { unparsed_fields : Msgpack.t list }
     | Msg_show of
         { kind : string
         ; content : Msgpack.t list
         ; replace_last : bool
+        ; unparsed_fields : Msgpack.t list
         }
-    | Msg_clear
-    | Msg_showcmd of { content : Msgpack.t list }
-    | Msg_showmode of { content : Msgpack.t list }
-    | Msg_ruler of { content : Msgpack.t list }
-    | Msg_history_show of { entries : Msgpack.t list }
-    | Msg_history_clear
+    | Msg_clear of { unparsed_fields : Msgpack.t list }
+    | Msg_showcmd of
+        { content : Msgpack.t list
+        ; unparsed_fields : Msgpack.t list
+        }
+    | Msg_showmode of
+        { content : Msgpack.t list
+        ; unparsed_fields : Msgpack.t list
+        }
+    | Msg_ruler of
+        { content : Msgpack.t list
+        ; unparsed_fields : Msgpack.t list
+        }
+    | Msg_history_show of
+        { entries : Msgpack.t list
+        ; unparsed_fields : Msgpack.t list
+        }
+    | Msg_history_clear of { unparsed_fields : Msgpack.t list }
+    | Unknown_event of
+        { name : string
+        ; unparsed_fields : Msgpack.t list
+        }
   [@@deriving sexp_of]
 
   val of_msgpack : Msgpack.t -> t list Or_error.t

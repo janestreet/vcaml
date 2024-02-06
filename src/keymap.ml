@@ -208,7 +208,10 @@ let set_internal
             ~events:[ BufDelete; BufWipeout ]
             (Viml
                [%string
-                 {| call rpcnotify(%{channel#Int}, "%{Client.Private.unregister_blocking_rpc}", "%{name}") |}])
+                 {|
+if !empty(nvim_get_chan_info(%{channel#Int}))
+  call rpcnotify(%{channel#Int}, "%{Client.Private.unregister_blocking_rpc}", "%{name}")
+endif |}])
           |> Deferred.ignore_m
       in
       (match expr with

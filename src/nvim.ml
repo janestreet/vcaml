@@ -553,7 +553,11 @@ let send_to_channel here client ~channel data =
   Nvim_internal.nvim_chan_send ~chan:channel ~data |> run here client
 ;;
 
-let get_current_line here client = Nvim_internal.nvim_get_current_line |> run here client
+let get_current_line here client =
+  Nvim_internal.nvim_get_current_line
+  |> map_witness ~f:(fun line -> Ok (String.Utf8.of_string_unchecked line))
+  |> run here client
+;;
 
 let set_current_line here client line =
   Nvim_internal.nvim_set_current_line ~line |> run here client
