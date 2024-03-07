@@ -196,6 +196,10 @@ let write_message t ~query ~on_successful_flush =
     let%map result =
       match%bind Writer.flushed_or_failed_with_result writer with
       | Flushed _ -> on_successful_flush ~connection_closed
+      | Force_closed ->
+        Deferred.Or_error.error_s
+          [%message
+            "Failed to send Msgpack RPC message: writer is closed" ~_:(query : Msgpack.t)]
       | Consumer_left ->
         failwith
           "BUG: [Consumer_left] should only be possible when \
