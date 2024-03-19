@@ -44,7 +44,8 @@ let%expect_test "get_cursor, set_cursor" =
   in
   [%expect {|
     ((row 1) (col 11))
-    ((row 1) (col 5)) |}];
+    ((row 1) (col 5))
+    |}];
   return ()
 ;;
 
@@ -61,7 +62,8 @@ let%expect_test "get_buf, set_buf" =
   in
   [%expect {|
     2
-    2 |}];
+    2
+    |}];
   return ()
 ;;
 
@@ -84,7 +86,8 @@ let%expect_test "get_var, set_var, delete_var" =
     (Ok true)
     (Error
      (("Vim returned error" "Key not found: foo" (error_type Validation))
-      (("Called from" lib/vcaml/test/bindings/test_window.ml:LINE:COL)))) |}];
+      (("Called from" lib/vcaml/test/bindings/test_window.ml:LINE:COL))))
+    |}];
   return ()
 ;;
 
@@ -179,7 +182,8 @@ let%expect_test "API for global-local window options" =
     [%expect
       {|
       ((current_listchars ("tab:> " trail:- nbsp:+))
-       (default_listchars ("tab:> " trail:- nbsp:+))) |}];
+       (default_listchars ("tab:> " trail:- nbsp:+)))
+      |}];
     let%bind () = fresh_buffer () in
     let%bind () =
       Window.Option.set_for_current_buffer_in_window
@@ -261,7 +265,8 @@ let%expect_test "close semantics" =
        (("Vim returned error"
          "Vim:E37: No write since last change (add ! to override)"
          (error_type Exception))
-        (("Called from" lib/vcaml/test/bindings/test_window.ml:LINE:COL)))) |}];
+        (("Called from" lib/vcaml/test/bindings/test_window.ml:LINE:COL))))
+      |}];
     Backtrace.elide := false;
     Deferred.Or_error.return ())
 ;;
@@ -368,7 +373,8 @@ let%expect_test "open_floating, get_config, set_config" =
              ((text "\226\148\128") (hl_group ()))
              ((text "\226\148\148") (hl_group ()))
              ((text "\226\148\130") (hl_group ()))))))
-         (title ())))) |}];
+         (title ()))))
+      |}];
     let%bind () =
       Window.set_config
         [%here]
@@ -439,7 +445,8 @@ let%expect_test "open_floating, get_config, set_config" =
              ((text +) (hl_group ())) ((text |) (hl_group ()))
              ((text +) (hl_group ())) ((text -) (hl_group ()))
              ((text +) (hl_group ())) ((text |) (hl_group ()))))))
-         (title ())))) |}];
+         (title ()))))
+      |}];
     let%bind () =
       Buffer.set_lines
         [%here]
@@ -517,7 +524,8 @@ let%expect_test "open_floating, get_config, set_config" =
         ((width 1) (height 1) (corner Top_left)
          (corner_pos
           (Relative_to_window (window (Id 1000)) (pos ((row 20) (col 14)))))
-         (zindex (50)) (focusable false) (border ()) (title ())))) |}];
+         (zindex (50)) (focusable false) (border ()) (title ()))))
+      |}];
     let%bind () =
       Buffer.set_lines
         [%here]
@@ -608,7 +616,8 @@ let%expect_test "open_floating, get_config, set_config" =
              ((text "\226\148\128") (hl_group ()))
              ((text "\226\149\176") (hl_group ()))
              ((text "\226\148\130") (hl_group ()))))))
-         (title (((pos Center) (text (((text Diagnostic) (hl_group ())))))))))) |}];
+         (title (((pos Center) (text (((text Diagnostic) (hl_group ()))))))))))
+      |}];
     return ())
 ;;
 
@@ -671,7 +680,8 @@ let%expect_test "eval_statusline" =
       ((text "(vcaml) foo.txt 0,0-1 All") (display_width 25)
        (highlights
         ((((text "(vcaml) ") (hl_group (User1)))
-          ((text "foo.txt 0,0-1 All") (hl_group (StatusLine))))))) |}];
+          ((text "foo.txt 0,0-1 All") (hl_group (StatusLine)))))))
+      |}];
     return ())
 ;;
 
@@ -700,7 +710,8 @@ let%expect_test "eval_winbar" =
       ((text "(vcaml) foo.txt 0,0-1 All") (display_width 25)
        (highlights
         ((((text "(vcaml) ") (hl_group (User1)))
-          ((text "foo.txt 0,0-1 All") (hl_group (WinBar))))))) |}];
+          ((text "foo.txt 0,0-1 All") (hl_group (WinBar)))))))
+      |}];
     return ())
 ;;
 
@@ -730,6 +741,7 @@ let%expect_test "eval_statuscolumn" =
       {|
       ((text "+  1|") (display_width 5)
        (highlights
-        ((((text +) (hl_group (User1))) ((text "  1|") (hl_group (LineNr))))))) |}];
+        ((((text +) (hl_group (User1))) ((text "  1|") (hl_group (LineNr)))))))
+      |}];
     return ())
 ;;

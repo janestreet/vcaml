@@ -24,7 +24,8 @@ let%expect_test "Oneshot" =
   print_endline output;
   [%expect {|
     Job status / exit code: 0
-    Current buffer: 1 |}]
+    Current buffer: 1
+    |}]
 ;;
 
 let start_plugin here ~client ~subcommand =
@@ -96,7 +97,8 @@ let%expect_test "Persistent plugin shows errors when they occur during [on_start
     │((vcaml-test-persistent-plugin Failure)                                         │
     │ (("Called from" lib/vcaml/plugin/src/vcaml_plugin.ml:LINE:COL)))               │
     │Press ENTER or type command to continue                                         │
-    ╰────────────────────────────────────────────────────────────────────────────────╯ |}];
+    ╰────────────────────────────────────────────────────────────────────────────────╯
+    |}];
   let%bind () = test ~subcommand:"on-startup-raises" in
   [%expect
     {|
@@ -131,7 +133,8 @@ let%expect_test "Persistent plugin shows errors when they occur during [on_start
     │   ("<backtrace elided in test>" "Caught by monitor try_with_join_or_error")))  │
     │ (("Called from" lib/vcaml/plugin/src/vcaml_plugin.ml:LINE:COL)))               │
     │Press ENTER or type command to continue                                         │
-    ╰────────────────────────────────────────────────────────────────────────────────╯ |}];
+    ╰────────────────────────────────────────────────────────────────────────────────╯
+    |}];
   return ()
 ;;
 
@@ -185,7 +188,8 @@ let%expect_test "Persistent plugin shows errors when they occur during VimL [not
     │   (("Called from" lib/vcaml/plugin/src/vcaml_plugin.ml:LINE:COL))))            │
     │ (("Called from" lib/vcaml/plugin/src/vcaml_plugin.ml:LINE:COL)))               │
     │Press ENTER or type command to continue                                         │
-    ╰────────────────────────────────────────────────────────────────────────────────╯ |}];
+    ╰────────────────────────────────────────────────────────────────────────────────╯
+    |}];
   return ()
 ;;
 
@@ -237,7 +241,8 @@ let%expect_test "Persistent plugin shows errors when they occur during Lua [noti
     │   (("Called from" lib/vcaml/plugin/src/vcaml_plugin.ml:LINE:COL))))            │
     │ (("Called from" lib/vcaml/plugin/src/vcaml_plugin.ml:LINE:COL)))               │
     │Press ENTER or type command to continue                                         │
-    ╰────────────────────────────────────────────────────────────────────────────────╯ |}];
+    ╰────────────────────────────────────────────────────────────────────────────────╯
+    |}];
   return ()
 ;;
 
@@ -290,7 +295,8 @@ let%expect_test "Persistent plugin shows errors when they occur during async RPC
     │((vcaml-test-persistent-plugin Failure)                                         │
     │ (("Called from" lib/vcaml/plugin/test/bin/main.ml:LINE:COL)))                  │
     │Press ENTER or type command to continue                                         │
-    ╰────────────────────────────────────────────────────────────────────────────────╯ |}];
+    ╰────────────────────────────────────────────────────────────────────────────────╯
+    |}];
   let%bind () = test ~subcommand:"async-rpc-raises" in
   [%expect
     {|
@@ -325,7 +331,8 @@ let%expect_test "Persistent plugin shows errors when they occur during async RPC
     │   ("<backtrace elided in test>" "Caught by monitor try_with_join_or_error")))  │
     │ (("Called from" lib/vcaml/plugin/test/bin/main.ml:LINE:COL)))                  │
     │Press ENTER or type command to continue                                         │
-    ╰────────────────────────────────────────────────────────────────────────────────╯ |}];
+    ╰────────────────────────────────────────────────────────────────────────────────╯
+    |}];
   let%bind () = test ~subcommand:"async-rpc-raises-after-returning" in
   [%expect
     {|
@@ -360,7 +367,8 @@ let%expect_test "Persistent plugin shows errors when they occur during async RPC
     │   ("<backtrace elided in test>" "Caught by monitor try_with_join_or_error")))  │
     │ (("Called from" lib/vcaml/plugin/test/bin/main.ml:LINE:COL)))                  │
     │Press ENTER or type command to continue                                         │
-    ╰────────────────────────────────────────────────────────────────────────────────╯ |}];
+    ╰────────────────────────────────────────────────────────────────────────────────╯
+    |}];
   return ()
 ;;
 
@@ -413,7 +421,8 @@ let%expect_test "Persistent plugin shows errors when they occur during blocking 
     │   (("Called from" lib/vcaml/plugin/src/vcaml_plugin.ml:LINE:COL))))            │
     │ (("Called from" lib/vcaml/plugin/src/vcaml_plugin.ml:LINE:COL)))               │
     │Press ENTER or type command to continue                                         │
-    ╰────────────────────────────────────────────────────────────────────────────────╯ |}];
+    ╰────────────────────────────────────────────────────────────────────────────────╯
+    |}];
   let%bind () = test ~subcommand:"blocking-rpc-raises" in
   [%expect
     {|
@@ -448,7 +457,8 @@ let%expect_test "Persistent plugin shows errors when they occur during blocking 
     │   (("Called from" lib/vcaml/plugin/src/vcaml_plugin.ml:LINE:COL))))            │
     │ (("Called from" lib/vcaml/plugin/src/vcaml_plugin.ml:LINE:COL)))               │
     │Press ENTER or type command to continue                                         │
-    ╰────────────────────────────────────────────────────────────────────────────────╯ |}];
+    ╰────────────────────────────────────────────────────────────────────────────────╯
+    |}];
   let%bind () = test ~subcommand:"blocking-rpc-raises-after-returning" in
   [%expect
     {|
@@ -483,6 +493,7 @@ let%expect_test "Persistent plugin shows errors when they occur during blocking 
     │   ("<backtrace elided in test>" "Caught by monitor try_with_join_or_error")))  │
     │ (("Called from" lib/vcaml/plugin/test/bin/main.ml:LINE:COL)))                  │
     │Press ENTER or type command to continue                                         │
-    ╰────────────────────────────────────────────────────────────────────────────────╯ |}];
+    ╰────────────────────────────────────────────────────────────────────────────────╯
+    |}];
   return ()
 ;;

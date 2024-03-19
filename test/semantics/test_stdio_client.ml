@@ -56,6 +56,7 @@ let%expect_test "Simple test of [Stdio] client" =
     [%expect
       {|
       (Ok "Hello, world!")
-      ("nvim exited" (exit_or_signal (Ok ()))) |}];
+      ("nvim exited" (exit_or_signal (Ok ())))
+      |}];
     return ())
 ;;

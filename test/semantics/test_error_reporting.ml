@@ -25,7 +25,8 @@ let%expect_test "Error inside [block_nvim] is displayed with callsite" =
      (("Vim returned error" "Command not found: DoesNotExist"
        (error_type Validation))
       (("Called from" lib/vcaml/test/semantics/test_error_reporting.ml:3:14)
-       ("Called from" lib/vcaml/test/semantics/test_error_reporting.ml:2:14)))) |}];
+       ("Called from" lib/vcaml/test/semantics/test_error_reporting.ml:2:14))))
+    |}];
   return ()
 ;;
 
@@ -59,7 +60,8 @@ let%expect_test "Error in the middle of an atomic call is returned correctly" =
       (index_of_failure 3)
       (error_type       Validation)
       "Key not found: bar")
-     (("Called from" lib/vcaml/test/semantics/test_error_reporting.ml:LINE:COL))) |}];
+     (("Called from" lib/vcaml/test/semantics/test_error_reporting.ml:LINE:COL)))
+    |}];
   Backtrace.elide := false;
   return ()
 ;;
@@ -142,7 +144,8 @@ let%expect_test "Failures parsing async requests" =
     │     (msgpack (String "bad argument"))))))                                      │
     │ (("Called from" lib/vcaml/test/semantics/test_error_reporting.ml:LINE:COL)))   │
     │Press ENTER or type command to continue                                         │
-    ╰────────────────────────────────────────────────────────────────────────────────╯ |}];
+    ╰────────────────────────────────────────────────────────────────────────────────╯
+    |}];
   let%bind () =
     (* Too few arguments *)
     test ~type_:Notifier.Func.unit []
@@ -180,7 +183,8 @@ let%expect_test "Failures parsing async requests" =
     │  ("Wrong number of arguments" (method_name async_func) (params ())))           │
     │ (("Called from" lib/vcaml/test/semantics/test_error_reporting.ml:LINE:COL)))   │
     │Press ENTER or type command to continue                                         │
-    ╰────────────────────────────────────────────────────────────────────────────────╯ |}];
+    ╰────────────────────────────────────────────────────────────────────────────────╯
+    |}];
   let%bind () =
     (* Too many arguments *)
     test ~type_:Notifier.Func.(Nil @-> Nil @-> unit) [ (); () ]
@@ -218,7 +222,8 @@ let%expect_test "Failures parsing async requests" =
     │  ("Wrong number of arguments" (method_name async_func) (params (Nil Nil))))    │
     │ (("Called from" lib/vcaml/test/semantics/test_error_reporting.ml:LINE:COL)))   │
     │Press ENTER or type command to continue                                         │
-    ╰────────────────────────────────────────────────────────────────────────────────╯ |}];
+    ╰────────────────────────────────────────────────────────────────────────────────╯
+    |}];
   Backtrace.elide := false;
   return ()
 ;;
@@ -279,7 +284,8 @@ let%expect_test "Error is displayed when Neovim sends a notification for an unkn
     │((test-client "Unknown method async_func")                                      │
     │ (("Called from" lib/vcaml/src/client.ml:LINE:COL)))                            │
     │Press ENTER or type command to continue                                         │
-    ╰────────────────────────────────────────────────────────────────────────────────╯ |}];
+    ╰────────────────────────────────────────────────────────────────────────────────╯
+    |}];
   Backtrace.elide := false;
   return ()
 ;;

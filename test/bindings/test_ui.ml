@@ -50,7 +50,8 @@ let%expect_test "Simple test of attach, detach, describe_attached_uis" =
        ((ext_cmdline true) (ext_hlstate false) (ext_linegrid false)
         (ext_messages false) (ext_multigrid false) (ext_popupmenu false)
         (ext_tabline true) (ext_termcolors true) (ext_wildmenu false) (rgb true)))))
-    () |}];
+    ()
+    |}];
   return ()
 ;;
 
@@ -95,7 +96,8 @@ let%expect_test "get_screen_contents" =
     │~                                                                               │
     │[No Name]                                                     0,0-1          All│
     │                                                                                │
-    ╰────────────────────────────────────────────────────────────────────────────────╯ |}];
+    ╰────────────────────────────────────────────────────────────────────────────────╯
+    |}];
   return ()
 ;;
 
@@ -175,7 +177,8 @@ let%expect_test "get screen contents multiple times" =
     │~                                                                               │
     │[No Name] [+]                                                 1,12           All│
     │-- INSERT --                                                                    │
-    ╰────────────────────────────────────────────────────────────────────────────────╯ |}];
+    ╰────────────────────────────────────────────────────────────────────────────────╯
+    |}];
   return ()
 ;;
 
@@ -223,7 +226,8 @@ let%expect_test "screen contents after typing hello world" =
     │~                                       │~                                      │
     │[No Name] [+]         1,12           All [No Name] [+]        1,12           All│
     │-- INSERT --                                                                    │
-    ╰────────────────────────────────────────────────────────────────────────────────╯ |}];
+    ╰────────────────────────────────────────────────────────────────────────────────╯
+    |}];
   return ()
 ;;
 
@@ -278,5 +282,6 @@ let%expect_test "timeout occurs" =
     │                                                                                │
     ╰────────────────────────────────────────────────────────────────────────────────╯
     ("ERROR: timeout when looking for value on screen"
-     ("Called from" lib/vcaml/test/bindings/test_ui.ml:2:14)) |}]
+     ("Called from" lib/vcaml/test/bindings/test_ui.ml:2:14))
+    |}]
 ;;

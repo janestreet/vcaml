@@ -121,8 +121,7 @@ let%expect_test "Test the pretty printer" =
   [%expect {| [] |}];
   pp (test_array 9);
   [%expect
-    {|
-    [ "test", "test", "test", "test", "test", "test", "test", "test", "test" ] |}];
+    {| [ "test", "test", "test", "test", "test", "test", "test", "test", "test" ] |}];
   pp (test_array 12);
   [%expect
     {|
@@ -138,7 +137,8 @@ let%expect_test "Test the pretty printer" =
     , "test"
     , "test"
     , "test"
-    ] |}];
+    ]
+    |}];
   pp (Map []);
   [%expect {| {} |}];
   pp (Map [ test_array 12, Bool false; String "hello", Int 10 ]);
@@ -147,7 +147,8 @@ let%expect_test "Test the pretty printer" =
     { [ "test", "test", "test", "test", "test", "test", "test", "test", "test", "test", "test", "test" ]:
           false
     , "hello": 10
-    } |}];
+    }
+    |}];
   pp (Ext { type_id = 0; data = Bytes.of_string "\x41" });
   [%expect {| { "type": 0, "data": "A" } |}];
   pp ~pp_ext (Ext { type_id = 0; data = Bytes.of_string "\x41" });
@@ -201,5 +202,6 @@ let%expect_test "Test the pretty printer" =
           ]
         ]
       ]
-    ] |}]
+    ]
+    |}]
 ;;

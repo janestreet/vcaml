@@ -51,7 +51,8 @@ let%expect_test "create, delete, user_defined_commands" =
          ((name Foobar) (definition "call Foobar(<line1>, <line2>)") (script_id -9)
           (keepscript false) (bang false) (bar false) (register false)
           (nargs At_most_one) (range_or_count ((Range (default All) (of_ Lines))))
-          (completion ((Custom (f CompleteFoobar)))))))) |}];
+          (completion ((Custom (f CompleteFoobar))))))))
+      |}];
     let%bind () = test ~scope:(`Buffer_local Current) in
     [%expect
       {|
@@ -65,7 +66,8 @@ let%expect_test "create, delete, user_defined_commands" =
          ((name Foobar) (definition "call Foobar(<line1>, <line2>)") (script_id -9)
           (keepscript false) (bang false) (bar false) (register false)
           (nargs At_most_one) (range_or_count ((Range (default All) (of_ Lines))))
-          (completion ((Custom (f CompleteFoobar)))))))) |}];
+          (completion ((Custom (f CompleteFoobar))))))))
+      |}];
     return ())
 ;;
 
@@ -119,7 +121,8 @@ let%expect_test "exec" =
     in
     [%expect {|
       9
-      9 |}];
+      9
+      |}];
     Deferred.Or_error.return ())
 ;;
 
@@ -141,7 +144,8 @@ let%expect_test "parse" =
          (noautocmd false) (browse false) (confirm false) (hide false)
          (horizontal false) (vertical false) (split ()) (keepalt false)
          (keepjumps false) (keepmarks false) (keeppatterns false) (lockmarks false)
-         (noswapfile false) (tab ()) (verbose ())))) |}];
+         (noswapfile false) (tab ()) (verbose ()))))
+      |}];
     let%bind () = parse [%here] "confirm write | quit" in
     [%expect
       {|
@@ -153,7 +157,8 @@ let%expect_test "parse" =
          (browse false) (confirm true) (hide false) (horizontal false)
          (vertical false) (split ()) (keepalt false) (keepjumps false)
          (keepmarks false) (keeppatterns false) (lockmarks false)
-         (noswapfile false) (tab ()) (verbose ())))) |}];
+         (noswapfile false) (tab ()) (verbose ()))))
+      |}];
     let%bind () = parse [%here] "3verbose 0tab sp" in
     [%expect
       {|
@@ -165,7 +170,8 @@ let%expect_test "parse" =
          (browse false) (confirm false) (hide false) (horizontal false)
          (vertical false) (split ()) (keepalt false) (keepjumps false)
          (keepmarks false) (keeppatterns false) (lockmarks false)
-         (noswapfile false) (tab (0)) (verbose (3))))) |}];
+         (noswapfile false) (tab (0)) (verbose (3)))))
+      |}];
     let%bind () = parse [%here] "silent! botright sp %" in
     [%expect
       {|
@@ -177,7 +183,8 @@ let%expect_test "parse" =
          (sandbox false) (noautocmd false) (browse false) (confirm false)
          (hide false) (horizontal false) (vertical false) (split (Bottom_right))
          (keepalt false) (keepjumps false) (keepmarks false) (keeppatterns false)
-         (lockmarks false) (noswapfile false) (tab ()) (verbose ())))) |}];
+         (lockmarks false) (noswapfile false) (tab ()) (verbose ()))))
+      |}];
     let%bind () = parse [%here] "3d x" in
     [%expect
       {|
@@ -190,7 +197,8 @@ let%expect_test "parse" =
          (browse false) (confirm false) (hide false) (horizontal false)
          (vertical false) (split ()) (keepalt false) (keepjumps false)
          (keepmarks false) (keeppatterns false) (lockmarks false)
-         (noswapfile false) (tab ()) (verbose ())))) |}];
+         (noswapfile false) (tab ()) (verbose ()))))
+      |}];
     let%bind () =
       Buffer.set_lines
         [%here]
@@ -215,7 +223,8 @@ let%expect_test "parse" =
          (browse false) (confirm false) (hide false) (horizontal false)
          (vertical false) (split ()) (keepalt false) (keepjumps false)
          (keepmarks false) (keeppatterns false) (lockmarks false)
-         (noswapfile false) (tab ()) (verbose ())))) |}];
+         (noswapfile false) (tab ()) (verbose ()))))
+      |}];
     return ())
 ;;
 
@@ -235,7 +244,8 @@ let%expect_test "parse fails for nonexistent command" =
       (("Vim returned error"
         "Error while parsing command line: E492: Not an editor command: nonexistent"
         (error_type Exception))
-       (("Called from" lib/vcaml/test/bindings/test_command.ml:LINE:COL))) |}];
+       (("Called from" lib/vcaml/test/bindings/test_command.ml:LINE:COL)))
+      |}];
     Backtrace.elide := false;
     return (Ok ()))
 ;;
@@ -258,7 +268,8 @@ let%expect_test "parsing doesn't fail for a nonexistent nextcmd" =
          (browse false) (confirm false) (hide false) (horizontal false)
          (vertical false) (split ()) (keepalt false) (keepjumps false)
          (keepmarks false) (keeppatterns false) (lockmarks false)
-         (noswapfile false) (tab ()) (verbose ())))) |}];
+         (noswapfile false) (tab ()) (verbose ()))))
+      |}];
     return (Ok ()))
 ;;
 
@@ -360,7 +371,8 @@ let%expect_test "[range_or_count] interpretation roundtrips in command definitio
       ((expected (-range=0)) (actual (-range=0)))
       ((expected (-range=1)) (actual (-range=1)))
       ((expected (-count=0)) (actual (-count=0)))
-      ((expected (-count=1)) (actual (-count=1))) |}];
+      ((expected (-count=1)) (actual (-count=1)))
+      |}];
     let test_ill_defined_case ~attr1 ~attr2 =
       let%bind () =
         Command.exec
@@ -394,7 +406,8 @@ let%expect_test "[range_or_count] interpretation roundtrips in command definitio
       ((expected ("-count -range")) (actual (-count=0)))
       ((expected ("-count=1 -range")) (actual (-count=1)))
       ((expected ("-count -range=%")) (actual (-count=0)))
-      ((expected ("-count=1 -range=%")) (actual (-count=1))) |}];
+      ((expected ("-count=1 -range=%")) (actual (-count=1)))
+      |}];
     return ())
 ;;
 
@@ -774,7 +787,8 @@ let%expect_test "Compare native command invocations with range/count against str
        (native_exec "Vim:E481: No range allowed: 2,5Foo"))
       ((input ((range (2 5)) (arg 11)))
        (parse "Error while parsing command line: E481: No range allowed")
-       (native_exec "Vim:E481: No range allowed: 2,5Foo11")) |}];
+       (native_exec "Vim:E481: No range allowed: 2,5Foo11"))
+      |}];
     let%bind () = test ~attrs:[ "-range" ] in
     [%expect
       {|
@@ -794,7 +808,8 @@ let%expect_test "Compare native command invocations with range/count against str
       ((input ((range (2 5)) (arg 11)))
        (parse ((range_or_count (Range (2 5))) (args (11))))
        (parse_exec "Wrong number of arguments")
-       (native_exec "Vim:E488: Trailing characters: 11: 2,5Foo11")) |}];
+       (native_exec "Vim:E488: Trailing characters: 11: 2,5Foo11"))
+      |}];
     let%bind () = test ~attrs:[ "-range=%" ] in
     [%expect
       {|
@@ -814,7 +829,8 @@ let%expect_test "Compare native command invocations with range/count against str
       ((input ((range (2 5)) (arg 11)))
        (parse ((range_or_count (Range (2 5))) (args (11))))
        (parse_exec "Wrong number of arguments")
-       (native_exec "Vim:E488: Trailing characters: 11: 2,5Foo11")) |}];
+       (native_exec "Vim:E488: Trailing characters: 11: 2,5Foo11"))
+      |}];
     let%bind () = test ~attrs:[ "-range=10" ] in
     (* The [(range (2 5))] input isn't valid, but there's no logic in Neovim or in VCaml
        that checks this, and both native and structured exec have the same behavior. *)
@@ -836,7 +852,8 @@ let%expect_test "Compare native command invocations with range/count against str
       ((input ((range (2 5)) (arg 11)))
        (parse ((range_or_count (Range (2 5))) (args (11))))
        (parse_exec "Wrong number of arguments")
-       (native_exec "Vim:E488: Trailing characters: 11: 2,5Foo11")) |}];
+       (native_exec "Vim:E488: Trailing characters: 11: 2,5Foo11"))
+      |}];
     let%bind () = test ~attrs:[ "-count=10" ] in
     (* The [(range (2 5))], [(range 2) (arg 5)], and [(range (2 5)) (arg 11)] inputs
        aren't valid, but again, there's no logic in Neovim or in VCaml that checks this.
@@ -870,7 +887,8 @@ let%expect_test "Compare native command invocations with range/count against str
       ((input ((range (2 5)))) (parse ((range_or_count (Range (2 5)))))
        (exec ((line1 2) (line2 5) (range 2) (count 5))))
       ((input ((range (2 5)) (arg 11))) (parse ((range_or_count (Range (2 11)))))
-       (exec ((line1 2) (line2 11) (range 2) (count 11)))) |}];
+       (exec ((line1 2) (line2 11) (range 2) (count 11))))
+      |}];
     let%bind () = test ~attrs:[ "-range"; "-count=10" ] in
     [%expect
       {|
@@ -895,7 +913,8 @@ let%expect_test "Compare native command invocations with range/count against str
       ((input ((range (2 5)) (arg 11))) (parse ((range_or_count (Range (5 15)))))
        (parse_exec_faithful ((line1 5) (line2 15) (range 2) (count 15)))
        (native_exec ((line1 5) (line2 15) (range 3) (count 15)))
-       (inconsistency_in (Neovim))) |}];
+       (inconsistency_in (Neovim)))
+      |}];
     let%bind () = test ~attrs:[ "-range=%"; "-count=10" ] in
     [%expect
       {|
@@ -917,7 +936,8 @@ let%expect_test "Compare native command invocations with range/count against str
       ((input ((range (2 5)) (arg 11))) (parse ((range_or_count (Range (5 15)))))
        (parse_exec_faithful ((line1 5) (line2 15) (range 2) (count 15)))
        (native_exec ((line1 5) (line2 15) (range 3) (count 15)))
-       (inconsistency_in (Neovim))) |}];
+       (inconsistency_in (Neovim)))
+      |}];
     let%bind () = test ~attrs:[ "-count=10"; "-range" ] in
     (* The VCaml inconsistency here is the same as in the [-count=10] case. *)
     [%expect
@@ -940,7 +960,8 @@ let%expect_test "Compare native command invocations with range/count against str
       ((input ((range (2 5)))) (parse ((range_or_count (Range (2 5)))))
        (exec ((line1 2) (line2 5) (range 2) (count 5))))
       ((input ((range (2 5)) (arg 11))) (parse ((range_or_count (Range (2 11)))))
-       (exec ((line1 2) (line2 11) (range 2) (count 11)))) |}];
+       (exec ((line1 2) (line2 11) (range 2) (count 11))))
+      |}];
     let%bind () = test ~attrs:[ "-count=10"; "-range=%" ] in
     (* The VCaml inconsistency here is the same as in the [-count=10] case. *)
     [%expect
@@ -963,6 +984,7 @@ let%expect_test "Compare native command invocations with range/count against str
       ((input ((range (2 5)))) (parse ((range_or_count (Range (2 5)))))
        (exec ((line1 2) (line2 5) (range 2) (count 5))))
       ((input ((range (2 5)) (arg 11))) (parse ((range_or_count (Range (2 11)))))
-       (exec ((line1 2) (line2 11) (range 2) (count 11)))) |}];
+       (exec ((line1 2) (line2 11) (range 2) (count 11))))
+      |}];
     Deferred.Or_error.return ())
 ;;

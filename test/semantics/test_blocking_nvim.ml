@@ -45,7 +45,8 @@ let%expect_test "Client given to synchronous callback cannot be used outside cal
       (Error
        ("Called Neovim with an expired client. This probably happened because a reference to the client persisted beyond the scope of the callback. The client is not allowed to escape its context, but OCaml's type system cannot prevent it."
         (("Called from" lib/vcaml/test/semantics/test_blocking_nvim.ml:LINE:COL))))))
-    ("Asynchronous client succeeds" (result (Ok ()))) |}];
+    ("Asynchronous client succeeds" (result (Ok ())))
+    |}];
   Backtrace.elide := false;
   return ()
 ;;
@@ -74,7 +75,8 @@ let%expect_test "Client given to [block_nvim] cannot be used outside callback" =
       (Error
        ("Called Neovim with an expired client. This probably happened because a reference to the client persisted beyond the scope of the callback. The client is not allowed to escape its context, but OCaml's type system cannot prevent it."
         (("Called from" lib/vcaml/test/semantics/test_blocking_nvim.ml:LINE:COL))))))
-    ("Asynchronous client succeeds" (result (Ok ()))) |}];
+    ("Asynchronous client succeeds" (result (Ok ())))
+    |}];
   Backtrace.elide := false;
   return ()
 ;;
@@ -133,7 +135,8 @@ let%expect_test "Jobs started with async client or with [run_in_background] wait
     ("Job status" (async_client_job ()) (background_client_job ()))
     Done handling blocking request.
     Running in background.
-    ("Job status" (async_client_job ((Ok ()))) (background_client_job ((Ok ())))) |}];
+    ("Job status" (async_client_job ((Ok ()))) (background_client_job ((Ok ()))))
+    |}];
   return ()
 ;;
 
@@ -213,7 +216,8 @@ let%expect_test "Jobs started with async client wait until after [block_nvim] to
   [%expect
     {|
     ("Job status" (async_client_job ()))
-    ("Job status" (async_client_job ((Ok ())))) |}];
+    ("Job status" (async_client_job ((Ok ()))))
+    |}];
   return ()
 ;;
 
@@ -273,7 +277,7 @@ let%expect_test "[block_nvim] does not run until it has permission" =
       in
       List.init 10 ~f:(fun _ -> block ()) |> Deferred.Or_error.all_unit)
   in
-  [%expect {||}];
+  [%expect {| |}];
   return ()
 ;;
 
@@ -323,7 +327,7 @@ let%expect_test "Simultaneous requests are sequenced." =
              Deferred.Or_error.error_s
                [%message "Out-of-order RPC calls" (trial : int) ~_:(calls : int list)])))
   in
-  [%expect {||}];
+  [%expect {| |}];
   return ()
 ;;
 
@@ -399,7 +403,7 @@ let%expect_test "Nested calls that all return at the same time does not cause co
   (* There's some verbose output that follows [with_client] on connection close, and we
      want to avoid emitting that in the successful case. *)
   if !succeeded then ignore ([%expect.output] : string);
-  [%expect {||}];
+  [%expect {| |}];
   return ()
 ;;
 
@@ -853,8 +857,9 @@ let%expect_test "Simple tests of running specifications" =
   [%expect {| () |}];
   let%bind () = test (call ~await:true [ Log; Log ]) in
   [%expect {|
-       (1)
-       (1) |}];
+    (1)
+    (1)
+    |}];
   let%bind () = test (Parallel [ Log ]) in
   [%expect {| () |}];
   let%bind () =
@@ -863,15 +868,16 @@ let%expect_test "Simple tests of running specifications" =
   in
   [%expect
     {|
-      (1 1)
-      (1 1)
-      (1 1)
-      (1 2)
-      (1 2)
-      (1 2)
-      (1 3)
-      (1 3)
-      (1 3) |}];
+    (1 1)
+    (1 1)
+    (1 1)
+    (1 2)
+    (1 2)
+    (1 2)
+    (1 3)
+    (1 3)
+    (1 3)
+    |}];
   return ()
 ;;
 
@@ -919,7 +925,7 @@ let%expect_test "Regression test: need to re-flush before invoking RPC" =
              }
          ])
   in
-  [%expect {||}];
+  [%expect {| |}];
   return ()
 ;;
 
@@ -1003,7 +1009,8 @@ let%expect_test "Demonstrate disconnect induced by sleep" =
 
     -----  NVIM_LOG_FILE  -----
     ERR TIMESTAMP socket     chan_close_with_error:LINE: RPC: ch 1 returned a response with an unknown request id. Ensure the client is properly synchronized
-    --------------------------- |}];
+    ---------------------------
+    |}];
   Backtrace.elide := false;
   Private.before_sending_response_hook_for_tests := None;
   return ()
@@ -1054,7 +1061,8 @@ let%expect_test "Demonstrate interleaving bug induced by sleep" =
       "Invalid event ordering" (
         (1)
         (2)
-        (1)))) |}];
+        (1))))
+    |}];
   return ()
 ;;
 
@@ -1101,6 +1109,6 @@ let%expect_test "Quickcheck tests of running specifications" =
     | true -> run ()
     | false -> return ()
   in
-  [%expect {||}];
+  [%expect {| |}];
   return ()
 ;;

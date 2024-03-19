@@ -782,20 +782,22 @@ open struct
     print_s [%sexp (test () : Error.t)];
     [%expect
       {|
-    ("error message"
-     (("Called from" lib/vcaml/src/client.ml:3:16)
-      ("Called from" lib/vcaml/src/client.ml:4:16)
-      ("Called from" lib/vcaml/src/client.ml:5:16)
-      ("Called from" lib/vcaml/src/client.ml:6:16))) |}];
+      ("error message"
+       (("Called from" lib/vcaml/src/client.ml:3:16)
+        ("Called from" lib/vcaml/src/client.ml:4:16)
+        ("Called from" lib/vcaml/src/client.ml:5:16)
+        ("Called from" lib/vcaml/src/client.ml:6:16)))
+      |}];
     Backtrace.elide := true;
     print_s [%sexp (test () : Error.t)];
     [%expect
       {|
-    ("error message"
-     (("Called from" lib/vcaml/src/client.ml:LINE:COL)
-      ("Called from" lib/vcaml/src/client.ml:LINE:COL)
-      ("Called from" lib/vcaml/src/client.ml:LINE:COL)
-      ("Called from" lib/vcaml/src/client.ml:LINE:COL))) |}];
+      ("error message"
+       (("Called from" lib/vcaml/src/client.ml:LINE:COL)
+        ("Called from" lib/vcaml/src/client.ml:LINE:COL)
+        ("Called from" lib/vcaml/src/client.ml:LINE:COL)
+        ("Called from" lib/vcaml/src/client.ml:LINE:COL)))
+      |}];
     Backtrace.elide := original_bt;
     return ()
   ;;

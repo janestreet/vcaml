@@ -79,8 +79,7 @@ let%expect_test "command, list_bufs, Buffer.get_name" =
       in
       print_s [%message (buffers : Buffer.t list) (buffer_names : string list)])
   in
-  [%expect {|
-    ((buffers (1 2 3)) (buffer_names (foo.txt bar.txt baz.txt)))|}];
+  [%expect {| ((buffers (1 2 3)) (buffer_names (foo.txt bar.txt baz.txt))) |}];
   return ()
 ;;
 
@@ -163,7 +162,8 @@ let%expect_test "set_client_info" =
          (((major (1)) (minor (2)) (patch (3)) (prerelease (test_prerelease))
            (commit (test_commit)))))
         (client_type (Embedder)) (methods ((test_method ((async (false))))))
-        (attributes ((attr1 val1)))))))|}];
+        (attributes ((attr1 val1)))))))
+    |}];
   return ()
 ;;
 
@@ -267,7 +267,8 @@ let%expect_test "get_color_by_name" =
   in
   [%expect {|
     #f0f8ff
-    #f0f8ff |}];
+    #f0f8ff
+    |}];
   return ()
 ;;
 
@@ -474,7 +475,8 @@ let%expect_test "color_map" =
      (Wheat3 #cdba96) (Wheat4 #8b7e66) (White #ffffff) (WhiteSmoke #f5f5f5)
      (X11Gray #bebebe) (X11Green #00ff00) (X11Grey #bebebe) (X11Maroon #b03060)
      (X11Purple #a020f0) (Yellow #ffff00) (Yellow1 #ffff00) (Yellow2 #eeee00)
-     (Yellow3 #cdcd00) (Yellow4 #8b8b00) (YellowGreen #9acd32)) |}];
+     (Yellow3 #cdcd00) (Yellow4 #8b8b00) (YellowGreen #9acd32))
+    |}];
   return ()
 ;;
 
@@ -497,7 +499,8 @@ let%expect_test "get_hl_by_name" =
   [%expect
     {|
     ((color256 ((fg (15)) (bg (1))))
-     (true_color ((fg (#ffffff)) (bg (#ff0000))))) |}];
+     (true_color ((fg (#ffffff)) (bg (#ff0000)))))
+    |}];
   return ()
 ;;
 
@@ -519,7 +522,8 @@ let%expect_test "get_hl_id_by_name, get_hl_by_id" =
   [%expect
     {|
     ((color256 ((fg (15)) (bg (1))))
-     (true_color ((fg (#ffffff)) (bg (#ff0000))))) |}];
+     (true_color ((fg (#ffffff)) (bg (#ff0000)))))
+    |}];
   return ()
 ;;
 
@@ -589,10 +593,11 @@ let%expect_test "Check that all modes documented in the help are covered by [Mod
       print_s [%message "Removed modes" ~_:(removed_modes : Mode.Set.t)];
       [%expect {|
         ("New modes" ())
-        ("Removed modes" ()) |}];
+        ("Removed modes" ())
+        |}];
       return ())
   in
-  [%expect {||}];
+  [%expect {| |}];
   return ()
 ;;
 
@@ -641,10 +646,11 @@ let%expect_test "get_var, set_var, delete_var" =
   Backtrace.elide := false;
   [%expect
     {|
-  (Ok true)
-  (Error
-   (("Vim returned error" "Key not found: foo" (error_type Validation))
-    (("Called from" lib/vcaml/test/bindings/test_nvim.ml:LINE:COL)))) |}];
+    (Ok true)
+    (Error
+     (("Vim returned error" "Key not found: foo" (error_type Validation))
+      (("Called from" lib/vcaml/test/bindings/test_nvim.ml:LINE:COL))))
+    |}];
   return ()
 ;;
 
@@ -662,8 +668,9 @@ let%expect_test "get_vvar, set_vvar" =
   in
   Backtrace.elide := false;
   [%expect {|
-  (Ok true)
-  (Ok false) |}];
+    (Ok true)
+    (Ok false)
+    |}];
   return ()
 ;;
 
@@ -689,7 +696,8 @@ let%expect_test "get_current_line, set_current_line, delete_current_line" =
     let%bind () = print_lines () in
     [%expect {|
       foo
-      bar |}];
+      bar
+      |}];
     let%bind current_line = Nvim.get_current_line [%here] client in
     print_endline (current_line :> string);
     [%expect {| foo |}];
@@ -697,7 +705,8 @@ let%expect_test "get_current_line, set_current_line, delete_current_line" =
     let%bind () = print_lines () in
     [%expect {|
       baz
-      bar |}];
+      bar
+      |}];
     let%bind () = Nvim.delete_current_line [%here] client in
     let%bind () = print_lines () in
     [%expect {| bar |}];
@@ -756,7 +765,8 @@ let%expect_test "get_context, load_context" =
     [%expect
       {|
       ((Jumplist _) (Registers _) (Buffer_list _) (Global_variables _)
-       (Global_and_script_local_functions _)) |}];
+       (Global_and_script_local_functions _))
+      |}];
     let%bind () = Nvim.load_context [%here] client context in
     return ())
 ;;
@@ -834,16 +844,17 @@ let%expect_test "[get_mode] and [input]" =
   in
   [%expect
     {|
-      (g ((mode Normal) (blocking true)))
-      (<Esc> ((mode Normal) (blocking false)))
-      (itest ((mode Insert) (blocking false)))
-      (<C-o> ((mode Normal_using_i_ctrl_o_in_insert_mode) (blocking false)))
-      (<Esc> ((mode Insert) (blocking false)))
-      (<Esc>r ((mode Replace) (blocking true)))
-      (<Esc>V ((mode Visual_by_line) (blocking false)))
-      (<Esc><C-v> ((mode Visual_blockwise) (blocking false)))
-      (<Esc>gR ((mode Virtual_replace) (blocking false)))
-      (<Esc>: ((mode Command_line_editing) (blocking false))) |}];
+    (g ((mode Normal) (blocking true)))
+    (<Esc> ((mode Normal) (blocking false)))
+    (itest ((mode Insert) (blocking false)))
+    (<C-o> ((mode Normal_using_i_ctrl_o_in_insert_mode) (blocking false)))
+    (<Esc> ((mode Insert) (blocking false)))
+    (<Esc>r ((mode Replace) (blocking true)))
+    (<Esc>V ((mode Visual_by_line) (blocking false)))
+    (<Esc><C-v> ((mode Visual_blockwise) (blocking false)))
+    (<Esc>gR ((mode Virtual_replace) (blocking false)))
+    (<Esc>: ((mode Command_line_editing) (blocking false)))
+    |}];
   return ()
 ;;
 
@@ -861,8 +872,9 @@ let%expect_test "[paste]" =
       return ())
   in
   [%expect {|
-      (lines (hello world!))
-      (cursor_pos ((row 2) (col 5))) |}];
+    (lines (hello world!))
+    (cursor_pos ((row 2) (col 5)))
+    |}];
   return ()
 ;;
 
@@ -884,8 +896,9 @@ let%expect_test "[paste_stream]" =
       return ())
   in
   [%expect {|
-      (lines (hello world!))
-      (cursor_pos ((row 2) (col 5))) |}];
+    (lines (hello world!))
+    (cursor_pos ((row 2) (col 5)))
+    |}];
   return ()
 ;;
 
@@ -927,9 +940,10 @@ let%expect_test "API calls work while a [paste_stream] is open" =
       return ())
   in
   [%expect {|
-      (hello "")
-      ("Switched buffers!" (buffer 2))
-      (world!) |}];
+    (hello "")
+    ("Switched buffers!" (buffer 2))
+    (world!)
+    |}];
   return ()
 ;;
 
@@ -988,7 +1002,8 @@ let%expect_test "put" =
       │~                                                                               │
       │[No Name] [+]                                                 3,0-1          All│
       │                                                                                │
-      ╰────────────────────────────────────────────────────────────────────────────────╯ |}];
+      ╰────────────────────────────────────────────────────────────────────────────────╯
+      |}];
     let%bind () = Command.exec [%here] client ~bang:true "normal" ~args:[ "k" ] in
     let%bind () =
       put_and_print
@@ -1031,7 +1046,8 @@ let%expect_test "put" =
       │~                                                                               │
       │[No Name] [+]                                                 2,1            All│
       │                                                                                │
-      ╰────────────────────────────────────────────────────────────────────────────────╯ |}];
+      ╰────────────────────────────────────────────────────────────────────────────────╯
+      |}];
     return ())
 ;;
 
@@ -1058,11 +1074,12 @@ let%expect_test "eval_tabline, input_mouse" =
     print_s [%sexp (tabline : Nvim.Tabline.t)];
     [%expect
       {|
-        ((text "tab0 tab1 tab2") (display_width 14)
-         (highlights
-          ((((text tab0) (hl_group (TabLine))) ((text " ") (hl_group (TabLineFill)))
-            ((text tab1) (hl_group (TabLineSel)))
-            ((text " ") (hl_group (TabLineFill))) ((text tab2) (hl_group (TabLine))))))) |}];
+      ((text "tab0 tab1 tab2") (display_width 14)
+       (highlights
+        ((((text tab0) (hl_group (TabLine))) ((text " ") (hl_group (TabLineFill)))
+          ((text tab1) (hl_group (TabLineSel)))
+          ((text " ") (hl_group (TabLineFill))) ((text tab2) (hl_group (TabLine)))))))
+      |}];
     let%bind current_tab = Nvim.get_current_tab [%here] client in
     print_s [%sexp (current_tab : Tabpage.t)];
     [%expect {| 2 |}];
@@ -1099,15 +1116,14 @@ let%expect_test "set_current_dir" =
     [%expect
       {|
       ((local_dir ${TMPDIR}/global/tab/window) (tab_dir ${TMPDIR}/global/tab)
-       (global_dir ${TMPDIR}/global)) |}];
+       (global_dir ${TMPDIR}/global))
+      |}];
     let%bind () =
       let%bind cwd = Unix.getcwd () |> Deferred.ok in
       Nvim.set_current_dir [%here] client cwd
     in
     let%bind () = print_dirs () in
-    [%expect
-      {|
-      ((local_dir ${TMPDIR}) (tab_dir ${TMPDIR}) (global_dir ${TMPDIR})) |}];
+    [%expect {| ((local_dir ${TMPDIR}) (tab_dir ${TMPDIR}) (global_dir ${TMPDIR})) |}];
     return ())
 ;;
 
@@ -1132,6 +1148,7 @@ let%expect_test "find_runtime_file_matching, all_runtime_files_matching" =
     [%expect
       {|
       (ftplugin/query.lua indent/query.lua lua/vim/treesitter/query.lua
-       syntax/query.lua) |}];
+       syntax/query.lua)
+      |}];
     return ())
 ;;

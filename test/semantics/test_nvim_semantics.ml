@@ -78,7 +78,8 @@ let%expect_test "[rpcrequest] blocks other channels" =
       "Blocking nvim (client1)"
       "Unblocking nvim (client1)"
       (Ok "Client 2 is unblocked")
-      ("nvim exited" (exit_or_signal (Ok ()))) |}];
+      ("nvim exited" (exit_or_signal (Ok ())))
+      |}];
     return ())
 ;;
 
@@ -209,7 +210,8 @@ let%expect_test "Plugin dying during [rpcrequest] does not bring down Neovim" =
       {|
       ("child exited" (exit_or_signal (Ok ())))
       (Ok "nvim is still running")
-      ("nvim exited" (exit_or_signal (Ok ()))) |}];
+      ("nvim exited" (exit_or_signal (Ok ())))
+      |}];
     return ())
 ;;
 

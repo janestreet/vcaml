@@ -21,7 +21,8 @@ let%expect_test "initial event received" =
     {|
     (event
      (Lines (changedtick (2)) (firstline 0) (lastline -1) (linedata (""))
-      (more false))) |}];
+      (more false)))
+    |}];
   return ()
 ;;
 
@@ -40,7 +41,8 @@ let%expect_test "events for some edits" =
       (more false)))
     (event
      (Lines (changedtick (4)) (firstline 1) (lastline 2)
-      (linedata ("hello, world!")) (more false))) |}];
+      (linedata ("hello, world!")) (more false)))
+    |}];
   return ()
 ;;
 
@@ -69,7 +71,8 @@ let%expect_test "feedkeys, get_lines, events for those edits" =
     (event
      (Lines (changedtick (5)) (firstline 1) (lastline 2) (linedata (world))
       (more false)))
-    (lines ((value (hello world)) (changedtick 5)))|}];
+    (lines ((value (hello world)) (changedtick 5)))
+    |}];
   return ()
 ;;
 
@@ -101,7 +104,8 @@ let%expect_test "set_lines, events for those edits" =
     (event
      (Lines (changedtick (3)) (firstline 0) (lastline 1)
       (linedata (this is an edit)) (more false)))
-    (lines ((value (this is an edit)) (changedtick 3)))|}];
+    (lines ((value (this is an edit)) (changedtick 3)))
+    |}];
   return ()
 ;;
 
@@ -170,7 +174,8 @@ let%expect_test "changedtick, get_text, set_text" =
        (index_of_failure 0) (error_type Exception)
        "nvim_exec2(): Vim(echoerr):Buffer updated since changedtick (wanted 2 but is now 3)")
       (("Called from" lib/vcaml/test/bindings/test_buffer.ml:LINE:COL))))
-    ((value (test)) (changedtick 3))|}];
+    ((value (test)) (changedtick 3))
+    |}];
   Backtrace.elide := false;
   return ()
 ;;
@@ -185,7 +190,7 @@ let%expect_test "create, set_name, get_name" =
       print_s [%message (buffer : Buffer.t) (name : string)];
       return ())
   in
-  [%expect {| ((buffer 2) (name ${TMPDIR}/foobar))|}];
+  [%expect {| ((buffer 2) (name ${TMPDIR}/foobar)) |}];
   return ()
 ;;
 
@@ -204,8 +209,7 @@ let%expect_test "find_by_name_or_create no name prefixes" =
         [%message (original_buf : Buffer.t) (new_buf : Buffer.t) (found_buf : Buffer.t)];
       return ())
   in
-  [%expect {|
-         ((original_buf 1) (new_buf 2) (found_buf 1))|}];
+  [%expect {| ((original_buf 1) (new_buf 2) (found_buf 1)) |}];
   return ()
 ;;
 
@@ -240,8 +244,7 @@ let%expect_test "find_by_name_or_create buffers with weird characters" =
             (buf_with_quotes : Buffer.t)];
       return ())
   in
-  [%expect {|
-    ((buf_with_whitespace 2) (buf_with_slash 3) (buf_with_quotes 4)) |}];
+  [%expect {| ((buf_with_whitespace 2) (buf_with_slash 3) (buf_with_quotes 4)) |}];
   return ()
 ;;
 
@@ -356,7 +359,8 @@ let%expect_test "get_mark, set_mark, delete_mark" =
     ((value ((sym m) (pos ((row 1) (col 0))))) (changedtick 5))
     (Error
      (("Mark not set in buffer" (buffer Current) (sym m))
-      (msgpack (Array ((Int 0) (Int 0)))))) |}];
+      (msgpack (Array ((Int 0) (Int 0))))))
+    |}];
   return ()
 ;;
 
@@ -376,10 +380,11 @@ let%expect_test "get_var, set_var, delete_var" =
   Backtrace.elide := false;
   [%expect
     {|
-  (Ok true)
-  (Error
-   (("Vim returned error" "Key not found: foo" (error_type Validation))
-    (("Called from" lib/vcaml/test/bindings/test_buffer.ml:LINE:COL)))) |}];
+    (Ok true)
+    (Error
+     (("Vim returned error" "Key not found: foo" (error_type Validation))
+      (("Called from" lib/vcaml/test/bindings/test_buffer.ml:LINE:COL))))
+    |}];
   return ()
 ;;
 
@@ -417,7 +422,8 @@ let%expect_test "unload and wipeout semantics (also exists, loaded)" =
       {|
       (Error
        (("Vim returned error" "Failed to unload buffer." (error_type Exception))
-        (("Called from" lib/vcaml/test/bindings/test_buffer.ml:LINE:COL)))) |}];
+        (("Called from" lib/vcaml/test/bindings/test_buffer.ml:LINE:COL))))
+      |}];
     let%bind () = test Buffer.unload ~even_if_modified:true in
     [%expect {| (Ok ((before Loaded) (after Unloaded))) |}];
     let%bind () = test Buffer.wipeout ~even_if_modified:false in
@@ -425,7 +431,8 @@ let%expect_test "unload and wipeout semantics (also exists, loaded)" =
       {|
       (Error
        (("Vim returned error" "Failed to unload buffer." (error_type Exception))
-        (("Called from" lib/vcaml/test/bindings/test_buffer.ml:LINE:COL)))) |}];
+        (("Called from" lib/vcaml/test/bindings/test_buffer.ml:LINE:COL))))
+      |}];
     let%bind () = test Buffer.wipeout ~even_if_modified:true in
     [%expect {| (Ok ((before Loaded) (after Invalid))) |}];
     Backtrace.elide := false;
@@ -458,7 +465,8 @@ let%expect_test "line_count, get_byte_offset_of_line" =
     [%expect
       {|
       ((line_count ((value 2) (changedtick 3)))
-       (line2_offset ((value 4) (changedtick 3)))) |}];
+       (line2_offset ((value 4) (changedtick 3))))
+      |}];
     return ())
 ;;
 
@@ -512,7 +520,8 @@ let%expect_test "open_term, Nvim.send_to_channel" =
       │[Scratch]                                                     1,1            All│
       │                                                                                │
       ╰────────────────────────────────────────────────────────────────────────────────╯
-      (Ok ()) |}];
+      (Ok ())
+      |}];
     Deferred.Or_error.return ())
 ;;
 
@@ -549,7 +558,8 @@ let%expect_test "Extmark indexing" =
         ((((row 0) (col 4))
           ((end_col (Int 1)) (end_right_gravity (Bool false)) (end_row (Int 1))
            (ns_id (Int 1)) (right_gravity (Bool true))))))
-       (changedtick 5)) |}];
+       (changedtick 5))
+      |}];
     let%bind result =
       Buffer.Untested.all_extmarks
         [%here]
@@ -595,8 +605,7 @@ let%expect_test "Subscribing twice to the same buffer fails" =
         let%bind (_ : _ Pipe.Reader.t) = Buffer.subscribe [%here] client Current in
         return ()))
   in
-  [%expect {|
-    ("Already subscribed to buffer" (buffer 1)) |}];
+  [%expect {| ("Already subscribed to buffer" (buffer 1)) |}];
   return ()
 ;;
 
@@ -609,8 +618,7 @@ let%expect_test "Racing subscriptions to the same buffer fail" =
         and (_ : _ Pipe.Reader.t) = Buffer.subscribe [%here] client Current in
         return ()))
   in
-  [%expect {|
-    ("Already subscribed to buffer" (buffer 1)) |}];
+  [%expect {| ("Already subscribed to buffer" (buffer 1)) |}];
   return ()
 ;;
 
@@ -623,7 +631,7 @@ let%expect_test "Resubscribing to a buffer succeeds" =
       let%bind (_ : _ Pipe.Reader.t) = Buffer.subscribe [%here] client Current in
       return ())
   in
-  [%expect {||}];
+  [%expect {| |}];
   return ()
 ;;
 
@@ -645,8 +653,7 @@ let%expect_test "Racing resubscriptions to the same buffer fail" =
         and (_ : _ Pipe.Reader.t) = Buffer.subscribe [%here] client (Id buf) in
         return ()))
   in
-  [%expect {|
-    ("Already subscribing to buffer" (buffer 1)) |}];
+  [%expect {| ("Already subscribing to buffer" (buffer 1)) |}];
   return ()
 ;;
 

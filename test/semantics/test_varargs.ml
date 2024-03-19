@@ -118,6 +118,7 @@ let%expect_test "Varargs (async)" =
     {|
     ((name abs) (args ((Int -1))))
     ((name stridx) (args ((String "hello, world") (String world))))
-    (Result Done!) |}];
+    (Result Done!)
+    |}];
   return ()
 ;;

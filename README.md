@@ -63,27 +63,71 @@ tests. They take care of spawning an embedded Neovim instance during the test so
 just write logic with a connected VCaml client. See the plugin tests in plugin/example for
 example usage.
 
-# Additional debugging tools
+# Debugging VCaml plugins
 
-## Debugging Process Communication
+There are a number of different methods and tools for debugging VCaml programs. Here's a
+brief guide to the available options.
 
-In the ./debug/bin directory there is a binary for debugging interaction between two
+## Print debugging
+
+### Printing to Neovim's message history
+The simplest way to log messages is to call one of the Neovim API functions for writing
+output, e.g., `Nvim.err_writeln`. However, this won't work well in the case where you are
+trying to debug a blocking request that is not completing, since you won't be able to
+access the message log while your Neovim instance is blocked.
+
+### Printing to stderr
+Another option is to write to stderr. Here's a Lua chunk you can use that will consume
+from stderr and write lines to a log file:
+
+```lua
+local logfile, error_msg = io.open(path_to_your_log_file, "a")
+if not logfile then
+  error("Failed to open logfile: " .. error_msg)
+end
+
+local opts = {}
+
+function opts.on_stderr(_, data)
+  logfile:write(table.concat(data, "\n"))
+  logfile:flush()
+end
+
+function opts.on_exit(_, exit_code)
+  logfile:write("Exited with code " .. exit_code)
+  logfile:close()
+end
+
+vim.fn.jobstart({ path_to_your_vcaml_exe }, opts)
+```
+Note that you'll need to capture stderr to diagnose crashes. Also note that while writing
+to stdout or stderr work equally well in "persistent" plugins, only stderr can be used to
+debug "oneshot" plugins since stdio is used for Msgpack RPC.
+
+## Debugging communication between Neovim and VCaml
+
+Sometimes print debugging doesn't cut it, and you need to actually observe the traffic
+between your plugin and Neovim.
+
+### Debugging Your Plugin
+
+In the `./debug/bin` directory there is a binary for debugging interaction between two
 Msgpack RPC peers. It has modes for debugging communication both over stdio and over unix
-domain sockets. See the CLI help for usage information.
+domain sockets. You can use this to observe traffic between Neovim and your plugin. See
+the CLI help for usage information.
 
-## Manual RPC Interaction (REPL)
+### Debugging Your Test
 
-If you want to experiment with Neovim's semantics, it's often more effective to construct
-and send RPC messages manually. If you don't need any code for your experiment, you can
-just do this with two vim instances. Get the server name from the target vim instance by
-running `:echo v:servername` (you can also do `:let @+ = v:servername` to copy the name
-directly into your clipboard). Then in the instance you're using for debugging, run
-`let socket = sockconnect("pipe", "servername", { "rpc": 1 })` where "servername" is the
-servername you copied. Now just use `rpcrequest` and `rpcnotify` with that socket.
+If you're trying to write a test for your plugin and the test is not behaving as expected,
+you can inspect the traffic between your plugin and Neovim by passing `~verbose:true` to
+the test helper function you're using.
 
-You can also manually drive Neovim from the OCaml top-level using the `vcaml.debug`
-library. Build the top-level for `vcaml.debug` and follow along below. For `socket`, use
-the servername copied from Neovim.
+### Debugging Neovim
+
+You can manually drive Neovim from the OCaml top-level using the `vcaml.debug` library.
+Build the top-level for `vcaml.debug` and follow along below. To get the appropriate value
+for `socket`, run `:let @+ = v:servername` in the target Neovim instance to copy its
+servername to your clipboard.
 
 <!-- Set up the example
 ```ocaml
@@ -95,10 +139,10 @@ let socket = Vcaml_readme.socket example;;
 ```ocaml
 # module V = Vcaml_debug.Toplevel_client
 module V = Vcaml_debug.Toplevel_client
-# #install_printer V.pp
+# #install_printer V.pp (* Improve styling of traffic printing. *)
 # let nvim = V.open_ socket
 val nvim : V.t = <abstr>
-# V.verbose nvim true
+# V.verbose nvim true (* Enable traffic printing for this connection. *)
 - : unit = ()
 # V.request nvim "nvim_exec2" [ String "echo 'hi'"; Map [] ]
 OCaml -> Nvim:
@@ -127,3 +171,9 @@ OCaml -> Nvim: [ 0, 3, "nvim_exec2", [ "quit", {} ] ]
 Vcaml_readme.teardown example;;
 ```
 -->
+
+If you don't care to see traffic or drive Neovim from OCaml, an often more convenient
+approach to debugging Neovim is to drive it from a second Neovim instance. Copy the target
+Neovim's servername as before, and in the instance you're using for debugging, run
+`let socket = sockconnect("pipe", "servername", { "rpc": 1 })` where "servername" is the
+servername you copied. Now just use `rpcrequest` and `rpcnotify` with that socket.

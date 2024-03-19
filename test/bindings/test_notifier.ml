@@ -38,8 +38,7 @@ let%expect_test "Simple asynchronous notification" =
   in
   let%bind result = with_timeout (Time_float.Span.of_int_sec 3) result in
   print_s [%sexp (result : [ `Result of string | `Timeout ])];
-  [%expect {|
-    (Result Called!) |}];
+  [%expect {| (Result Called!) |}];
   return ()
 ;;
 
@@ -69,6 +68,7 @@ let%expect_test "Bad asynchronous notification" =
     (Nvim_error_event
      ((error_type Exception)
       (message "Vim:E117: Unknown function: bad-function")))
-    (Result "Received asynchronous failure message") |}];
+    (Result "Received asynchronous failure message")
+    |}];
   return ()
 ;;

@@ -19,6 +19,7 @@ let%expect_test "create, all_named" =
   [%expect
     {|
     ((unnamed ((id 1) (name ()))) (named ((id 2) (name (foo))))
-     (all_named ((foo ((id 2) (name (foo))))))) |}];
+     (all_named ((foo ((id 2) (name (foo)))))))
+    |}];
   return ()
 ;;

@@ -496,7 +496,8 @@ let%expect_test "winning game of hangman" =
     │~                                                                               │
     │[No Name]                                                     0,0-1          All│
     │Enter a word or phrase for the other player to guess: **************            │
-    ╰────────────────────────────────────────────────────────────────────────────────╯ |}]
+    ╰────────────────────────────────────────────────────────────────────────────────╯
+    |}]
 ;;
 
 let%expect_test "losing game of hangman" =
@@ -758,5 +759,6 @@ let%expect_test "losing game of hangman" =
     │~                                                                               │
     │[No Name]                                                     0,0-1          All│
     │Enter a word or phrase for the other player to guess: *****                     │
-    ╰────────────────────────────────────────────────────────────────────────────────╯ |}]
+    ╰────────────────────────────────────────────────────────────────────────────────╯
+    |}]
 ;;

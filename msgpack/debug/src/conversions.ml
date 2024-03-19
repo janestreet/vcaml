@@ -250,7 +250,7 @@ let%expect_test "Msgpack ~= Msgpack->JSON->Msgpack" =
             (expected : Msgpack.t)
             (actual : Msgpack.t)
             (json : Jsonaf.t)]);
-  [%expect {||}];
+  [%expect {| |}];
   return ()
 ;;
 
@@ -272,7 +272,7 @@ let%expect_test "Msgpack->JSON->Msgpack == Msgpack->JSON->Msgpack->JSON->Msgpack
             (expected : Msgpack.t)
             (actual : Msgpack.t)
             (json : Jsonaf.t)]);
-  [%expect {||}];
+  [%expect {| |}];
   return ()
 ;;
 
@@ -295,7 +295,7 @@ let%expect_test "Msgpack ~= Msgpack->Sexp->Msgpack" =
             ~actual:(Msgpack.string_of_t_exn actual)
             (sexp : Sexp.t)
             (actual : Msgpack.t)]);
-  [%expect {||}];
+  [%expect {| |}];
   return ()
 ;;
 
@@ -317,7 +317,7 @@ let%expect_test "Msgpack->Sexp->Msgpack == Msgpack->Sexp->Msgpack->Sexp->Msgpack
             ~expected:(Msgpack.string_of_t_exn expected)
             ~actual:(Msgpack.string_of_t_exn actual)
             (sexp : Sexp.t)]);
-  [%expect {||}];
+  [%expect {| |}];
   return ()
 ;;
 
@@ -381,7 +381,7 @@ let%expect_test "Hex/Bytes Roundtrip" =
       (Msgpack.quickcheck_generator ~only_string_keys:false ~only_finite_floats:false)
       ~format:Hex
   in
-  [%expect {||}]
+  [%expect {| |}]
 ;;
 
 let%expect_test "Sexp/Bytes Roundtrip" =
@@ -390,7 +390,7 @@ let%expect_test "Sexp/Bytes Roundtrip" =
       (Msgpack.quickcheck_generator ~only_string_keys:false ~only_finite_floats:true)
       ~format:Sexp
   in
-  [%expect {||}]
+  [%expect {| |}]
 ;;
 
 let%expect_test "Json/Bytes Roundtrip" =
@@ -404,5 +404,5 @@ let%expect_test "Json/Bytes Roundtrip" =
        msg |> jsonaf_of_msgpack |> msgpack_of_jsonaf)
       ~format:Json
   in
-  [%expect {||}]
+  [%expect {| |}]
 ;;

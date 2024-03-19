@@ -26,7 +26,8 @@ let%expect_test "Sending request with a closed client" =
         (Int    9)
         (String nvim_get_current_buf)
         (Array ()))))
-     (("Called from" lib/vcaml/test/semantics/test_closed_client.ml:LINE:COL))) |}]
+     (("Called from" lib/vcaml/test/semantics/test_closed_client.ml:LINE:COL)))
+    |}]
 ;;
 
 let%expect_test "Sending notification with a closed client" =
@@ -48,7 +49,8 @@ let%expect_test "Sending notification with a closed client" =
         (Int    2)
         (String nvim_call_function)
         (Array ((String nvim_get_current_buf) (Array ()))))))
-     (("Called from" lib/vcaml/test/semantics/test_closed_client.ml:LINE:COL))) |}]
+     (("Called from" lib/vcaml/test/semantics/test_closed_client.ml:LINE:COL)))
+    |}]
 ;;
 
 let%expect_test "Sending response with a closed client" =
@@ -97,7 +99,8 @@ let%expect_test "Sending response with a closed client" =
              (Array (
                (Int    1)
                (String rpc)))))))))
-     (("Called from" lib/vcaml/test/semantics/test_closed_client.ml:LINE:COL))) |}]
+     (("Called from" lib/vcaml/test/semantics/test_closed_client.ml:LINE:COL)))
+    |}]
 ;;
 
 let%expect_test "Client closes inside RPC" =
@@ -139,5 +142,6 @@ let%expect_test "Client closes inside RPC" =
              (Array (
                (Int    1)
                (String rpc)))))))))
-     (("Called from" lib/vcaml/test/semantics/test_closed_client.ml:LINE:COL))) |}]
+     (("Called from" lib/vcaml/test/semantics/test_closed_client.ml:LINE:COL)))
+    |}]
 ;;

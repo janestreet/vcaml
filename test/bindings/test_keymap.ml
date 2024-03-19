@@ -152,7 +152,8 @@ let%expect_test "Test keymaps" =
        ((lhs b) (mode Language) (scope Global) (rhs a) (nowait false)
         (silent true) (recursive true) (script_id -9))
        ((lhs c) (mode Language) (scope (Buffer_local 1)) (rhs c) (nowait true)
-        (silent false) (recursive false) (script_id -9))))) |}];
+        (silent false) (recursive false) (script_id -9)))))
+    |}];
   return ()
 ;;
 
@@ -189,7 +190,8 @@ let%expect_test "Test unsetting keymap in specific mode" =
       (((lhs a) (mode Operator_pending) (scope Global) (rhs a) (nowait false)
         (silent false) (recursive false) (script_id -9))
        ((lhs a) (mode Select) (scope Global) (rhs a) (nowait false)
-        (silent false) (recursive false) (script_id -9))))) |}];
+        (silent false) (recursive false) (script_id -9)))))
+    |}];
   return ()
 ;;
 
@@ -259,7 +261,8 @@ let%expect_test "Test replacing keycodes in an expr mapping" =
       │~                                                                               │
       │[No Name]                                                     0,0-1          All│
       │Hi                                                                              │
-      ╰────────────────────────────────────────────────────────────────────────────────╯ |}];
+      ╰────────────────────────────────────────────────────────────────────────────────╯
+      |}];
     let%bind () = test ~replace_keycodes:false in
     [%expect
       {|
@@ -297,6 +300,7 @@ let%expect_test "Test replacing keycodes in an expr mapping" =
       │~                                                                               │
       │[No Name]                                                     0,0-1          All│
       │:echo 'Hi'<CR>                                                                  │
-      ╰────────────────────────────────────────────────────────────────────────────────╯ |}];
+      ╰────────────────────────────────────────────────────────────────────────────────╯
+      |}];
     return ())
 ;;

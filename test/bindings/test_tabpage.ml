@@ -45,7 +45,8 @@ let%expect_test "exists, get_number" =
   [%expect
     {|
     (((tab 1) (number 1)) ((tab 2) (number 2)))
-    (((tab 1) (number -)) ((tab 2) (number 1))) |}];
+    (((tab 1) (number -)) ((tab 2) (number 1)))
+    |}];
   return ()
 ;;
 
@@ -69,7 +70,8 @@ let%expect_test "set_var, get_var, delete_var" =
     (foo
      (Error
       (("Vim returned error" "Key not found: foo" (error_type Validation))
-       (("Called from" lib/vcaml/test/bindings/test_tabpage.ml:LINE:COL))))) |}];
+       (("Called from" lib/vcaml/test/bindings/test_tabpage.ml:LINE:COL)))))
+    |}];
   Backtrace.elide := false;
   return ()
 ;;

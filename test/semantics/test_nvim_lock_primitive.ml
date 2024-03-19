@@ -178,5 +178,5 @@ let%expect_test "Well-behaved semantics" =
           raise_s
             [%message
               "Found an empty [Permission_to_run.t] that should be expired" (id : int)]));
-  [%expect {||}]
+  [%expect {| |}]
 ;;

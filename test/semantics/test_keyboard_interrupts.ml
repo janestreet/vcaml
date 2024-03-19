@@ -96,7 +96,8 @@ let%expect_test "Keyboard interrupt aborts simple RPC request" =
         "Keyboard interrupt")
        (("Called from"
          lib/vcaml/test/semantics/test_keyboard_interrupts.ml:LINE:COL)))))
-    ("nvim exited" (exit_or_signal (Ok ()))) |}];
+    ("nvim exited" (exit_or_signal (Ok ())))
+    |}];
   Backtrace.elide := false;
   return ()
 ;;
@@ -161,7 +162,8 @@ let%expect_test "Keyboard interrupt learned by RPC response aborts [rpcrequest]"
       (("Vim returned error" "Keyboard interrupt" (error_type Exception))
        (("Called from"
          lib/vcaml/test/semantics/test_keyboard_interrupts.ml:LINE:COL)))))
-    ("nvim exited" (exit_or_signal (Ok ()))) |}];
+    ("nvim exited" (exit_or_signal (Ok ())))
+    |}];
   Backtrace.elide := false;
   return ()
 ;;
@@ -181,7 +183,8 @@ let%expect_test "Keyboard interrupt learned by heartbeating aborts [rpcrequest]"
       (("Vim returned error" "Keyboard interrupt" (error_type Exception))
        (("Called from"
          lib/vcaml/test/semantics/test_keyboard_interrupts.ml:LINE:COL)))))
-    ("nvim exited" (exit_or_signal (Ok ()))) |}];
+    ("nvim exited" (exit_or_signal (Ok ())))
+    |}];
   Backtrace.elide := false;
   return ()
 ;;
@@ -198,7 +201,8 @@ let%expect_test "Keyboard interrupt learned by ??? - Neovim's semantics have cha
   [%expect
     {|
     (rpc_result Timeout)
-    ("nvim exited" (exit_or_signal (Error (Exit_non_zero 1)))) |}];
+    ("nvim exited" (exit_or_signal (Error (Exit_non_zero 1))))
+    |}];
   return ()
 ;;
 

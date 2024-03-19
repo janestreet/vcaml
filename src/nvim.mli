@@ -173,15 +173,8 @@ val echo
   -> unit Deferred.Or_error.t
 
 (** As of this writing messages echoed during an [rpcrequest] are not displayed until the
-    request completes. This function hacks around that limitation. A side-effect of this
-    hack is that if the user mashes the keyboard during the [rpcrequest] those keys will
-    be printed after the message. [inputsave] + [inputrestore] does not seem to help
-    mitigate this. For more details about this echoing limitation, see
-    https://github.com/neovim/neovim/issues/14449.
-
-    Note that [err_write] and [err_writeln] do work inside [rpcrequest] but the error
-    message is treated as an exception, so they aren't suitable for regular echoing
-    purposes. *)
+    request completes. This function hacks around that limitation. For more details about
+    this echoing limitation, see https://github.com/neovim/neovim/issues/14449. *)
 val echo_in_rpcrequest
   :  Source_code_position.t
   -> _ Client.t

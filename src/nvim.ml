@@ -507,10 +507,12 @@ let put here client ?text_mode lines ~where ~place_cursor =
 ;;
 
 (* The <CR> is buffered and then used to reply to the prompt. The side-effect of this
-   dance is that the prompt is echoed to the screen. *)
+   dance is that the prompt is echoed to the screen. The <C-u> is used to clear pending
+   input that the user might have actually typed (e.g., from mashing the keyboard while
+   waiting). *)
 let echo_in_rpcrequest here client message =
   let message = String.substr_replace_all message ~pattern:"'" ~with_:"'.\"'\".'" in
-  [ T (Nvim_internal.nvim_input ~keys:"<CR>")
+  [ T (Nvim_internal.nvim_input ~keys:"<C-u><CR>")
   ; T (Nvim_internal.nvim_eval ~expr:(sprintf "input('%s')" message))
   ]
   |> Atomic.run here client

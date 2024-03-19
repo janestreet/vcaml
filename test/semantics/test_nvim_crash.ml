@@ -104,7 +104,8 @@ let%expect_test "Crash while waiting for a response results in an error" =
             (Array
              ((Map (((String cmd) (String quit))))
               (Map (((String output) (Bool false))))))))))
-        (("Called from" lib/vcaml/test/semantics/test_nvim_crash.ml:LINE:COL)))) |}];
+        (("Called from" lib/vcaml/test/semantics/test_nvim_crash.ml:LINE:COL))))
+      |}];
     Backtrace.elide := false;
     Client.close client)
 ;;
@@ -151,7 +152,8 @@ let%expect_test "Crash during an RPC does not cause failure when sending respons
           (Array
            ((Int 0) (Int 4) (String nvim_call_function)
             (Array ((String rpcrequest) (Array ((Int 1) (String anon_rpc__0)))))))))
-        (("Called from" lib/vcaml/test/semantics/test_nvim_crash.ml:LINE:COL)))) |}];
+        (("Called from" lib/vcaml/test/semantics/test_nvim_crash.ml:LINE:COL))))
+      |}];
     Backtrace.elide := false;
     Client.close client)
 ;;
