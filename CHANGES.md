@@ -19,6 +19,8 @@ This release brings major changes to VCaml. It is compatible with Neovim 0.9.1.
 - Removed: mli-cycler plugin (use OCaml-LSP for cycling).
 - Removed: `Api_call.t` applicative that was used for batching.
 - Removed: `Luaref`.
+- Made [Ui_event.t] forwards-compatible.
+- VCaml buffer text is now represented as [String.Utf8.t]
 
 ## Release v0.16.0
 
