@@ -13,7 +13,7 @@ run-test: [
   ["./run-tests-in-opam.sh" name jobs]
 ]
 depends: [
-  "ocaml" {>= "4.14.0"}
+  "ocaml" {>= "5.1.0"}
   "async"
   "async_unix"
   "base_trie"
