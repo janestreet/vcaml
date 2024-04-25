@@ -29,7 +29,7 @@ depends: [
   "textutils"
   "angstrom"                   {>= "0.15.0"}
   "angstrom-async"             {>= "0.15.0"}
-  "dune"                       {>= "2.0.0"}
+  "dune"                       {>= "3.11.0"}
   "faraday"                    {>= "0.8.1"}
   "re"                         {>= "1.8.0"}
 ]
