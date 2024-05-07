@@ -1,4 +1,5 @@
 opam-version: "2.0"
+version: "v0.17.0"
 maintainer: "Jane Street developers"
 authors: ["Jane Street Group, LLC"]
 homepage: "https://github.com/janestreet/vcaml"
@@ -13,20 +14,20 @@ run-test: [
   ["./run-tests-in-opam.sh" name jobs]
 ]
 depends: [
-  "ocaml" {>= "5.1.0"}
-  "async"
-  "async_unix"
-  "base_trie"
-  "core"
-  "core_kernel"
-  "core_unix"
-  "expect_test_helpers_async"
-  "jsonaf"
-  "man_in_the_middle_debugger"
-  "ppx_jane"
-  "ppx_optcomp"
-  "semantic_version"
-  "textutils"
+  "ocaml"                      {>= "5.1.0"}
+  "async"                      {>= "v0.17" & < "v0.18"}
+  "async_unix"                 {>= "v0.17" & < "v0.18"}
+  "base_trie"                  {>= "v0.17" & < "v0.18"}
+  "core"                       {>= "v0.17" & < "v0.18"}
+  "core_kernel"                {>= "v0.17" & < "v0.18"}
+  "core_unix"                  {>= "v0.17" & < "v0.18"}
+  "expect_test_helpers_async"  {>= "v0.17" & < "v0.18"}
+  "jsonaf"                     {>= "v0.17" & < "v0.18"}
+  "man_in_the_middle_debugger" {>= "v0.17" & < "v0.18"}
+  "ppx_jane"                   {>= "v0.17" & < "v0.18"}
+  "ppx_optcomp"                {>= "v0.17" & < "v0.18"}
+  "semantic_version"           {>= "v0.17" & < "v0.18"}
+  "textutils"                  {>= "v0.17" & < "v0.18"}
   "angstrom"                   {>= "0.15.0"}
   "angstrom-async"             {>= "0.15.0"}
   "dune"                       {>= "3.11.0"}
