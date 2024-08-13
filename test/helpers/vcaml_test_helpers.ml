@@ -105,9 +105,9 @@ let replace_line_numbers_in_log_message =
   |> seq
   |> compile
   |> replace ~f:(fun group ->
-       match Group.get_opt group 1 with
-       | None -> Group.get group 0
-       | Some prefix -> prefix ^ ":LINE:")
+    match Group.get_opt group 1 with
+    | None -> Group.get group 0
+    | Some prefix -> prefix ^ ":LINE:")
 ;;
 
 let with_client
@@ -231,19 +231,19 @@ let with_client
           Reader.file_lines nvim_log_file
           >>| List.filter ~f:(Fn.non String.is_empty)
           >>| (function
-          | [] -> []
-          | lines ->
-            let lines =
-              List.map lines ~f:(fun line ->
-                line
-                |> replace_timestamp_in_log_message
-                |> replace_line_numbers_in_log_message)
-            in
-            [ [ "-----  NVIM_LOG_FILE  -----" ]
-            ; lines
-            ; [ "---------------------------" ]
-            ]
-            |> List.concat)
+           | [] -> []
+           | lines ->
+             let lines =
+               List.map lines ~f:(fun line ->
+                 line
+                 |> replace_timestamp_in_log_message
+                 |> replace_line_numbers_in_log_message)
+             in
+             [ [ "-----  NVIM_LOG_FILE  -----" ]
+             ; lines
+             ; [ "---------------------------" ]
+             ]
+             |> List.concat)
       and verbose_log =
         (* This file will be populated by VCaml plugins that are launched during
            integration tests under verbose mode (in other words, when the test setup is
@@ -300,7 +300,7 @@ module Test_ui = struct
       then Buffer.add_string buffer "├"
       else Buffer.add_string buffer "│";
       Array.iter row ~f:(fun string -> Buffer.add_string buffer string);
-      if String.equal (Array.last row) "─"
+      if String.equal (Array.last_exn row) "─"
       then Buffer.add_string buffer "┤"
       else Buffer.add_string buffer "│";
       Buffer.add_char buffer '\n');
@@ -634,7 +634,7 @@ let%expect_test "We cannot have two blocking RPCs with the same name" =
   let%map () =
     with_client (fun client ->
       register_dummy_rpc_handler client ~name:"test";
-      Expect_test_helpers_base.require_does_raise [%here] (fun () ->
+      Expect_test_helpers_base.require_does_raise (fun () ->
         register_dummy_rpc_handler client ~name:"test");
       Deferred.Or_error.return ())
   in
@@ -653,7 +653,7 @@ let%expect_test "We cannot have two async RPCs with the same name" =
   let%map () =
     with_client (fun client ->
       register_dummy_rpc_handler client ~name:"test";
-      Expect_test_helpers_base.require_does_raise [%here] (fun () ->
+      Expect_test_helpers_base.require_does_raise (fun () ->
         register_dummy_rpc_handler client ~name:"test");
       Deferred.Or_error.return ())
   in

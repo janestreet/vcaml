@@ -31,7 +31,7 @@ let options_for_scope =
   let window_options, window_per_buffer_options =
     Nvim_internal.Options.Window.options
     |> List.partition_tf ~f:(fun { name; _ } ->
-         Set.mem window_local_options_with_ignored_global_setting name)
+      Set.mem window_local_options_with_ignored_global_setting name)
   in
   function
   | Global -> global_options
@@ -51,33 +51,33 @@ let generate_options_type ~scope =
   let gadt =
     options
     |> List.map ~f:(fun { name; global_local; type_ } ->
-         let type_phantom =
-           match type_ with
-           | String -> "string"
-           | Int -> "int"
-           | Bool -> "bool"
-           | Char_list _ -> "char list"
-           | String_list -> "string list"
-         in
-         let scope_phantoms =
-           match scope, global_local with
-           | Global, true ->
-             raise_s [%message "Globally scoped option is marked global-local" name]
-           | Global, false -> []
-           | Buffer, true -> [ "[`global]" ]
-           | Buffer, false ->
-             (match Set.mem buffer_local_options_with_ignored_global_setting name with
-              | true -> [ "[`none]" ]
-              | false -> [ "[`copied]" ])
-           | Window, true ->
-             raise_s [%message "Special window-local option was marked global-local" name]
-           | Window, false -> []
-           | Window_per_buffer, true -> [ "[`global]" ]
-           | Window_per_buffer, false -> [ "[`copied]" ]
-           | Tabpage, _ -> []
-         in
-         let phantom = String.concat (type_phantom :: scope_phantoms) ~sep:"," in
-         [%string "| %{String.capitalize name} : (%{phantom}) t"])
+      let type_phantom =
+        match type_ with
+        | String -> "string"
+        | Int -> "int"
+        | Bool -> "bool"
+        | Char_list _ -> "char list"
+        | String_list -> "string list"
+      in
+      let scope_phantoms =
+        match scope, global_local with
+        | Global, true ->
+          raise_s [%message "Globally scoped option is marked global-local" name]
+        | Global, false -> []
+        | Buffer, true -> [ "[`global]" ]
+        | Buffer, false ->
+          (match Set.mem buffer_local_options_with_ignored_global_setting name with
+           | true -> [ "[`none]" ]
+           | false -> [ "[`copied]" ])
+        | Window, true ->
+          raise_s [%message "Special window-local option was marked global-local" name]
+        | Window, false -> []
+        | Window_per_buffer, true -> [ "[`global]" ]
+        | Window_per_buffer, false -> [ "[`copied]" ]
+        | Tabpage, _ -> []
+      in
+      let phantom = String.concat (type_phantom :: scope_phantoms) ~sep:"," in
+      [%string "| %{String.capitalize name} : (%{phantom}) t"])
     |> String.concat ~sep:"\n"
   in
   [%string {| type %{gadt_params} t = %{gadt} [@@deriving sexp_of] |}] |> print_endline
@@ -88,7 +88,7 @@ let generate_options_to_string ~scope =
   let cases =
     options
     |> List.map ~f:(fun { name; _ } ->
-         [%string {| | %{String.capitalize name} -> "%{name}" |}])
+      [%string {| | %{String.capitalize name} -> "%{name}" |}])
     |> String.concat ~sep:"\n"
   in
   (match scope with
@@ -104,17 +104,16 @@ let generate_options_of_msgpack ~scope =
   let cases =
     options
     |> List.map ~f:(fun { name; type_; _ } ->
-         let phantom =
-           match type_ with
-           | String -> "String"
-           | Int -> "Int"
-           | Bool -> "Bool"
-           | Char_list { commalist = false } -> "Custom (module Char_list)"
-           | Char_list { commalist = true } -> "Custom (module Char_list.Comma_separated)"
-           | String_list -> "Custom (module String_list)"
-         in
-         [%string
-           {| | %{String.capitalize name} -> Type.of_msgpack (%{phantom}) msgpack |}])
+      let phantom =
+        match type_ with
+        | String -> "String"
+        | Int -> "Int"
+        | Bool -> "Bool"
+        | Char_list { commalist = false } -> "Custom (module Char_list)"
+        | Char_list { commalist = true } -> "Custom (module Char_list.Comma_separated)"
+        | String_list -> "Custom (module String_list)"
+      in
+      [%string {| | %{String.capitalize name} -> Type.of_msgpack (%{phantom}) msgpack |}])
     |> String.concat ~sep:"\n"
   in
   (match scope with
@@ -138,16 +137,16 @@ let generate_options_to_msgpack ~scope =
   let cases =
     options
     |> List.map ~f:(fun { name; type_; _ } ->
-         let phantom =
-           match type_ with
-           | String -> "String"
-           | Int -> "Int"
-           | Bool -> "Bool"
-           | Char_list { commalist = false } -> "Custom (module Char_list)"
-           | Char_list { commalist = true } -> "Custom (module Char_list.Comma_separated)"
-           | String_list -> "Custom (module String_list)"
-         in
-         [%string {| | %{String.capitalize name} -> Type.to_msgpack (%{phantom}) value |}])
+      let phantom =
+        match type_ with
+        | String -> "String"
+        | Int -> "Int"
+        | Bool -> "Bool"
+        | Char_list { commalist = false } -> "Custom (module Char_list)"
+        | Char_list { commalist = true } -> "Custom (module Char_list.Comma_separated)"
+        | String_list -> "Custom (module String_list)"
+      in
+      [%string {| | %{String.capitalize name} -> Type.to_msgpack (%{phantom}) value |}])
     |> String.concat ~sep:"\n"
   in
   (match scope with
@@ -171,15 +170,15 @@ let generate_buffer_options_kind () =
   let cases =
     options
     |> List.map ~f:(fun { name; global_local; _ } ->
-         let kind =
-           match global_local with
-           | true -> "Global"
-           | false ->
-             (match Set.mem buffer_local_options_with_ignored_global_setting name with
-              | true -> "None"
-              | false -> "Copied")
-         in
-         [%string {| | %{String.capitalize name} -> %{kind} |}])
+      let kind =
+        match global_local with
+        | true -> "Global"
+        | false ->
+          (match Set.mem buffer_local_options_with_ignored_global_setting name with
+           | true -> "None"
+           | false -> "Copied")
+      in
+      [%string {| | %{String.capitalize name} -> %{kind} |}])
     |> String.concat ~sep:"\n"
   in
   [%string

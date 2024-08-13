@@ -41,11 +41,11 @@ let spin_until_nvim_creates_socket_file pid ~socket =
             Monitor.try_with ~extract_exn:true (fun () ->
               Tcp.connect_sock (Tcp.Where_to_connect.of_unix_address (`Unix socket)))
             >>| (function
-            | Ok socket ->
-              Socket.shutdown socket `Both;
-              `Finished `Socket_created
-            | Error (Unix.Unix_error (ECONNREFUSED, _, _)) -> `Repeat (attempt + 1)
-            | Error exn -> raise exn)
+             | Ok socket ->
+               Socket.shutdown socket `Both;
+               `Finished `Socket_created
+             | Error (Unix.Unix_error (ECONNREFUSED, _, _)) -> `Repeat (attempt + 1)
+             | Error exn -> raise exn)
           | false ->
             let%bind () = Clock_ns.after Time_ns.Span.millisecond in
             return (`Repeat (attempt + 1)))))

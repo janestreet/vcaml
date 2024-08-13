@@ -237,33 +237,23 @@ let get here client ?group ?events ?patterns_or_buffer () =
   in
   Nvim_internal.nvim_get_autocmds ~opts
   |> map_witness ~f:(fun autocmds ->
-       autocmds
-       |> List.map ~f:(fun msgpack ->
-            let open Or_error.Let_syntax in
-            let%bind map = Type.of_msgpack Dict msgpack in
-            let%bind id = find_and_convert map "id" (Type.of_msgpack Int) in
-            let%bind group = find_and_convert map "group" (Type.of_msgpack Int) in
-            let%bind group_name =
-              find_and_convert map "group_name" (Type.of_msgpack String)
-            in
-            let%bind description = find_and_convert map "desc" (Type.of_msgpack String) in
-            let%bind event = find_or_error_and_convert map "event" Event.of_msgpack in
-            let%bind pattern_or_buffer = Pattern_or_buffer.of_msgpack_map map in
-            let%bind command =
-              find_or_error_and_convert map "command" (Type.of_msgpack String)
-            in
-            let%bind once = find_or_error_and_convert map "once" (Type.of_msgpack Bool) in
-            return
-              { id
-              ; group
-              ; group_name
-              ; description
-              ; event
-              ; pattern_or_buffer
-              ; once
-              ; command
-              })
-       |> Or_error.combine_errors)
+    autocmds
+    |> List.map ~f:(fun msgpack ->
+      let open Or_error.Let_syntax in
+      let%bind map = Type.of_msgpack Dict msgpack in
+      let%bind id = find_and_convert map "id" (Type.of_msgpack Int) in
+      let%bind group = find_and_convert map "group" (Type.of_msgpack Int) in
+      let%bind group_name = find_and_convert map "group_name" (Type.of_msgpack String) in
+      let%bind description = find_and_convert map "desc" (Type.of_msgpack String) in
+      let%bind event = find_or_error_and_convert map "event" Event.of_msgpack in
+      let%bind pattern_or_buffer = Pattern_or_buffer.of_msgpack_map map in
+      let%bind command =
+        find_or_error_and_convert map "command" (Type.of_msgpack String)
+      in
+      let%bind once = find_or_error_and_convert map "once" (Type.of_msgpack Bool) in
+      return
+        { id; group; group_name; description; event; pattern_or_buffer; once; command })
+    |> Or_error.combine_errors)
   |> run here client
 ;;
 

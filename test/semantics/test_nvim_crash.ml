@@ -55,6 +55,11 @@ let%expect_test "Crash before sending a request results in an error" =
           (("Called from" lib/vcaml/test/semantics/test_nvim_crash.ml:LINE:COL)))) |}
       ; {|
         (Error
+         (("Failed to send Msgpack RPC message: consumer left"
+           (Array ((Int 0) (Int 4) (String nvim_get_current_buf) (Array ()))))
+          (("Called from" lib/vcaml/test/semantics/test_nvim_crash.ml:LINE:COL)))) |}
+      ; {|
+        (Error
          (("Failed to send Msgpack RPC message"
            (Array ((Int 0) (Int 4) (String nvim_get_current_buf) (Array ())))
            (error

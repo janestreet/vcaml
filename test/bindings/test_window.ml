@@ -42,7 +42,8 @@ let%expect_test "get_cursor, set_cursor" =
       print_s [%sexp (position : Position.One_indexed_row.t)];
       return ())
   in
-  [%expect {|
+  [%expect
+    {|
     ((row 1) (col 11))
     ((row 1) (col 5))
     |}];
@@ -60,7 +61,8 @@ let%expect_test "get_buf, set_buf" =
       print_s [%sexp (buffer : Buffer.t)];
       return ())
   in
-  [%expect {|
+  [%expect
+    {|
     2
     2
     |}];

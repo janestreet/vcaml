@@ -678,11 +678,11 @@ let run_spec ?warn_if_neovim_exits_early ?verbose spec =
     fun ~prefix ->
       let fresh_tag = Set_once.create () in
       event_tags
-        := Trie.update_trie !event_tags prefix ~f:(fun trie ->
-             let children = Trie.num_children trie in
-             let keychain = [ children + 1 ] in
-             Set_once.set_exn fresh_tag [%here] (prefix @ keychain);
-             Trie.add_exn trie ~keychain ~data:());
+      := Trie.update_trie !event_tags prefix ~f:(fun trie ->
+           let children = Trie.num_children trie in
+           let keychain = [ children + 1 ] in
+           Set_once.set_exn fresh_tag [%here] (prefix @ keychain);
+           Trie.add_exn trie ~keychain ~data:());
       Set_once.get_exn fresh_tag [%here]
   in
   let rec run_action client event_tag action =
@@ -752,20 +752,20 @@ let run_spec ?warn_if_neovim_exits_early ?verbose spec =
                ~name
                ~type_:Ocaml_from_nvim.Async.unit
                ~f:(fun ~client ->
-               let%bind result =
-                 Deferred.Or_error.List.iter ~how:`Sequential actions ~f:(function
-                   | Log ->
-                     (* Print rather than raise because VCaml will catch the
+                 let%bind result =
+                   Deferred.Or_error.List.iter ~how:`Sequential actions ~f:(function
+                     | Log ->
+                       (* Print rather than raise because VCaml will catch the
                           exception and display it in Neovim. *)
-                     print_s
-                       [%message
-                         "Encountered [Log] in an async RPC. This scenario is invalid, \
-                          as async RPCs do not enjoy non-interleaving properties."];
-                     Deferred.Or_error.return ()
-                   | action -> run_action client [] action)
-               in
-               Ivar.fill_exn rpc_finished ();
-               return result);
+                       print_s
+                         [%message
+                           "Encountered [Log] in an async RPC. This scenario is invalid, \
+                            as async RPCs do not enjoy non-interleaving properties."];
+                       Deferred.Or_error.return ()
+                     | action -> run_action client [] action)
+                 in
+                 Ivar.fill_exn rpc_finished ();
+                 return result);
              [%string {| call rpcnotify(%{channel#Int}, "%{name}") |}])
       and implement_plugin_spec = function
         | Action.Spec.New.Log -> return Action.Log
@@ -856,7 +856,8 @@ let%expect_test "Simple tests of running specifications" =
   let%bind () = test Log in
   [%expect {| () |}];
   let%bind () = test (call ~await:true [ Log; Log ]) in
-  [%expect {|
+  [%expect
+    {|
     (1)
     (1)
     |}];
@@ -955,7 +956,7 @@ let%expect_test "Demonstrate disconnect induced by sleep" =
      dummy returning indicating it's safe to respond and actually sending the response
      during which sending the response becomes unsafe. *)
   Private.before_sending_response_hook_for_tests
-    := Some (fun () -> Clock_ns.after (Time_ns.Span.of_int_ms 10));
+  := Some (fun () -> Clock_ns.after (Time_ns.Span.of_int_ms 10));
   let output = ref "" in
   let test ?verbose spec =
     Expect_test_helpers_async.show_raise_async (fun () ->

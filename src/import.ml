@@ -128,58 +128,56 @@ module Statusline = struct
     in
     Nvim_internal.nvim_eval_statusline ~str ~opts
     |> map_witness ~f:(fun map ->
-         let open Or_error.Let_syntax in
-         let%bind text = find_or_error_and_convert map "str" (Type.of_msgpack String) in
-         let%bind display_width =
-           find_or_error_and_convert map "width" (Type.of_msgpack Int)
-         in
-         let%bind highlights =
-           match%bind
-             find_and_convert map "highlights" (Type.of_msgpack (Array Dict))
-           with
-           | None -> Ok None
-           | Some highlights ->
-             let%bind highlights =
-               highlights
-               |> List.map ~f:(fun map ->
-                    let%bind start =
-                      find_or_error_and_convert map "start" (Type.of_msgpack Int)
-                    in
-                    let%bind group =
-                      find_or_error_and_convert map "group" (Type.of_msgpack String)
-                    in
-                    Ok (start, group))
-               |> Or_error.combine_errors
-             in
-             (match highlights with
-              | [] ->
-                (* Confirmed in testing that the array should always be non-empty, even when
+      let open Or_error.Let_syntax in
+      let%bind text = find_or_error_and_convert map "str" (Type.of_msgpack String) in
+      let%bind display_width =
+        find_or_error_and_convert map "width" (Type.of_msgpack Int)
+      in
+      let%bind highlights =
+        match%bind find_and_convert map "highlights" (Type.of_msgpack (Array Dict)) with
+        | None -> Ok None
+        | Some highlights ->
+          let%bind highlights =
+            highlights
+            |> List.map ~f:(fun map ->
+              let%bind start =
+                find_or_error_and_convert map "start" (Type.of_msgpack Int)
+              in
+              let%bind group =
+                find_or_error_and_convert map "group" (Type.of_msgpack String)
+              in
+              Ok (start, group))
+            |> Or_error.combine_errors
+          in
+          (match highlights with
+           | [] ->
+             (* Confirmed in testing that the array should always be non-empty, even when
                 the statusline string is empty. *)
-                Or_error.error_s [%message "Empty highlights list"]
-              | initial_highlight :: highlights ->
-                let (last_highlight_start, last_highlight_group), chunks =
-                  List.fold
-                    ~init:(initial_highlight, Reversed_list.[])
-                    highlights
-                    ~f:(fun ((start, group), chunks) ((end_, _) as next_highlight) ->
-                      let chunk =
-                        { Highlighted_text.Chunk.text = String.slice text start end_
-                        ; hl_group = Some group
-                        }
-                      in
-                      next_highlight, chunk :: chunks)
-                in
-                let highlighted_text =
-                  { Highlighted_text.Chunk.text =
-                      String.slice text last_highlight_start (String.length text)
-                  ; hl_group = Some last_highlight_group
-                  }
-                  :: chunks
-                  |> Reversed_list.rev
-                in
-                Ok (Some highlighted_text))
-         in
-         return { text; display_width; highlights })
+             Or_error.error_s [%message "Empty highlights list"]
+           | initial_highlight :: highlights ->
+             let (last_highlight_start, last_highlight_group), chunks =
+               List.fold
+                 ~init:(initial_highlight, Reversed_list.[])
+                 highlights
+                 ~f:(fun ((start, group), chunks) ((end_, _) as next_highlight) ->
+                   let chunk =
+                     { Highlighted_text.Chunk.text = String.slice text start end_
+                     ; hl_group = Some group
+                     }
+                   in
+                   next_highlight, chunk :: chunks)
+             in
+             let highlighted_text =
+               { Highlighted_text.Chunk.text =
+                   String.slice text last_highlight_start (String.length text)
+               ; hl_group = Some last_highlight_group
+               }
+               :: chunks
+               |> Reversed_list.rev
+             in
+             Ok (Some highlighted_text))
+      in
+      return { text; display_width; highlights })
     |> run here client
   ;;
 end
@@ -216,11 +214,10 @@ module Option_helpers = struct
         | String flags ->
           String.split flags ~on:','
           |> List.map ~f:(fun flag ->
-               match String.length flag with
-               | 1 -> Ok flag.[0]
-               | _ ->
-                 Or_error.error_s
-                   [%message "Character flag expected" flag (flags : string)])
+            match String.length flag with
+            | 1 -> Ok flag.[0]
+            | _ ->
+              Or_error.error_s [%message "Character flag expected" flag (flags : string)])
           |> Or_error.combine_errors
         | msgpack -> Or_error.error_s [%message "String expected" (msgpack : Msgpack.t)]
       ;;

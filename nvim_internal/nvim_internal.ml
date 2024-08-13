@@ -563,19 +563,19 @@ module Ui_event = struct
           | "mode_info_set" ->
             calls
             |> List.map ~f:(fun params ->
-                 (match params with
-                  | Bool enabled :: cursor_styles :: unparsed_fields ->
-                    let%bind cursor_styles =
-                      Phantom.of_msgpack (Array Object) cursor_styles
-                    in
-                    return (Mode_info_set { enabled; cursor_styles; unparsed_fields })
-                  | _ -> Or_error.error_string "Arguments have wrong type or arity")
-                 |> Or_error.tag_s_lazy
-                      ~tag:
-                        [%lazy_message
-                          "Failed to parse UI event"
-                            (name : string)
-                            (params : Msgpack.t list)])
+              (match params with
+               | Bool enabled :: cursor_styles :: unparsed_fields ->
+                 let%bind cursor_styles =
+                   Phantom.of_msgpack (Array Object) cursor_styles
+                 in
+                 return (Mode_info_set { enabled; cursor_styles; unparsed_fields })
+               | _ -> Or_error.error_string "Arguments have wrong type or arity")
+              |> Or_error.tag_s_lazy
+                   ~tag:
+                     [%lazy_message
+                       "Failed to parse UI event"
+                         (name : string)
+                         (params : Msgpack.t list)])
             |> Or_error.combine_errors
           | "update_menu" ->
             calls
@@ -600,16 +600,16 @@ module Ui_event = struct
           | "mode_change" ->
             calls
             |> List.map ~f:(fun params ->
-                 (match params with
-                  | String mode :: Int mode_idx :: unparsed_fields ->
-                    Ok (Mode_change { mode; mode_idx; unparsed_fields })
-                  | _ -> Or_error.error_string "Arguments have wrong type or arity")
-                 |> Or_error.tag_s_lazy
-                      ~tag:
-                        [%lazy_message
-                          "Failed to parse UI event"
-                            (name : string)
-                            (params : Msgpack.t list)])
+              (match params with
+               | String mode :: Int mode_idx :: unparsed_fields ->
+                 Ok (Mode_change { mode; mode_idx; unparsed_fields })
+               | _ -> Or_error.error_string "Arguments have wrong type or arity")
+              |> Or_error.tag_s_lazy
+                   ~tag:
+                     [%lazy_message
+                       "Failed to parse UI event"
+                         (name : string)
+                         (params : Msgpack.t list)])
             |> Or_error.combine_errors
           | "bell" ->
             calls
@@ -630,111 +630,110 @@ module Ui_event = struct
           | "set_title" ->
             calls
             |> List.map ~f:(fun params ->
-                 (match params with
-                  | String title :: unparsed_fields ->
-                    Ok (Set_title { title; unparsed_fields })
-                  | _ -> Or_error.error_string "Arguments have wrong type or arity")
-                 |> Or_error.tag_s_lazy
-                      ~tag:
-                        [%lazy_message
-                          "Failed to parse UI event"
-                            (name : string)
-                            (params : Msgpack.t list)])
+              (match params with
+               | String title :: unparsed_fields ->
+                 Ok (Set_title { title; unparsed_fields })
+               | _ -> Or_error.error_string "Arguments have wrong type or arity")
+              |> Or_error.tag_s_lazy
+                   ~tag:
+                     [%lazy_message
+                       "Failed to parse UI event"
+                         (name : string)
+                         (params : Msgpack.t list)])
             |> Or_error.combine_errors
           | "set_icon" ->
             calls
             |> List.map ~f:(fun params ->
-                 (match params with
-                  | String icon :: unparsed_fields ->
-                    Ok (Set_icon { icon; unparsed_fields })
-                  | _ -> Or_error.error_string "Arguments have wrong type or arity")
-                 |> Or_error.tag_s_lazy
-                      ~tag:
-                        [%lazy_message
-                          "Failed to parse UI event"
-                            (name : string)
-                            (params : Msgpack.t list)])
+              (match params with
+               | String icon :: unparsed_fields -> Ok (Set_icon { icon; unparsed_fields })
+               | _ -> Or_error.error_string "Arguments have wrong type or arity")
+              |> Or_error.tag_s_lazy
+                   ~tag:
+                     [%lazy_message
+                       "Failed to parse UI event"
+                         (name : string)
+                         (params : Msgpack.t list)])
             |> Or_error.combine_errors
           | "screenshot" ->
             calls
             |> List.map ~f:(fun params ->
-                 (match params with
-                  | String path :: unparsed_fields ->
-                    Ok (Screenshot { path; unparsed_fields })
-                  | _ -> Or_error.error_string "Arguments have wrong type or arity")
-                 |> Or_error.tag_s_lazy
-                      ~tag:
-                        [%lazy_message
-                          "Failed to parse UI event"
-                            (name : string)
-                            (params : Msgpack.t list)])
+              (match params with
+               | String path :: unparsed_fields ->
+                 Ok (Screenshot { path; unparsed_fields })
+               | _ -> Or_error.error_string "Arguments have wrong type or arity")
+              |> Or_error.tag_s_lazy
+                   ~tag:
+                     [%lazy_message
+                       "Failed to parse UI event"
+                         (name : string)
+                         (params : Msgpack.t list)])
             |> Or_error.combine_errors
           | "option_set" ->
             calls
             |> List.map ~f:(fun params ->
-                 (match params with
-                  | String name :: value :: unparsed_fields ->
-                    Ok (Option_set { name; value; unparsed_fields })
-                  | _ -> Or_error.error_string "Arguments have wrong type or arity")
-                 |> Or_error.tag_s_lazy
-                      ~tag:
-                        [%lazy_message
-                          "Failed to parse UI event"
-                            (name : string)
-                            (params : Msgpack.t list)])
+              (match params with
+               | String name :: value :: unparsed_fields ->
+                 Ok (Option_set { name; value; unparsed_fields })
+               | _ -> Or_error.error_string "Arguments have wrong type or arity")
+              |> Or_error.tag_s_lazy
+                   ~tag:
+                     [%lazy_message
+                       "Failed to parse UI event"
+                         (name : string)
+                         (params : Msgpack.t list)])
             |> Or_error.combine_errors
           | "update_fg" ->
             calls
             |> List.map ~f:(fun params ->
-                 (match params with
-                  | Int fg :: unparsed_fields -> Ok (Update_fg { fg; unparsed_fields })
-                  | _ -> Or_error.error_string "Arguments have wrong type or arity")
-                 |> Or_error.tag_s_lazy
-                      ~tag:
-                        [%lazy_message
-                          "Failed to parse UI event"
-                            (name : string)
-                            (params : Msgpack.t list)])
+              (match params with
+               | Int fg :: unparsed_fields -> Ok (Update_fg { fg; unparsed_fields })
+               | _ -> Or_error.error_string "Arguments have wrong type or arity")
+              |> Or_error.tag_s_lazy
+                   ~tag:
+                     [%lazy_message
+                       "Failed to parse UI event"
+                         (name : string)
+                         (params : Msgpack.t list)])
             |> Or_error.combine_errors
           | "update_bg" ->
             calls
             |> List.map ~f:(fun params ->
-                 (match params with
-                  | Int bg :: unparsed_fields -> Ok (Update_bg { bg; unparsed_fields })
-                  | _ -> Or_error.error_string "Arguments have wrong type or arity")
-                 |> Or_error.tag_s_lazy
-                      ~tag:
-                        [%lazy_message
-                          "Failed to parse UI event"
-                            (name : string)
-                            (params : Msgpack.t list)])
+              (match params with
+               | Int bg :: unparsed_fields -> Ok (Update_bg { bg; unparsed_fields })
+               | _ -> Or_error.error_string "Arguments have wrong type or arity")
+              |> Or_error.tag_s_lazy
+                   ~tag:
+                     [%lazy_message
+                       "Failed to parse UI event"
+                         (name : string)
+                         (params : Msgpack.t list)])
             |> Or_error.combine_errors
           | "update_sp" ->
             calls
             |> List.map ~f:(fun params ->
-                 (match params with
-                  | Int sp :: unparsed_fields -> Ok (Update_sp { sp; unparsed_fields })
-                  | _ -> Or_error.error_string "Arguments have wrong type or arity")
-                 |> Or_error.tag_s_lazy
-                      ~tag:
-                        [%lazy_message
-                          "Failed to parse UI event"
-                            (name : string)
-                            (params : Msgpack.t list)])
+              (match params with
+               | Int sp :: unparsed_fields -> Ok (Update_sp { sp; unparsed_fields })
+               | _ -> Or_error.error_string "Arguments have wrong type or arity")
+              |> Or_error.tag_s_lazy
+                   ~tag:
+                     [%lazy_message
+                       "Failed to parse UI event"
+                         (name : string)
+                         (params : Msgpack.t list)])
             |> Or_error.combine_errors
           | "resize" ->
             calls
             |> List.map ~f:(fun params ->
-                 (match params with
-                  | Int width :: Int height :: unparsed_fields ->
-                    Ok (Resize { width; height; unparsed_fields })
-                  | _ -> Or_error.error_string "Arguments have wrong type or arity")
-                 |> Or_error.tag_s_lazy
-                      ~tag:
-                        [%lazy_message
-                          "Failed to parse UI event"
-                            (name : string)
-                            (params : Msgpack.t list)])
+              (match params with
+               | Int width :: Int height :: unparsed_fields ->
+                 Ok (Resize { width; height; unparsed_fields })
+               | _ -> Or_error.error_string "Arguments have wrong type or arity")
+              |> Or_error.tag_s_lazy
+                   ~tag:
+                     [%lazy_message
+                       "Failed to parse UI event"
+                         (name : string)
+                         (params : Msgpack.t list)])
             |> Or_error.combine_errors
           | "clear" ->
             calls
@@ -747,414 +746,410 @@ module Ui_event = struct
           | "cursor_goto" ->
             calls
             |> List.map ~f:(fun params ->
-                 (match params with
-                  | Int row :: Int col :: unparsed_fields ->
-                    Ok (Cursor_goto { row; col; unparsed_fields })
-                  | _ -> Or_error.error_string "Arguments have wrong type or arity")
-                 |> Or_error.tag_s_lazy
-                      ~tag:
-                        [%lazy_message
-                          "Failed to parse UI event"
-                            (name : string)
-                            (params : Msgpack.t list)])
+              (match params with
+               | Int row :: Int col :: unparsed_fields ->
+                 Ok (Cursor_goto { row; col; unparsed_fields })
+               | _ -> Or_error.error_string "Arguments have wrong type or arity")
+              |> Or_error.tag_s_lazy
+                   ~tag:
+                     [%lazy_message
+                       "Failed to parse UI event"
+                         (name : string)
+                         (params : Msgpack.t list)])
             |> Or_error.combine_errors
           | "highlight_set" ->
             calls
             |> List.map ~f:(fun params ->
-                 (match params with
-                  | attrs :: unparsed_fields ->
-                    let%bind attrs = Phantom.of_msgpack Dict attrs in
-                    return (Highlight_set { attrs; unparsed_fields })
-                  | _ -> Or_error.error_string "Arguments have wrong type or arity")
-                 |> Or_error.tag_s_lazy
-                      ~tag:
-                        [%lazy_message
-                          "Failed to parse UI event"
-                            (name : string)
-                            (params : Msgpack.t list)])
+              (match params with
+               | attrs :: unparsed_fields ->
+                 let%bind attrs = Phantom.of_msgpack Dict attrs in
+                 return (Highlight_set { attrs; unparsed_fields })
+               | _ -> Or_error.error_string "Arguments have wrong type or arity")
+              |> Or_error.tag_s_lazy
+                   ~tag:
+                     [%lazy_message
+                       "Failed to parse UI event"
+                         (name : string)
+                         (params : Msgpack.t list)])
             |> Or_error.combine_errors
           | "put" ->
             calls
             |> List.map ~f:(fun params ->
-                 (match params with
-                  | String str :: unparsed_fields -> Ok (Put { str; unparsed_fields })
-                  | _ -> Or_error.error_string "Arguments have wrong type or arity")
-                 |> Or_error.tag_s_lazy
-                      ~tag:
-                        [%lazy_message
-                          "Failed to parse UI event"
-                            (name : string)
-                            (params : Msgpack.t list)])
+              (match params with
+               | String str :: unparsed_fields -> Ok (Put { str; unparsed_fields })
+               | _ -> Or_error.error_string "Arguments have wrong type or arity")
+              |> Or_error.tag_s_lazy
+                   ~tag:
+                     [%lazy_message
+                       "Failed to parse UI event"
+                         (name : string)
+                         (params : Msgpack.t list)])
             |> Or_error.combine_errors
           | "set_scroll_region" ->
             calls
             |> List.map ~f:(fun params ->
-                 (match params with
-                  | Int top :: Int bot :: Int left :: Int right :: unparsed_fields ->
-                    Ok (Set_scroll_region { top; bot; left; right; unparsed_fields })
-                  | _ -> Or_error.error_string "Arguments have wrong type or arity")
-                 |> Or_error.tag_s_lazy
-                      ~tag:
-                        [%lazy_message
-                          "Failed to parse UI event"
-                            (name : string)
-                            (params : Msgpack.t list)])
+              (match params with
+               | Int top :: Int bot :: Int left :: Int right :: unparsed_fields ->
+                 Ok (Set_scroll_region { top; bot; left; right; unparsed_fields })
+               | _ -> Or_error.error_string "Arguments have wrong type or arity")
+              |> Or_error.tag_s_lazy
+                   ~tag:
+                     [%lazy_message
+                       "Failed to parse UI event"
+                         (name : string)
+                         (params : Msgpack.t list)])
             |> Or_error.combine_errors
           | "scroll" ->
             calls
             |> List.map ~f:(fun params ->
-                 (match params with
-                  | Int count :: unparsed_fields -> Ok (Scroll { count; unparsed_fields })
-                  | _ -> Or_error.error_string "Arguments have wrong type or arity")
-                 |> Or_error.tag_s_lazy
-                      ~tag:
-                        [%lazy_message
-                          "Failed to parse UI event"
-                            (name : string)
-                            (params : Msgpack.t list)])
+              (match params with
+               | Int count :: unparsed_fields -> Ok (Scroll { count; unparsed_fields })
+               | _ -> Or_error.error_string "Arguments have wrong type or arity")
+              |> Or_error.tag_s_lazy
+                   ~tag:
+                     [%lazy_message
+                       "Failed to parse UI event"
+                         (name : string)
+                         (params : Msgpack.t list)])
             |> Or_error.combine_errors
           | "default_colors_set" ->
             calls
             |> List.map ~f:(fun params ->
-                 (match params with
-                  | Int rgb_fg
-                    :: Int rgb_bg
-                    :: Int rgb_sp
-                    :: Int cterm_fg
-                    :: Int cterm_bg
-                    :: unparsed_fields ->
-                    Ok
-                      (Default_colors_set
-                         { rgb_fg; rgb_bg; rgb_sp; cterm_fg; cterm_bg; unparsed_fields })
-                  | _ -> Or_error.error_string "Arguments have wrong type or arity")
-                 |> Or_error.tag_s_lazy
-                      ~tag:
-                        [%lazy_message
-                          "Failed to parse UI event"
-                            (name : string)
-                            (params : Msgpack.t list)])
+              (match params with
+               | Int rgb_fg
+                 :: Int rgb_bg
+                 :: Int rgb_sp
+                 :: Int cterm_fg
+                 :: Int cterm_bg
+                 :: unparsed_fields ->
+                 Ok
+                   (Default_colors_set
+                      { rgb_fg; rgb_bg; rgb_sp; cterm_fg; cterm_bg; unparsed_fields })
+               | _ -> Or_error.error_string "Arguments have wrong type or arity")
+              |> Or_error.tag_s_lazy
+                   ~tag:
+                     [%lazy_message
+                       "Failed to parse UI event"
+                         (name : string)
+                         (params : Msgpack.t list)])
             |> Or_error.combine_errors
           | "hl_attr_define" ->
             calls
             |> List.map ~f:(fun params ->
-                 (match params with
-                  | Int id :: rgb_attrs :: cterm_attrs :: info :: unparsed_fields ->
-                    let%bind rgb_attrs = Phantom.of_msgpack Dict rgb_attrs in
-                    let%bind cterm_attrs = Phantom.of_msgpack Dict cterm_attrs in
-                    let%bind info = Phantom.of_msgpack (Array Object) info in
-                    return
-                      (Hl_attr_define
-                         { id; rgb_attrs; cterm_attrs; info; unparsed_fields })
-                  | _ -> Or_error.error_string "Arguments have wrong type or arity")
-                 |> Or_error.tag_s_lazy
-                      ~tag:
-                        [%lazy_message
-                          "Failed to parse UI event"
-                            (name : string)
-                            (params : Msgpack.t list)])
+              (match params with
+               | Int id :: rgb_attrs :: cterm_attrs :: info :: unparsed_fields ->
+                 let%bind rgb_attrs = Phantom.of_msgpack Dict rgb_attrs in
+                 let%bind cterm_attrs = Phantom.of_msgpack Dict cterm_attrs in
+                 let%bind info = Phantom.of_msgpack (Array Object) info in
+                 return
+                   (Hl_attr_define { id; rgb_attrs; cterm_attrs; info; unparsed_fields })
+               | _ -> Or_error.error_string "Arguments have wrong type or arity")
+              |> Or_error.tag_s_lazy
+                   ~tag:
+                     [%lazy_message
+                       "Failed to parse UI event"
+                         (name : string)
+                         (params : Msgpack.t list)])
             |> Or_error.combine_errors
           | "hl_group_set" ->
             calls
             |> List.map ~f:(fun params ->
-                 (match params with
-                  | String name :: Int id :: unparsed_fields ->
-                    Ok (Hl_group_set { name; id; unparsed_fields })
-                  | _ -> Or_error.error_string "Arguments have wrong type or arity")
-                 |> Or_error.tag_s_lazy
-                      ~tag:
-                        [%lazy_message
-                          "Failed to parse UI event"
-                            (name : string)
-                            (params : Msgpack.t list)])
+              (match params with
+               | String name :: Int id :: unparsed_fields ->
+                 Ok (Hl_group_set { name; id; unparsed_fields })
+               | _ -> Or_error.error_string "Arguments have wrong type or arity")
+              |> Or_error.tag_s_lazy
+                   ~tag:
+                     [%lazy_message
+                       "Failed to parse UI event"
+                         (name : string)
+                         (params : Msgpack.t list)])
             |> Or_error.combine_errors
           | "grid_resize" ->
             calls
             |> List.map ~f:(fun params ->
-                 (match params with
-                  | Int grid :: Int width :: Int height :: unparsed_fields ->
-                    Ok (Grid_resize { grid; width; height; unparsed_fields })
-                  | _ -> Or_error.error_string "Arguments have wrong type or arity")
-                 |> Or_error.tag_s_lazy
-                      ~tag:
-                        [%lazy_message
-                          "Failed to parse UI event"
-                            (name : string)
-                            (params : Msgpack.t list)])
+              (match params with
+               | Int grid :: Int width :: Int height :: unparsed_fields ->
+                 Ok (Grid_resize { grid; width; height; unparsed_fields })
+               | _ -> Or_error.error_string "Arguments have wrong type or arity")
+              |> Or_error.tag_s_lazy
+                   ~tag:
+                     [%lazy_message
+                       "Failed to parse UI event"
+                         (name : string)
+                         (params : Msgpack.t list)])
             |> Or_error.combine_errors
           | "grid_clear" ->
             calls
             |> List.map ~f:(fun params ->
-                 (match params with
-                  | Int grid :: unparsed_fields ->
-                    Ok (Grid_clear { grid; unparsed_fields })
-                  | _ -> Or_error.error_string "Arguments have wrong type or arity")
-                 |> Or_error.tag_s_lazy
-                      ~tag:
-                        [%lazy_message
-                          "Failed to parse UI event"
-                            (name : string)
-                            (params : Msgpack.t list)])
+              (match params with
+               | Int grid :: unparsed_fields -> Ok (Grid_clear { grid; unparsed_fields })
+               | _ -> Or_error.error_string "Arguments have wrong type or arity")
+              |> Or_error.tag_s_lazy
+                   ~tag:
+                     [%lazy_message
+                       "Failed to parse UI event"
+                         (name : string)
+                         (params : Msgpack.t list)])
             |> Or_error.combine_errors
           | "grid_cursor_goto" ->
             calls
             |> List.map ~f:(fun params ->
-                 (match params with
-                  | Int grid :: Int row :: Int col :: unparsed_fields ->
-                    Ok (Grid_cursor_goto { grid; row; col; unparsed_fields })
-                  | _ -> Or_error.error_string "Arguments have wrong type or arity")
-                 |> Or_error.tag_s_lazy
-                      ~tag:
-                        [%lazy_message
-                          "Failed to parse UI event"
-                            (name : string)
-                            (params : Msgpack.t list)])
+              (match params with
+               | Int grid :: Int row :: Int col :: unparsed_fields ->
+                 Ok (Grid_cursor_goto { grid; row; col; unparsed_fields })
+               | _ -> Or_error.error_string "Arguments have wrong type or arity")
+              |> Or_error.tag_s_lazy
+                   ~tag:
+                     [%lazy_message
+                       "Failed to parse UI event"
+                         (name : string)
+                         (params : Msgpack.t list)])
             |> Or_error.combine_errors
           | "grid_line" ->
             calls
             |> List.map ~f:(fun params ->
-                 (match params with
-                  | Int grid :: Int row :: Int col_start :: data :: unparsed_fields ->
-                    let%bind data = Phantom.of_msgpack (Array Object) data in
-                    return (Grid_line { grid; row; col_start; data; unparsed_fields })
-                  | _ -> Or_error.error_string "Arguments have wrong type or arity")
-                 |> Or_error.tag_s_lazy
-                      ~tag:
-                        [%lazy_message
-                          "Failed to parse UI event"
-                            (name : string)
-                            (params : Msgpack.t list)])
+              (match params with
+               | Int grid :: Int row :: Int col_start :: data :: unparsed_fields ->
+                 let%bind data = Phantom.of_msgpack (Array Object) data in
+                 return (Grid_line { grid; row; col_start; data; unparsed_fields })
+               | _ -> Or_error.error_string "Arguments have wrong type or arity")
+              |> Or_error.tag_s_lazy
+                   ~tag:
+                     [%lazy_message
+                       "Failed to parse UI event"
+                         (name : string)
+                         (params : Msgpack.t list)])
             |> Or_error.combine_errors
           | "grid_scroll" ->
             calls
             |> List.map ~f:(fun params ->
-                 (match params with
-                  | Int grid
-                    :: Int top
-                    :: Int bot
-                    :: Int left
-                    :: Int right
-                    :: Int rows
-                    :: Int cols
-                    :: unparsed_fields ->
-                    Ok
-                      (Grid_scroll
-                         { grid; top; bot; left; right; rows; cols; unparsed_fields })
-                  | _ -> Or_error.error_string "Arguments have wrong type or arity")
-                 |> Or_error.tag_s_lazy
-                      ~tag:
-                        [%lazy_message
-                          "Failed to parse UI event"
-                            (name : string)
-                            (params : Msgpack.t list)])
+              (match params with
+               | Int grid
+                 :: Int top
+                 :: Int bot
+                 :: Int left
+                 :: Int right
+                 :: Int rows
+                 :: Int cols
+                 :: unparsed_fields ->
+                 Ok
+                   (Grid_scroll
+                      { grid; top; bot; left; right; rows; cols; unparsed_fields })
+               | _ -> Or_error.error_string "Arguments have wrong type or arity")
+              |> Or_error.tag_s_lazy
+                   ~tag:
+                     [%lazy_message
+                       "Failed to parse UI event"
+                         (name : string)
+                         (params : Msgpack.t list)])
             |> Or_error.combine_errors
           | "grid_destroy" ->
             calls
             |> List.map ~f:(fun params ->
-                 (match params with
-                  | Int grid :: unparsed_fields ->
-                    Ok (Grid_destroy { grid; unparsed_fields })
-                  | _ -> Or_error.error_string "Arguments have wrong type or arity")
-                 |> Or_error.tag_s_lazy
-                      ~tag:
-                        [%lazy_message
-                          "Failed to parse UI event"
-                            (name : string)
-                            (params : Msgpack.t list)])
+              (match params with
+               | Int grid :: unparsed_fields ->
+                 Ok (Grid_destroy { grid; unparsed_fields })
+               | _ -> Or_error.error_string "Arguments have wrong type or arity")
+              |> Or_error.tag_s_lazy
+                   ~tag:
+                     [%lazy_message
+                       "Failed to parse UI event"
+                         (name : string)
+                         (params : Msgpack.t list)])
             |> Or_error.combine_errors
           | "win_pos" ->
             calls
             |> List.map ~f:(fun params ->
-                 (match params with
-                  | Int grid
-                    :: win
-                    :: Int startrow
-                    :: Int startcol
-                    :: Int width
-                    :: Int height
-                    :: unparsed_fields ->
-                    let%bind win = Phantom.of_msgpack Window win in
-                    return
-                      (Win_pos
-                         { grid; win; startrow; startcol; width; height; unparsed_fields })
-                  | _ -> Or_error.error_string "Arguments have wrong type or arity")
-                 |> Or_error.tag_s_lazy
-                      ~tag:
-                        [%lazy_message
-                          "Failed to parse UI event"
-                            (name : string)
-                            (params : Msgpack.t list)])
+              (match params with
+               | Int grid
+                 :: win
+                 :: Int startrow
+                 :: Int startcol
+                 :: Int width
+                 :: Int height
+                 :: unparsed_fields ->
+                 let%bind win = Phantom.of_msgpack Window win in
+                 return
+                   (Win_pos
+                      { grid; win; startrow; startcol; width; height; unparsed_fields })
+               | _ -> Or_error.error_string "Arguments have wrong type or arity")
+              |> Or_error.tag_s_lazy
+                   ~tag:
+                     [%lazy_message
+                       "Failed to parse UI event"
+                         (name : string)
+                         (params : Msgpack.t list)])
             |> Or_error.combine_errors
           | "win_float_pos" ->
             calls
             |> List.map ~f:(fun params ->
-                 (match params with
-                  | Int grid
-                    :: win
-                    :: String anchor
-                    :: Int anchor_grid
-                    :: Float anchor_row
-                    :: Float anchor_col
-                    :: Bool focusable
-                    :: Int zindex
-                    :: unparsed_fields ->
-                    let%bind win = Phantom.of_msgpack Window win in
-                    return
-                      (Win_float_pos
-                         { grid
-                         ; win
-                         ; anchor
-                         ; anchor_grid
-                         ; anchor_row
-                         ; anchor_col
-                         ; focusable
-                         ; zindex
-                         ; unparsed_fields
-                         })
-                  | _ -> Or_error.error_string "Arguments have wrong type or arity")
-                 |> Or_error.tag_s_lazy
-                      ~tag:
-                        [%lazy_message
-                          "Failed to parse UI event"
-                            (name : string)
-                            (params : Msgpack.t list)])
+              (match params with
+               | Int grid
+                 :: win
+                 :: String anchor
+                 :: Int anchor_grid
+                 :: Float anchor_row
+                 :: Float anchor_col
+                 :: Bool focusable
+                 :: Int zindex
+                 :: unparsed_fields ->
+                 let%bind win = Phantom.of_msgpack Window win in
+                 return
+                   (Win_float_pos
+                      { grid
+                      ; win
+                      ; anchor
+                      ; anchor_grid
+                      ; anchor_row
+                      ; anchor_col
+                      ; focusable
+                      ; zindex
+                      ; unparsed_fields
+                      })
+               | _ -> Or_error.error_string "Arguments have wrong type or arity")
+              |> Or_error.tag_s_lazy
+                   ~tag:
+                     [%lazy_message
+                       "Failed to parse UI event"
+                         (name : string)
+                         (params : Msgpack.t list)])
             |> Or_error.combine_errors
           | "win_external_pos" ->
             calls
             |> List.map ~f:(fun params ->
-                 (match params with
-                  | Int grid :: win :: unparsed_fields ->
-                    let%bind win = Phantom.of_msgpack Window win in
-                    return (Win_external_pos { grid; win; unparsed_fields })
-                  | _ -> Or_error.error_string "Arguments have wrong type or arity")
-                 |> Or_error.tag_s_lazy
-                      ~tag:
-                        [%lazy_message
-                          "Failed to parse UI event"
-                            (name : string)
-                            (params : Msgpack.t list)])
+              (match params with
+               | Int grid :: win :: unparsed_fields ->
+                 let%bind win = Phantom.of_msgpack Window win in
+                 return (Win_external_pos { grid; win; unparsed_fields })
+               | _ -> Or_error.error_string "Arguments have wrong type or arity")
+              |> Or_error.tag_s_lazy
+                   ~tag:
+                     [%lazy_message
+                       "Failed to parse UI event"
+                         (name : string)
+                         (params : Msgpack.t list)])
             |> Or_error.combine_errors
           | "win_hide" ->
             calls
             |> List.map ~f:(fun params ->
-                 (match params with
-                  | Int grid :: unparsed_fields -> Ok (Win_hide { grid; unparsed_fields })
-                  | _ -> Or_error.error_string "Arguments have wrong type or arity")
-                 |> Or_error.tag_s_lazy
-                      ~tag:
-                        [%lazy_message
-                          "Failed to parse UI event"
-                            (name : string)
-                            (params : Msgpack.t list)])
+              (match params with
+               | Int grid :: unparsed_fields -> Ok (Win_hide { grid; unparsed_fields })
+               | _ -> Or_error.error_string "Arguments have wrong type or arity")
+              |> Or_error.tag_s_lazy
+                   ~tag:
+                     [%lazy_message
+                       "Failed to parse UI event"
+                         (name : string)
+                         (params : Msgpack.t list)])
             |> Or_error.combine_errors
           | "win_close" ->
             calls
             |> List.map ~f:(fun params ->
-                 (match params with
-                  | Int grid :: unparsed_fields ->
-                    Ok (Win_close { grid; unparsed_fields })
-                  | _ -> Or_error.error_string "Arguments have wrong type or arity")
-                 |> Or_error.tag_s_lazy
-                      ~tag:
-                        [%lazy_message
-                          "Failed to parse UI event"
-                            (name : string)
-                            (params : Msgpack.t list)])
+              (match params with
+               | Int grid :: unparsed_fields -> Ok (Win_close { grid; unparsed_fields })
+               | _ -> Or_error.error_string "Arguments have wrong type or arity")
+              |> Or_error.tag_s_lazy
+                   ~tag:
+                     [%lazy_message
+                       "Failed to parse UI event"
+                         (name : string)
+                         (params : Msgpack.t list)])
             |> Or_error.combine_errors
           | "msg_set_pos" ->
             calls
             |> List.map ~f:(fun params ->
-                 (match params with
-                  | Int grid
-                    :: Int row
-                    :: Bool scrolled
-                    :: String sep_char
-                    :: unparsed_fields ->
-                    Ok (Msg_set_pos { grid; row; scrolled; sep_char; unparsed_fields })
-                  | _ -> Or_error.error_string "Arguments have wrong type or arity")
-                 |> Or_error.tag_s_lazy
-                      ~tag:
-                        [%lazy_message
-                          "Failed to parse UI event"
-                            (name : string)
-                            (params : Msgpack.t list)])
+              (match params with
+               | Int grid
+                 :: Int row
+                 :: Bool scrolled
+                 :: String sep_char
+                 :: unparsed_fields ->
+                 Ok (Msg_set_pos { grid; row; scrolled; sep_char; unparsed_fields })
+               | _ -> Or_error.error_string "Arguments have wrong type or arity")
+              |> Or_error.tag_s_lazy
+                   ~tag:
+                     [%lazy_message
+                       "Failed to parse UI event"
+                         (name : string)
+                         (params : Msgpack.t list)])
             |> Or_error.combine_errors
           | "win_viewport" ->
             calls
             |> List.map ~f:(fun params ->
-                 (match params with
-                  | Int grid
-                    :: win
-                    :: Int topline
-                    :: Int botline
-                    :: Int curline
-                    :: Int curcol
-                    :: Int line_count
-                    :: Int scroll_delta
-                    :: unparsed_fields ->
-                    let%bind win = Phantom.of_msgpack Window win in
-                    return
-                      (Win_viewport
-                         { grid
-                         ; win
-                         ; topline
-                         ; botline
-                         ; curline
-                         ; curcol
-                         ; line_count
-                         ; scroll_delta
-                         ; unparsed_fields
-                         })
-                  | _ -> Or_error.error_string "Arguments have wrong type or arity")
-                 |> Or_error.tag_s_lazy
-                      ~tag:
-                        [%lazy_message
-                          "Failed to parse UI event"
-                            (name : string)
-                            (params : Msgpack.t list)])
+              (match params with
+               | Int grid
+                 :: win
+                 :: Int topline
+                 :: Int botline
+                 :: Int curline
+                 :: Int curcol
+                 :: Int line_count
+                 :: Int scroll_delta
+                 :: unparsed_fields ->
+                 let%bind win = Phantom.of_msgpack Window win in
+                 return
+                   (Win_viewport
+                      { grid
+                      ; win
+                      ; topline
+                      ; botline
+                      ; curline
+                      ; curcol
+                      ; line_count
+                      ; scroll_delta
+                      ; unparsed_fields
+                      })
+               | _ -> Or_error.error_string "Arguments have wrong type or arity")
+              |> Or_error.tag_s_lazy
+                   ~tag:
+                     [%lazy_message
+                       "Failed to parse UI event"
+                         (name : string)
+                         (params : Msgpack.t list)])
             |> Or_error.combine_errors
           | "win_extmark" ->
             calls
             |> List.map ~f:(fun params ->
-                 (match params with
-                  | Int grid
-                    :: win
-                    :: Int ns_id
-                    :: Int mark_id
-                    :: Int row
-                    :: Int col
-                    :: unparsed_fields ->
-                    let%bind win = Phantom.of_msgpack Window win in
-                    return
-                      (Win_extmark
-                         { grid; win; ns_id; mark_id; row; col; unparsed_fields })
-                  | _ -> Or_error.error_string "Arguments have wrong type or arity")
-                 |> Or_error.tag_s_lazy
-                      ~tag:
-                        [%lazy_message
-                          "Failed to parse UI event"
-                            (name : string)
-                            (params : Msgpack.t list)])
+              (match params with
+               | Int grid
+                 :: win
+                 :: Int ns_id
+                 :: Int mark_id
+                 :: Int row
+                 :: Int col
+                 :: unparsed_fields ->
+                 let%bind win = Phantom.of_msgpack Window win in
+                 return
+                   (Win_extmark { grid; win; ns_id; mark_id; row; col; unparsed_fields })
+               | _ -> Or_error.error_string "Arguments have wrong type or arity")
+              |> Or_error.tag_s_lazy
+                   ~tag:
+                     [%lazy_message
+                       "Failed to parse UI event"
+                         (name : string)
+                         (params : Msgpack.t list)])
             |> Or_error.combine_errors
           | "popupmenu_show" ->
             calls
             |> List.map ~f:(fun params ->
-                 (match params with
-                  | items
-                    :: Int selected
-                    :: Int row
-                    :: Int col
-                    :: Int grid
-                    :: unparsed_fields ->
-                    let%bind items = Phantom.of_msgpack (Array Object) items in
-                    return
-                      (Popupmenu_show { items; selected; row; col; grid; unparsed_fields })
-                  | _ -> Or_error.error_string "Arguments have wrong type or arity")
-                 |> Or_error.tag_s_lazy
-                      ~tag:
-                        [%lazy_message
-                          "Failed to parse UI event"
-                            (name : string)
-                            (params : Msgpack.t list)])
+              (match params with
+               | items
+                 :: Int selected
+                 :: Int row
+                 :: Int col
+                 :: Int grid
+                 :: unparsed_fields ->
+                 let%bind items = Phantom.of_msgpack (Array Object) items in
+                 return
+                   (Popupmenu_show { items; selected; row; col; grid; unparsed_fields })
+               | _ -> Or_error.error_string "Arguments have wrong type or arity")
+              |> Or_error.tag_s_lazy
+                   ~tag:
+                     [%lazy_message
+                       "Failed to parse UI event"
+                         (name : string)
+                         (params : Msgpack.t list)])
             |> Or_error.combine_errors
           | "popupmenu_hide" ->
             calls
@@ -1163,131 +1158,131 @@ module Ui_event = struct
           | "popupmenu_select" ->
             calls
             |> List.map ~f:(fun params ->
-                 (match params with
-                  | Int selected :: unparsed_fields ->
-                    Ok (Popupmenu_select { selected; unparsed_fields })
-                  | _ -> Or_error.error_string "Arguments have wrong type or arity")
-                 |> Or_error.tag_s_lazy
-                      ~tag:
-                        [%lazy_message
-                          "Failed to parse UI event"
-                            (name : string)
-                            (params : Msgpack.t list)])
+              (match params with
+               | Int selected :: unparsed_fields ->
+                 Ok (Popupmenu_select { selected; unparsed_fields })
+               | _ -> Or_error.error_string "Arguments have wrong type or arity")
+              |> Or_error.tag_s_lazy
+                   ~tag:
+                     [%lazy_message
+                       "Failed to parse UI event"
+                         (name : string)
+                         (params : Msgpack.t list)])
             |> Or_error.combine_errors
           | "tabline_update" ->
             calls
             |> List.map ~f:(fun params ->
-                 (match params with
-                  | current :: tabs :: current_buffer :: buffers :: unparsed_fields ->
-                    let%bind current = Phantom.of_msgpack Tabpage current in
-                    let%bind tabs = Phantom.of_msgpack (Array Object) tabs in
-                    let%bind current_buffer = Phantom.of_msgpack Buffer current_buffer in
-                    let%bind buffers = Phantom.of_msgpack (Array Object) buffers in
-                    return
-                      (Tabline_update
-                         { current; tabs; current_buffer; buffers; unparsed_fields })
-                  | _ -> Or_error.error_string "Arguments have wrong type or arity")
-                 |> Or_error.tag_s_lazy
-                      ~tag:
-                        [%lazy_message
-                          "Failed to parse UI event"
-                            (name : string)
-                            (params : Msgpack.t list)])
+              (match params with
+               | current :: tabs :: current_buffer :: buffers :: unparsed_fields ->
+                 let%bind current = Phantom.of_msgpack Tabpage current in
+                 let%bind tabs = Phantom.of_msgpack (Array Object) tabs in
+                 let%bind current_buffer = Phantom.of_msgpack Buffer current_buffer in
+                 let%bind buffers = Phantom.of_msgpack (Array Object) buffers in
+                 return
+                   (Tabline_update
+                      { current; tabs; current_buffer; buffers; unparsed_fields })
+               | _ -> Or_error.error_string "Arguments have wrong type or arity")
+              |> Or_error.tag_s_lazy
+                   ~tag:
+                     [%lazy_message
+                       "Failed to parse UI event"
+                         (name : string)
+                         (params : Msgpack.t list)])
             |> Or_error.combine_errors
           | "cmdline_show" ->
             calls
             |> List.map ~f:(fun params ->
-                 (match params with
-                  | content
-                    :: Int pos
-                    :: String firstc
-                    :: String prompt
-                    :: Int indent
-                    :: Int level
-                    :: unparsed_fields ->
-                    let%bind content = Phantom.of_msgpack (Array Object) content in
-                    return
-                      (Cmdline_show
-                         { content; pos; firstc; prompt; indent; level; unparsed_fields })
-                  | _ -> Or_error.error_string "Arguments have wrong type or arity")
-                 |> Or_error.tag_s_lazy
-                      ~tag:
-                        [%lazy_message
-                          "Failed to parse UI event"
-                            (name : string)
-                            (params : Msgpack.t list)])
+              (match params with
+               | content
+                 :: Int pos
+                 :: String firstc
+                 :: String prompt
+                 :: Int indent
+                 :: Int level
+                 :: unparsed_fields ->
+                 let%bind content = Phantom.of_msgpack (Array Object) content in
+                 return
+                   (Cmdline_show
+                      { content; pos; firstc; prompt; indent; level; unparsed_fields })
+               | _ -> Or_error.error_string "Arguments have wrong type or arity")
+              |> Or_error.tag_s_lazy
+                   ~tag:
+                     [%lazy_message
+                       "Failed to parse UI event"
+                         (name : string)
+                         (params : Msgpack.t list)])
             |> Or_error.combine_errors
           | "cmdline_pos" ->
             calls
             |> List.map ~f:(fun params ->
-                 (match params with
-                  | Int pos :: Int level :: unparsed_fields ->
-                    Ok (Cmdline_pos { pos; level; unparsed_fields })
-                  | _ -> Or_error.error_string "Arguments have wrong type or arity")
-                 |> Or_error.tag_s_lazy
-                      ~tag:
-                        [%lazy_message
-                          "Failed to parse UI event"
-                            (name : string)
-                            (params : Msgpack.t list)])
+              (match params with
+               | Int pos :: Int level :: unparsed_fields ->
+                 Ok (Cmdline_pos { pos; level; unparsed_fields })
+               | _ -> Or_error.error_string "Arguments have wrong type or arity")
+              |> Or_error.tag_s_lazy
+                   ~tag:
+                     [%lazy_message
+                       "Failed to parse UI event"
+                         (name : string)
+                         (params : Msgpack.t list)])
             |> Or_error.combine_errors
           | "cmdline_special_char" ->
             calls
             |> List.map ~f:(fun params ->
-                 (match params with
-                  | String c :: Bool shift :: Int level :: unparsed_fields ->
-                    Ok (Cmdline_special_char { c; shift; level; unparsed_fields })
-                  | _ -> Or_error.error_string "Arguments have wrong type or arity")
-                 |> Or_error.tag_s_lazy
-                      ~tag:
-                        [%lazy_message
-                          "Failed to parse UI event"
-                            (name : string)
-                            (params : Msgpack.t list)])
+              (match params with
+               | String c :: Bool shift :: Int level :: unparsed_fields ->
+                 Ok (Cmdline_special_char { c; shift; level; unparsed_fields })
+               | _ -> Or_error.error_string "Arguments have wrong type or arity")
+              |> Or_error.tag_s_lazy
+                   ~tag:
+                     [%lazy_message
+                       "Failed to parse UI event"
+                         (name : string)
+                         (params : Msgpack.t list)])
             |> Or_error.combine_errors
           | "cmdline_hide" ->
             calls
             |> List.map ~f:(fun params ->
-                 (match params with
-                  | Int level :: unparsed_fields ->
-                    Ok (Cmdline_hide { level; unparsed_fields })
-                  | _ -> Or_error.error_string "Arguments have wrong type or arity")
-                 |> Or_error.tag_s_lazy
-                      ~tag:
-                        [%lazy_message
-                          "Failed to parse UI event"
-                            (name : string)
-                            (params : Msgpack.t list)])
+              (match params with
+               | Int level :: unparsed_fields ->
+                 Ok (Cmdline_hide { level; unparsed_fields })
+               | _ -> Or_error.error_string "Arguments have wrong type or arity")
+              |> Or_error.tag_s_lazy
+                   ~tag:
+                     [%lazy_message
+                       "Failed to parse UI event"
+                         (name : string)
+                         (params : Msgpack.t list)])
             |> Or_error.combine_errors
           | "cmdline_block_show" ->
             calls
             |> List.map ~f:(fun params ->
-                 (match params with
-                  | lines :: unparsed_fields ->
-                    let%bind lines = Phantom.of_msgpack (Array Object) lines in
-                    return (Cmdline_block_show { lines; unparsed_fields })
-                  | _ -> Or_error.error_string "Arguments have wrong type or arity")
-                 |> Or_error.tag_s_lazy
-                      ~tag:
-                        [%lazy_message
-                          "Failed to parse UI event"
-                            (name : string)
-                            (params : Msgpack.t list)])
+              (match params with
+               | lines :: unparsed_fields ->
+                 let%bind lines = Phantom.of_msgpack (Array Object) lines in
+                 return (Cmdline_block_show { lines; unparsed_fields })
+               | _ -> Or_error.error_string "Arguments have wrong type or arity")
+              |> Or_error.tag_s_lazy
+                   ~tag:
+                     [%lazy_message
+                       "Failed to parse UI event"
+                         (name : string)
+                         (params : Msgpack.t list)])
             |> Or_error.combine_errors
           | "cmdline_block_append" ->
             calls
             |> List.map ~f:(fun params ->
-                 (match params with
-                  | lines :: unparsed_fields ->
-                    let%bind lines = Phantom.of_msgpack (Array Object) lines in
-                    return (Cmdline_block_append { lines; unparsed_fields })
-                  | _ -> Or_error.error_string "Arguments have wrong type or arity")
-                 |> Or_error.tag_s_lazy
-                      ~tag:
-                        [%lazy_message
-                          "Failed to parse UI event"
-                            (name : string)
-                            (params : Msgpack.t list)])
+              (match params with
+               | lines :: unparsed_fields ->
+                 let%bind lines = Phantom.of_msgpack (Array Object) lines in
+                 return (Cmdline_block_append { lines; unparsed_fields })
+               | _ -> Or_error.error_string "Arguments have wrong type or arity")
+              |> Or_error.tag_s_lazy
+                   ~tag:
+                     [%lazy_message
+                       "Failed to parse UI event"
+                         (name : string)
+                         (params : Msgpack.t list)])
             |> Or_error.combine_errors
           | "cmdline_block_hide" ->
             calls
@@ -1296,31 +1291,31 @@ module Ui_event = struct
           | "wildmenu_show" ->
             calls
             |> List.map ~f:(fun params ->
-                 (match params with
-                  | items :: unparsed_fields ->
-                    let%bind items = Phantom.of_msgpack (Array Object) items in
-                    return (Wildmenu_show { items; unparsed_fields })
-                  | _ -> Or_error.error_string "Arguments have wrong type or arity")
-                 |> Or_error.tag_s_lazy
-                      ~tag:
-                        [%lazy_message
-                          "Failed to parse UI event"
-                            (name : string)
-                            (params : Msgpack.t list)])
+              (match params with
+               | items :: unparsed_fields ->
+                 let%bind items = Phantom.of_msgpack (Array Object) items in
+                 return (Wildmenu_show { items; unparsed_fields })
+               | _ -> Or_error.error_string "Arguments have wrong type or arity")
+              |> Or_error.tag_s_lazy
+                   ~tag:
+                     [%lazy_message
+                       "Failed to parse UI event"
+                         (name : string)
+                         (params : Msgpack.t list)])
             |> Or_error.combine_errors
           | "wildmenu_select" ->
             calls
             |> List.map ~f:(fun params ->
-                 (match params with
-                  | Int selected :: unparsed_fields ->
-                    Ok (Wildmenu_select { selected; unparsed_fields })
-                  | _ -> Or_error.error_string "Arguments have wrong type or arity")
-                 |> Or_error.tag_s_lazy
-                      ~tag:
-                        [%lazy_message
-                          "Failed to parse UI event"
-                            (name : string)
-                            (params : Msgpack.t list)])
+              (match params with
+               | Int selected :: unparsed_fields ->
+                 Ok (Wildmenu_select { selected; unparsed_fields })
+               | _ -> Or_error.error_string "Arguments have wrong type or arity")
+              |> Or_error.tag_s_lazy
+                   ~tag:
+                     [%lazy_message
+                       "Failed to parse UI event"
+                         (name : string)
+                         (params : Msgpack.t list)])
             |> Or_error.combine_errors
           | "wildmenu_hide" ->
             calls
@@ -1329,17 +1324,17 @@ module Ui_event = struct
           | "msg_show" ->
             calls
             |> List.map ~f:(fun params ->
-                 (match params with
-                  | String kind :: content :: Bool replace_last :: unparsed_fields ->
-                    let%bind content = Phantom.of_msgpack (Array Object) content in
-                    return (Msg_show { kind; content; replace_last; unparsed_fields })
-                  | _ -> Or_error.error_string "Arguments have wrong type or arity")
-                 |> Or_error.tag_s_lazy
-                      ~tag:
-                        [%lazy_message
-                          "Failed to parse UI event"
-                            (name : string)
-                            (params : Msgpack.t list)])
+              (match params with
+               | String kind :: content :: Bool replace_last :: unparsed_fields ->
+                 let%bind content = Phantom.of_msgpack (Array Object) content in
+                 return (Msg_show { kind; content; replace_last; unparsed_fields })
+               | _ -> Or_error.error_string "Arguments have wrong type or arity")
+              |> Or_error.tag_s_lazy
+                   ~tag:
+                     [%lazy_message
+                       "Failed to parse UI event"
+                         (name : string)
+                         (params : Msgpack.t list)])
             |> Or_error.combine_errors
           | "msg_clear" ->
             calls
@@ -1348,62 +1343,62 @@ module Ui_event = struct
           | "msg_showcmd" ->
             calls
             |> List.map ~f:(fun params ->
-                 (match params with
-                  | content :: unparsed_fields ->
-                    let%bind content = Phantom.of_msgpack (Array Object) content in
-                    return (Msg_showcmd { content; unparsed_fields })
-                  | _ -> Or_error.error_string "Arguments have wrong type or arity")
-                 |> Or_error.tag_s_lazy
-                      ~tag:
-                        [%lazy_message
-                          "Failed to parse UI event"
-                            (name : string)
-                            (params : Msgpack.t list)])
+              (match params with
+               | content :: unparsed_fields ->
+                 let%bind content = Phantom.of_msgpack (Array Object) content in
+                 return (Msg_showcmd { content; unparsed_fields })
+               | _ -> Or_error.error_string "Arguments have wrong type or arity")
+              |> Or_error.tag_s_lazy
+                   ~tag:
+                     [%lazy_message
+                       "Failed to parse UI event"
+                         (name : string)
+                         (params : Msgpack.t list)])
             |> Or_error.combine_errors
           | "msg_showmode" ->
             calls
             |> List.map ~f:(fun params ->
-                 (match params with
-                  | content :: unparsed_fields ->
-                    let%bind content = Phantom.of_msgpack (Array Object) content in
-                    return (Msg_showmode { content; unparsed_fields })
-                  | _ -> Or_error.error_string "Arguments have wrong type or arity")
-                 |> Or_error.tag_s_lazy
-                      ~tag:
-                        [%lazy_message
-                          "Failed to parse UI event"
-                            (name : string)
-                            (params : Msgpack.t list)])
+              (match params with
+               | content :: unparsed_fields ->
+                 let%bind content = Phantom.of_msgpack (Array Object) content in
+                 return (Msg_showmode { content; unparsed_fields })
+               | _ -> Or_error.error_string "Arguments have wrong type or arity")
+              |> Or_error.tag_s_lazy
+                   ~tag:
+                     [%lazy_message
+                       "Failed to parse UI event"
+                         (name : string)
+                         (params : Msgpack.t list)])
             |> Or_error.combine_errors
           | "msg_ruler" ->
             calls
             |> List.map ~f:(fun params ->
-                 (match params with
-                  | content :: unparsed_fields ->
-                    let%bind content = Phantom.of_msgpack (Array Object) content in
-                    return (Msg_ruler { content; unparsed_fields })
-                  | _ -> Or_error.error_string "Arguments have wrong type or arity")
-                 |> Or_error.tag_s_lazy
-                      ~tag:
-                        [%lazy_message
-                          "Failed to parse UI event"
-                            (name : string)
-                            (params : Msgpack.t list)])
+              (match params with
+               | content :: unparsed_fields ->
+                 let%bind content = Phantom.of_msgpack (Array Object) content in
+                 return (Msg_ruler { content; unparsed_fields })
+               | _ -> Or_error.error_string "Arguments have wrong type or arity")
+              |> Or_error.tag_s_lazy
+                   ~tag:
+                     [%lazy_message
+                       "Failed to parse UI event"
+                         (name : string)
+                         (params : Msgpack.t list)])
             |> Or_error.combine_errors
           | "msg_history_show" ->
             calls
             |> List.map ~f:(fun params ->
-                 (match params with
-                  | entries :: unparsed_fields ->
-                    let%bind entries = Phantom.of_msgpack (Array Object) entries in
-                    return (Msg_history_show { entries; unparsed_fields })
-                  | _ -> Or_error.error_string "Arguments have wrong type or arity")
-                 |> Or_error.tag_s_lazy
-                      ~tag:
-                        [%lazy_message
-                          "Failed to parse UI event"
-                            (name : string)
-                            (params : Msgpack.t list)])
+              (match params with
+               | entries :: unparsed_fields ->
+                 let%bind entries = Phantom.of_msgpack (Array Object) entries in
+                 return (Msg_history_show { entries; unparsed_fields })
+               | _ -> Or_error.error_string "Arguments have wrong type or arity")
+              |> Or_error.tag_s_lazy
+                   ~tag:
+                     [%lazy_message
+                       "Failed to parse UI event"
+                         (name : string)
+                         (params : Msgpack.t list)])
             |> Or_error.combine_errors
           | "msg_history_clear" ->
             calls
@@ -1412,7 +1407,7 @@ module Ui_event = struct
           | _ ->
             calls
             |> List.map ~f:(fun params ->
-                 Unknown_event { name; unparsed_fields = params })
+              Unknown_event { name; unparsed_fields = params })
             |> Or_error.return)
        | exception Exit ->
          Or_error.error_s [%message "Failed to parse batched UI event" (msg : Msgpack.t)])

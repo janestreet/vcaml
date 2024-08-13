@@ -1,7 +1,8 @@
 (library
  (name vcaml_bindings_test)
  (public_name vcaml.test.bindings)
- (libraries async core expect_test_helpers_async vcaml vcaml.test.helpers)
+ (libraries async core expect_test_helpers_async msgpack
+   core_kernel.nonempty_list vcaml vcaml.test.helpers)
  (flags :standard -alert -vcaml_private)
  (inline_tests)
  (preprocess

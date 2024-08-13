@@ -120,9 +120,9 @@ let set_text
 let create here client ~listed ~scratch =
   Nvim_internal.nvim_create_buf ~listed ~scratch
   |> map_witness ~f:(fun t ->
-       match (t :> int) with
-       | 0 -> Or_error.error_string "nvim_create_buf failed (returned 0)"
-       | _ -> Ok t)
+    match (t :> int) with
+    | 0 -> Or_error.error_string "nvim_create_buf failed (returned 0)"
+    | _ -> Ok t)
   |> run here client
 ;;
 
@@ -211,10 +211,10 @@ let delete_var here client t name =
 let get_mark here client t ~sym =
   Nvim_internal.nvim_buf_get_mark ~buffer:t ~name:(Char.to_string sym)
   |> map_witness ~f:(function
-       | 0, 0 ->
-         Or_error.error_s
-           [%message "Mark not set in buffer" ~buffer:(t : Or_current.t) (sym : char)]
-       | row, col -> Ok { Mark.sym; pos = { row; col } })
+    | 0, 0 ->
+      Or_error.error_s
+        [%message "Mark not set in buffer" ~buffer:(t : Or_current.t) (sym : char)]
+    | row, col -> Ok { Mark.sym; pos = { row; col } })
   |> run_and_get_changedtick here client t
 ;;
 
@@ -229,20 +229,20 @@ let set_mark here client ?changedtick t mark =
     ~col:mark.pos.col
     ~opts:String.Map.empty
   |> map_witness ~f:(function
-       | true -> Ok ()
-       | false ->
-         Or_error.error_s
-           [%message "Failed to set mark" ~buffer:(t : Or_current.t) (mark : Mark.t)])
+    | true -> Ok ()
+    | false ->
+      Or_error.error_s
+        [%message "Failed to set mark" ~buffer:(t : Or_current.t) (mark : Mark.t)])
   |> run_with_changedtick_check here client ?changedtick t
 ;;
 
 let delete_mark here client t sym =
   Nvim_internal.nvim_buf_del_mark ~buffer:t ~name:(Char.to_string sym)
   |> map_witness ~f:(function
-       | true -> Ok ()
-       | false ->
-         Or_error.error_s
-           [%message "Mark not set in buffer" ~buffer:(t : Or_current.t) (sym : char)])
+    | true -> Ok ()
+    | false ->
+      Or_error.error_s
+        [%message "Mark not set in buffer" ~buffer:(t : Or_current.t) (sym : char)])
   |> run here client
 ;;
 
@@ -456,8 +456,8 @@ module Untested = struct
       ~ns_id:(Namespace.id extmark.namespace)
       ~id:extmark.id
     |> map_witness ~f:(function
-         | true -> Ok ()
-         | false -> Or_error.error_s [%message "Invalid extmark" ~_:(extmark : Extmark.t)])
+      | true -> Ok ()
+      | false -> Or_error.error_s [%message "Invalid extmark" ~_:(extmark : Extmark.t)])
     |> run here client
   ;;
 
@@ -469,9 +469,9 @@ module Untested = struct
       ~id
       ~opts
     |> map_witness ~f:(function
-         | [] -> Ok None
-         | [ row; col ] -> Ok (Some { Position.row; col })
-         | _ -> Or_error.error_string "malformed result for [nvim_buf_get_extmark_by_id]")
+      | [] -> Ok None
+      | [ row; col ] -> Ok (Some { Position.row; col })
+      | _ -> Or_error.error_string "malformed result for [nvim_buf_get_extmark_by_id]")
     |> run_and_get_changedtick here client (Id buffer)
   ;;
 
@@ -497,11 +497,11 @@ module Untested = struct
        [details] is provided the last item in the array is a dictionary. *)
     { api_result with witness = Array Object }
     |> map_witness ~f:(function
-         | [] -> Ok None
-         | [ Int row; Int col; details ] ->
-           let%map.Or_error details = Type.of_msgpack Dict details in
-           Some ({ Position.row; col }, details)
-         | _ -> Or_error.error_string "malformed result for [nvim_buf_get_extmark_by_id]")
+      | [] -> Ok None
+      | [ Int row; Int col; details ] ->
+        let%map.Or_error details = Type.of_msgpack Dict details in
+        Some ({ Position.row; col }, details)
+      | _ -> Or_error.error_string "malformed result for [nvim_buf_get_extmark_by_id]")
     |> run_and_get_changedtick here client (Id buffer)
   ;;
 
@@ -564,11 +564,11 @@ module Untested = struct
       ~map_witness_f:(fun ~buffer ~namespace extmarks ->
         extmarks
         |> List.map ~f:(function
-             | [ Int id; Int row; Int col ] ->
-               let extmark = { Extmark.id; namespace; buffer } in
-               let pos = { Position.row; col } in
-               Ok (extmark, pos)
-             | _ -> Or_error.error_string "malformed result from [nvim_buf_get_extmarks]")
+          | [ Int id; Int row; Int col ] ->
+            let extmark = { Extmark.id; namespace; buffer } in
+            let pos = { Position.row; col } in
+            Ok (extmark, pos)
+          | _ -> Or_error.error_string "malformed result from [nvim_buf_get_extmarks]")
         |> Or_error.combine_errors)
       ~details:false
       ?hl_groups:None
@@ -581,12 +581,12 @@ module Untested = struct
       ~map_witness_f:(fun ~buffer ~namespace extmarks ->
         extmarks
         |> List.map ~f:(function
-             | [ Int id; Int row; Int col; details ] ->
-               let%map.Or_error details = Type.of_msgpack Dict details in
-               let extmark = { Extmark.id; namespace; buffer } in
-               let pos = { Position.row; col } in
-               extmark, pos, details
-             | _ -> Or_error.error_string "malformed result from [nvim_buf_get_extmarks]")
+          | [ Int id; Int row; Int col; details ] ->
+            let%map.Or_error details = Type.of_msgpack Dict details in
+            let extmark = { Extmark.id; namespace; buffer } in
+            let pos = { Position.row; col } in
+            extmark, pos, details
+          | _ -> Or_error.error_string "malformed result from [nvim_buf_get_extmarks]")
         |> Or_error.combine_errors)
       ~details:true
       here
@@ -1118,9 +1118,9 @@ let open_term here client t =
     (* As of Neovim 0.9.1, [opts] is Lua-specific. *)
     Nvim_internal.nvim_open_term ~buffer:(Id buffer) ~opts:String.Map.empty
     |> map_witness ~f:(function
-         | 0 ->
-           Or_error.error_s
-             [%message "nvim_open_term failed (returned 0)" ~buffer:(t : Or_current.t)]
-         | channel -> Ok channel)
+      | 0 ->
+        Or_error.error_s
+          [%message "nvim_open_term failed (returned 0)" ~buffer:(t : Or_current.t)]
+      | channel -> Ok channel)
     |> run here client
 ;;

@@ -233,7 +233,7 @@ let%expect_test "screen contents after typing hello world" =
 
 let%expect_test "timeout occurs" =
   let%map () =
-    Expect_test_helpers_async.require_does_raise_async [%here] (fun () ->
+    Expect_test_helpers_async.require_does_raise_async (fun () ->
       let open Deferred.Or_error.Let_syntax in
       with_ui_client (fun _client ui ->
         let%bind (_ : string) =

@@ -17,7 +17,7 @@ end
 
 type 'a t =
   { default : 'a
-      (** Even though the default value for an option is not dynamic, it is system-dependent,
+  (** Even though the default value for an option is not dynamic, it is system-dependent,
       so we cannot hardcode it in VCaml. *)
   ; last_set : Last_set_loc.t option
   }

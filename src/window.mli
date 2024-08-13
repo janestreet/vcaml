@@ -191,7 +191,7 @@ module Config : sig
               }
           | Relative_to_cursor_in_current_window of { pos : Position.t }
           | Relative_to_mouse of { pos : Position.t }
-              (** Note that mouse updates will be infrequent unless the 'mousemoveevent'
+          (** Note that mouse updates will be infrequent unless the 'mousemoveevent'
               option is set. This option has overhead, and when it is enabled mouse
               movement can abort pending mappings. *)
       end
@@ -377,13 +377,13 @@ module Option : sig
   module Per_buffer : sig
     (*$ Vcaml_cinaps.generate_options_intf ~scope:Window_per_buffer *)
     (** Buffer-specific Neovim window options. These operate like buffer options, but the
-        "global scope" is per-window. The ['global] phantom type represents the notion of
-        a "global" value for the option. [`global] means there is a global value for each
-        window that can be locally overridden for any given buffer in the window.
-        [`copied] means the (per-window) global value is copied to the (per-buffer,window)
-        local value when a new buffer is opened in the window. The details of when and how
-        these settings are copied are somewhat arcane, so it's best not to rely on this
-        behavior. *)
+      "global scope" is per-window. The ['global] phantom type represents the notion of
+      a "global" value for the option. [`global] means there is a global value for each
+      window that can be locally overridden for any given buffer in the window.
+      [`copied] means the (per-window) global value is copied to the (per-buffer,window)
+      local value when a new buffer is opened in the window. The details of when and how
+      these settings are copied are somewhat arcane, so it's best not to rely on this
+      behavior. *)
     type ('a, 'global) t =
       | Arabic : (bool, [ `copied ]) t
       | Breakindent : (bool, [ `copied ]) t

@@ -10,8 +10,8 @@ let with_event_printing ~f =
     let%bind events = Buffer.subscribe [%here] client Current >>| ok_exn in
     Async.don't_wait_for
     @@ Async.Pipe.iter events ~f:(fun event ->
-         print_s [%message (event : Buffer.Event.t)];
-         Deferred.unit);
+      print_s [%message (event : Buffer.Event.t)];
+      Deferred.unit);
     f client)
 ;;
 
@@ -598,7 +598,7 @@ let%expect_test "Extmark indexing" =
 
 let%expect_test "Subscribing twice to the same buffer fails" =
   let%bind () =
-    Expect_test_helpers_async.require_does_raise_async [%here] (fun () ->
+    Expect_test_helpers_async.require_does_raise_async (fun () ->
       with_client (fun client ->
         let open Deferred.Or_error.Let_syntax in
         let%bind (_ : _ Pipe.Reader.t) = Buffer.subscribe [%here] client Current in
@@ -611,7 +611,7 @@ let%expect_test "Subscribing twice to the same buffer fails" =
 
 let%expect_test "Racing subscriptions to the same buffer fail" =
   let%bind () =
-    Expect_test_helpers_async.require_does_raise_async [%here] (fun () ->
+    Expect_test_helpers_async.require_does_raise_async (fun () ->
       with_client (fun client ->
         let open Deferred.Or_error.Let_syntax in
         let%bind (_ : _ Pipe.Reader.t) = Buffer.subscribe [%here] client Current
@@ -637,7 +637,7 @@ let%expect_test "Resubscribing to a buffer succeeds" =
 
 let%expect_test "Racing resubscriptions to the same buffer fail" =
   let%bind () =
-    Expect_test_helpers_async.require_does_raise_async [%here] (fun () ->
+    Expect_test_helpers_async.require_does_raise_async (fun () ->
       with_client (fun client ->
         let open Deferred.Or_error.Let_syntax in
         let%bind buf =
@@ -659,7 +659,7 @@ let%expect_test "Racing resubscriptions to the same buffer fail" =
 
 let%expect_test "Still in good state after failing to attach (can retry)" =
   let%bind () =
-    Expect_test_helpers_async.require_does_not_raise_async [%here] (fun () ->
+    Expect_test_helpers_async.require_does_not_raise_async (fun () ->
       with_client (fun client ->
         let%bind pipe = Buffer.subscribe [%here] client Current >>| ok_exn in
         match%bind Buffer.subscribe [%here] client Current with

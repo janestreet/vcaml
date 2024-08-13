@@ -129,7 +129,7 @@ let conv ~from ~to_ ~reader ~writer =
       let pipe_r =
         Reader.pipe reader
         |> Pipe.map' ~max_queue_length:1 ~f:(fun queue ->
-             return (Queue.concat_map queue ~f:String.to_list))
+          return (Queue.concat_map queue ~f:String.to_list))
       in
       Pipe.create_reader ~close_on_exception:false (fun writer ->
         let write2 c1 c2 =
@@ -184,8 +184,8 @@ let conv ~from ~to_ ~reader ~writer =
              single atom. All other Mspgack constructors have arguments, so they have sexp
              list representations. *)
           |> (function
-          | "Nil" -> "Nil "
-          | sexp -> sexp)
+           | "Nil" -> "Nil "
+           | sexp -> sexp)
     in
     fun msgpack ->
       Writer.write writer (msgpack_to_output_format msgpack);
@@ -239,17 +239,17 @@ let%expect_test "Msgpack ~= Msgpack->JSON->Msgpack" =
     (Msgpack.quickcheck_generator ~only_string_keys:true ~only_finite_floats:true)
     ~sexp_of:[%sexp_of: Msgpack.t]
     ~f:(fun expected ->
-    let json = jsonaf_of_msgpack expected in
-    let actual = msgpack_of_jsonaf json in
-    match effectively_equivalent_msgpack expected actual with
-    | true -> ()
-    | false ->
-      raise_s
-        [%message
-          "Not effectively equivalent"
-            (expected : Msgpack.t)
-            (actual : Msgpack.t)
-            (json : Jsonaf.t)]);
+      let json = jsonaf_of_msgpack expected in
+      let actual = msgpack_of_jsonaf json in
+      match effectively_equivalent_msgpack expected actual with
+      | true -> ()
+      | false ->
+        raise_s
+          [%message
+            "Not effectively equivalent"
+              (expected : Msgpack.t)
+              (actual : Msgpack.t)
+              (json : Jsonaf.t)]);
   [%expect {| |}];
   return ()
 ;;
@@ -259,19 +259,19 @@ let%expect_test "Msgpack->JSON->Msgpack == Msgpack->JSON->Msgpack->JSON->Msgpack
     (Msgpack.quickcheck_generator ~only_string_keys:true ~only_finite_floats:true)
     ~sexp_of:[%sexp_of: Msgpack.t]
     ~f:(fun original ->
-    let expected = original |> jsonaf_of_msgpack |> msgpack_of_jsonaf in
-    let json = jsonaf_of_msgpack expected in
-    let actual = msgpack_of_jsonaf json in
-    match Msgpack.equal expected actual with
-    | true -> ()
-    | false ->
-      raise_s
-        [%message
-          "Not exactly equivalent"
-            (original : Msgpack.t)
-            (expected : Msgpack.t)
-            (actual : Msgpack.t)
-            (json : Jsonaf.t)]);
+      let expected = original |> jsonaf_of_msgpack |> msgpack_of_jsonaf in
+      let json = jsonaf_of_msgpack expected in
+      let actual = msgpack_of_jsonaf json in
+      match Msgpack.equal expected actual with
+      | true -> ()
+      | false ->
+        raise_s
+          [%message
+            "Not exactly equivalent"
+              (original : Msgpack.t)
+              (expected : Msgpack.t)
+              (actual : Msgpack.t)
+              (json : Jsonaf.t)]);
   [%expect {| |}];
   return ()
 ;;
@@ -283,18 +283,18 @@ let%expect_test "Msgpack ~= Msgpack->Sexp->Msgpack" =
     (Msgpack.quickcheck_generator ~only_string_keys:false ~only_finite_floats:true)
     ~sexp_of:[%sexp_of: Msgpack.t]
     ~f:(fun expected ->
-    let sexp = [%sexp_of: Msgpack.t] expected in
-    let actual = [%of_sexp: Msgpack.t] sexp in
-    match effectively_equivalent_msgpack expected actual with
-    | true -> ()
-    | false ->
-      raise_s
-        [%message
-          "Not effectively equivalent"
-            ~expected:(Msgpack.string_of_t_exn expected)
-            ~actual:(Msgpack.string_of_t_exn actual)
-            (sexp : Sexp.t)
-            (actual : Msgpack.t)]);
+      let sexp = [%sexp_of: Msgpack.t] expected in
+      let actual = [%of_sexp: Msgpack.t] sexp in
+      match effectively_equivalent_msgpack expected actual with
+      | true -> ()
+      | false ->
+        raise_s
+          [%message
+            "Not effectively equivalent"
+              ~expected:(Msgpack.string_of_t_exn expected)
+              ~actual:(Msgpack.string_of_t_exn actual)
+              (sexp : Sexp.t)
+              (actual : Msgpack.t)]);
   [%expect {| |}];
   return ()
 ;;
@@ -304,19 +304,19 @@ let%expect_test "Msgpack->Sexp->Msgpack == Msgpack->Sexp->Msgpack->Sexp->Msgpack
     (Msgpack.quickcheck_generator ~only_string_keys:false ~only_finite_floats:true)
     ~sexp_of:[%sexp_of: Msgpack.t]
     ~f:(fun original ->
-    let expected = original |> [%sexp_of: Msgpack.t] |> [%of_sexp: Msgpack.t] in
-    let sexp = [%sexp_of: Msgpack.t] expected in
-    let actual = [%of_sexp: Msgpack.t] sexp in
-    match Msgpack.equal expected actual with
-    | true -> ()
-    | false ->
-      raise_s
-        [%message
-          "Not exactly equivalent"
-            ~original:(Msgpack.string_of_t_exn original)
-            ~expected:(Msgpack.string_of_t_exn expected)
-            ~actual:(Msgpack.string_of_t_exn actual)
-            (sexp : Sexp.t)]);
+      let expected = original |> [%sexp_of: Msgpack.t] |> [%of_sexp: Msgpack.t] in
+      let sexp = [%sexp_of: Msgpack.t] expected in
+      let actual = [%of_sexp: Msgpack.t] sexp in
+      match Msgpack.equal expected actual with
+      | true -> ()
+      | false ->
+        raise_s
+          [%message
+            "Not exactly equivalent"
+              ~original:(Msgpack.string_of_t_exn original)
+              ~expected:(Msgpack.string_of_t_exn expected)
+              ~actual:(Msgpack.string_of_t_exn actual)
+              (sexp : Sexp.t)]);
   [%expect {| |}];
   return ()
 ;;
@@ -336,33 +336,33 @@ let quickcheck_conv_roundtrip quickcheck_generator ~format =
       quickcheck_generator
       ~sexp_of:[%sexp_of: Msgpack.t]
       ~f:(fun msgpack ->
-      let expected_bytes = Msgpack.string_of_t_exn msgpack in
-      Writer.write writer1 expected_bytes;
-      let%bind () = Writer.flushed writer1 in
-      let actual_bytes = Bytes.create (String.length expected_bytes) in
-      match%map Reader.read reader3 actual_bytes with
-      | `Eof ->
-        raise_s
-          [%message
-            "Expected bytes but got EOF" (expected_bytes : string) (msgpack : Msgpack.t)]
-      | `Ok n_bytes ->
-        let actual_bytes =
-          (* We use [String.prefix] here in case [n_bytes < String.length expected_bytes]
+        let expected_bytes = Msgpack.string_of_t_exn msgpack in
+        Writer.write writer1 expected_bytes;
+        let%bind () = Writer.flushed writer1 in
+        let actual_bytes = Bytes.create (String.length expected_bytes) in
+        match%map Reader.read reader3 actual_bytes with
+        | `Eof ->
+          raise_s
+            [%message
+              "Expected bytes but got EOF" (expected_bytes : string) (msgpack : Msgpack.t)]
+        | `Ok n_bytes ->
+          let actual_bytes =
+            (* We use [String.prefix] here in case [n_bytes < String.length expected_bytes]
                so we exclude trailing garbage. *)
-          String.prefix (Bytes.to_string actual_bytes) n_bytes
-        in
-        (match
-           n_bytes = String.length expected_bytes
-           && String.equal actual_bytes expected_bytes
-         with
-         | true -> ()
-         | false ->
-           raise_s
-             [%message
-               "Mismatch between actual and expected bytes"
-                 (expected_bytes : string)
-                 (actual_bytes : string)
-                 (msgpack : Msgpack.t)]))
+            String.prefix (Bytes.to_string actual_bytes) n_bytes
+          in
+          (match
+             n_bytes = String.length expected_bytes
+             && String.equal actual_bytes expected_bytes
+           with
+           | true -> ()
+           | false ->
+             raise_s
+               [%message
+                 "Mismatch between actual and expected bytes"
+                   (expected_bytes : string)
+                   (actual_bytes : string)
+                   (msgpack : Msgpack.t)]))
   in
   let%bind () = Writer.close writer1 in
   let%bind () = pass1 in

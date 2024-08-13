@@ -8,7 +8,7 @@ end
 
 module Event :
   module type of Subscription_manager.Buffer_event
-    with module Private := Subscription_manager.Buffer_event.Private
+  with module Private := Subscription_manager.Buffer_event.Private
 
 (** A [changedtick] represents the edit number of the buffer. If you pass it to a function
     that updates the buffer contents, the contents will only be updated if the buffer has
@@ -474,7 +474,7 @@ module Untested : sig
     -> Or_current.t
     -> namespace:Namespace.t
     -> (Extmark.t * Position.t * Msgpack.t String.Map.t) list With_changedtick.t
-       Deferred.Or_error.t
+         Deferred.Or_error.t
 
   (** See `:h nvim_buf_set_extmark` for differences in treatment of [virt_text] and
       [virt_lines]. *)

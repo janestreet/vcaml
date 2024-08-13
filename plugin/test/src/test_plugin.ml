@@ -22,7 +22,8 @@ let%expect_test "Oneshot" =
     with_client (fun client -> Nvim.exec_viml_and_capture_output [%here] client code)
   in
   print_endline output;
-  [%expect {|
+  [%expect
+    {|
     Job status / exit code: 0
     Current buffer: 1
     |}]

@@ -298,7 +298,7 @@ module Parse_result : sig
           { value : int
           ; of_ : Range_or_count.Of.t
           }
-          (** For commands that are defined with [-range=N], the parse result only returns a
+      (** For commands that are defined with [-range=N], the parse result only returns a
           range value, not a count. This makes it impossible to distinguish a singleton
           range for a command with the [-range]/[-range=%] attribute from a count for a
           command with the [-range=N] attribute. *)

@@ -133,19 +133,19 @@ let%expect_test "Keyboard interrupt learned by RPC response aborts [rpcrequest]"
       ~timeout:None
       ~time_source:None
       ~f:(fun client ->
-      let sleep_and_print_result here =
-        Command.exec here client "sleep" ~args:[ "100" ]
-        >>| [%sexp_of: unit Or_error.t]
-        >>| print_s
-      in
-      (* Sleep to make sure that this command will see the Ctrl-C that was sent. This
+        let sleep_and_print_result here =
+          Command.exec here client "sleep" ~args:[ "100" ]
+          >>| [%sexp_of: unit Or_error.t]
+          >>| print_s
+        in
+        (* Sleep to make sure that this command will see the Ctrl-C that was sent. This
            works even if it was sent before the sleep began because Neovim has not yet had
            an opportunity to communicate the interrupt. *)
-      let%bind () = sleep_and_print_result [%here] in
-      (* After a keyboard interrupt [client] should be rendered unusable, so we should
+        let%bind () = sleep_and_print_result [%here] in
+        (* After a keyboard interrupt [client] should be rendered unusable, so we should
            not actually send the sleep command. *)
-      let%bind () = sleep_and_print_result [%here] in
-      return (Ok ()))
+        let%bind () = sleep_and_print_result [%here] in
+        return (Ok ()))
   in
   [%expect
     {|

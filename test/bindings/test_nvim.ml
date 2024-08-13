@@ -75,7 +75,7 @@ let%expect_test "command, list_bufs, Buffer.get_name" =
         |> List.map ~f:(fun buffer -> Buffer.get_name [%here] client (Id buffer))
         |> Deferred.Or_error.combine_errors
         |> Deferred.Or_error.map ~f:(fun filenames ->
-             List.map filenames ~f:(fun file -> file |> Filename.parts |> List.last_exn))
+          List.map filenames ~f:(fun file -> file |> Filename.parts |> List.last_exn))
       in
       print_s [%message (buffers : Buffer.t list) (buffer_names : string list)])
   in
@@ -265,7 +265,8 @@ let%expect_test "get_color_by_name" =
       print_s [%sexp (color : Color.True_color.t)];
       return ())
   in
-  [%expect {|
+  [%expect
+    {|
     #f0f8ff
     #f0f8ff
     |}];
@@ -543,55 +544,56 @@ let%expect_test "Check that all modes documented in the help are covered by [Mod
       let modes_in_help, new_modes =
         lines
         |> List.filter ~f:(fun line ->
-             not (String.is_prefix (line :> string) ~prefix:"\t\t\t\t"))
+          not (String.is_prefix (line :> string) ~prefix:"\t\t\t\t"))
         |> List.partition_map ~f:(fun line ->
-             let lsplit2_whitespace_exn str =
-               let is_space_or_tab = function
-                 | ' ' | '\t' -> true
-                 | _ -> false
-               in
-               let end_of_first_word =
-                 String.lfindi str ~f:(fun _ -> is_space_or_tab) |> Option.value_exn
-               in
-               let start_of_second_word =
-                 String.lfindi str ~pos:end_of_first_word ~f:(fun _ ->
-                   Fn.non is_space_or_tab)
-                 |> Option.value_exn
-               in
-               let word1 = String.subo str ~len:end_of_first_word in
-               let word2 = String.subo str ~pos:start_of_second_word in
-               word1, word2
-             in
-             let symbol, description =
-               (line :> string) |> String.strip |> lsplit2_whitespace_exn
-             in
-             let symbol =
-               match String.substr_index symbol ~pattern:"CTRL-" with
-               | None -> symbol
-               | Some idx ->
-                 let ctrl_char =
-                   symbol.[idx + 5]
-                   |> Char.to_int
-                   |> (fun c -> c - Char.to_int '@')
-                   |> Char.of_int_exn
-                   |> String.of_char
-                 in
-                 [ String.subo symbol ~len:idx
-                 ; ctrl_char
-                 ; String.subo symbol ~pos:(idx + 6)
-                 ]
-                 |> String.concat ~sep:""
-             in
-             match Mode.of_mode_symbol symbol with
-             | Ok mode -> First mode
-             | Error _ -> Second (symbol, description))
+          let lsplit2_whitespace_exn str =
+            let is_space_or_tab = function
+              | ' ' | '\t' -> true
+              | _ -> false
+            in
+            let end_of_first_word =
+              String.lfindi str ~f:(fun _ -> is_space_or_tab) |> Option.value_exn
+            in
+            let start_of_second_word =
+              String.lfindi str ~pos:end_of_first_word ~f:(fun _ ->
+                Fn.non is_space_or_tab)
+              |> Option.value_exn
+            in
+            let word1 = String.subo str ~len:end_of_first_word in
+            let word2 = String.subo str ~pos:start_of_second_word in
+            word1, word2
+          in
+          let symbol, description =
+            (line :> string) |> String.strip |> lsplit2_whitespace_exn
+          in
+          let symbol =
+            match String.substr_index symbol ~pattern:"CTRL-" with
+            | None -> symbol
+            | Some idx ->
+              let ctrl_char =
+                symbol.[idx + 5]
+                |> Char.to_int
+                |> (fun c -> c - Char.to_int '@')
+                |> Char.of_int_exn
+                |> String.of_char
+              in
+              [ String.subo symbol ~len:idx
+              ; ctrl_char
+              ; String.subo symbol ~pos:(idx + 6)
+              ]
+              |> String.concat ~sep:""
+          in
+          match Mode.of_mode_symbol symbol with
+          | Ok mode -> First mode
+          | Error _ -> Second (symbol, description))
       in
       let modes_in_help = modes_in_help |> Mode.Set.of_list in
       let all_modes = Mode.all |> Mode.Set.of_list in
       let removed_modes = Set.diff all_modes modes_in_help in
       print_s [%message "New modes" ~_:(new_modes : (string * string) list)];
       print_s [%message "Removed modes" ~_:(removed_modes : Mode.Set.t)];
-      [%expect {|
+      [%expect
+        {|
         ("New modes" ())
         ("Removed modes" ())
         |}];
@@ -667,7 +669,8 @@ let%expect_test "get_vvar, set_vvar" =
       return ())
   in
   Backtrace.elide := false;
-  [%expect {|
+  [%expect
+    {|
     (Ok true)
     (Ok false)
     |}];
@@ -694,7 +697,8 @@ let%expect_test "get_current_line, set_current_line, delete_current_line" =
         [ "foo"; "bar" ]
     in
     let%bind () = print_lines () in
-    [%expect {|
+    [%expect
+      {|
       foo
       bar
       |}];
@@ -703,7 +707,8 @@ let%expect_test "get_current_line, set_current_line, delete_current_line" =
     [%expect {| foo |}];
     let%bind () = Nvim.set_current_line [%here] client "baz" in
     let%bind () = print_lines () in
-    [%expect {|
+    [%expect
+      {|
       baz
       bar
       |}];
@@ -871,7 +876,8 @@ let%expect_test "[paste]" =
       print_s [%message (cursor_pos : Position.One_indexed_row.t)];
       return ())
   in
-  [%expect {|
+  [%expect
+    {|
     (lines (hello world!))
     (cursor_pos ((row 2) (col 5)))
     |}];
@@ -895,7 +901,8 @@ let%expect_test "[paste_stream]" =
       print_s [%message (cursor_pos : Position.One_indexed_row.t)];
       return ())
   in
-  [%expect {|
+  [%expect
+    {|
     (lines (hello world!))
     (cursor_pos ((row 2) (col 5)))
     |}];
@@ -939,7 +946,8 @@ let%expect_test "API calls work while a [paste_stream] is open" =
       print_s [%sexp (lines : String.Utf8.t list)];
       return ())
   in
-  [%expect {|
+  [%expect
+    {|
     (hello "")
     ("Switched buffers!" (buffer 2))
     (world!)
@@ -1062,12 +1070,12 @@ let%expect_test "eval_tabline, input_mouse" =
       let%bind current_tab = Nvim.get_current_tab [%here] client in
       tabs
       |> List.mapi ~f:(fun idx tab ->
-           let hlgroup =
-             match Tabpage.equal tab current_tab with
-             | true -> "TabLineSel"
-             | false -> "TabLine"
-           in
-           [%string "%%{idx#Int}T%#%{hlgroup}#tab%{idx#Int}"])
+        let hlgroup =
+          match Tabpage.equal tab current_tab with
+          | true -> "TabLineSel"
+          | false -> "TabLine"
+        in
+        [%string "%%{idx#Int}T%#%{hlgroup}#tab%{idx#Int}"])
       |> String.concat ~sep:"%#TabLineFill# "
       |> Nvim.Fast.eval_tabline [%here] client ~include_highlights:true
     in

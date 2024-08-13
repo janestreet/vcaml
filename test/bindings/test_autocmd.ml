@@ -36,9 +36,9 @@ let%expect_test "Events are typed correctly" =
               | _ -> Some tag))
         | _ -> None)
       |> List.partition_map ~f:(fun event ->
-           match Autocmd.Event.of_string event with
-           | event -> First event
-           | exception _ -> Second event)
+        match Autocmd.Event.of_string event with
+        | event -> First event
+        | exception _ -> Second event)
     in
     let extra_events =
       Set.diff
@@ -53,8 +53,8 @@ let%expect_test "Events are typed correctly" =
 ;;
 
 module Maybe_group = Comparable.Make_plain (struct
-  type t = Autocmd.Group.t option [@@deriving compare, sexp_of]
-end)
+    type t = Autocmd.Group.t option [@@deriving compare, sexp_of]
+  end)
 
 let%expect_test "get, create, delete, clear" =
   with_client (fun client ->
@@ -64,13 +64,13 @@ let%expect_test "get, create, delete, clear" =
       let%map autocmds =
         Autocmd.get [%here] client ()
         >>| Maybe_group.Map.of_list_with_key_multi ~get_key:(fun { Autocmd.group; _ } ->
-              group)
+          group)
         >>| Map.map ~f:(fun autocmds -> List.length autocmds)
       in
       autocmds
       |> Map.to_alist
       |> List.map ~f:(fun (group, count) ->
-           [%message (group : Autocmd.Group.t option) (count : int)])
+        [%message (group : Autocmd.Group.t option) (count : int)])
       |> [%sexp_of: Sexp.t list]
       |> print_s
     in
@@ -92,7 +92,7 @@ let%expect_test "get, create, delete, clear" =
       >>| List.filter_opt
       >>| List.dedup_and_sort ~compare:Autocmd.Group.compare
       >>= Deferred.Or_error.List.iter ~how:`Sequential ~f:(fun group ->
-            Autocmd.clear [%here] client () ~group:(`Group group) ~events:all_events)
+        Autocmd.clear [%here] client () ~group:(`Group group) ~events:all_events)
     in
     let%bind () = print_summary () in
     [%expect {| (((group ()) (count 10))) |}];

@@ -33,7 +33,7 @@ let%expect_test "Error inside [block_nvim] is displayed with callsite" =
 let%expect_test "Error in the middle of an atomic call is returned correctly" =
   Backtrace.elide := true;
   let%bind () =
-    Expect_test_helpers_async.require_does_raise_async [%here] (fun () ->
+    Expect_test_helpers_async.require_does_raise_async (fun () ->
       with_client (fun client ->
         let open Expert in
         let open Deferred.Or_error.Let_syntax in

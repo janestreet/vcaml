@@ -313,8 +313,8 @@ let on_startup client =
         |> String.split ~on:' '
         |> List.filter ~f:(Fn.non String.is_empty)
         |> (function
-        | [] -> failwith "Secret must have at least one letter"
-        | words -> String.concat words ~sep:" ")
+         | [] -> failwith "Secret must have at least one letter"
+         | words -> String.concat words ~sep:" ")
     in
     let%bind buffer = Buffer.create [%here] client ~listed:false ~scratch:true in
     let%bind () = Buffer.Option.set [%here] client (Id buffer) Bufhidden "wipe" in

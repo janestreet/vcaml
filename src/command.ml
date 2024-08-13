@@ -420,7 +420,7 @@ endif |}])
         map
         (Range_or_count.Spec.to_msgpack_map range_or_count)
         ~combine:(fun ~key _ _ ->
-        raise_s [%message "BUG: Key appears twice in command specification" key])
+          raise_s [%message "BUG: Key appears twice in command specification" key])
   in
   let query =
     match scope with
@@ -569,8 +569,8 @@ let exec_internal
           |> map_witness ~f:map_witness_f
           |> run here client
           >>| (function
-          | Ok _ as ok -> ok
-          | Error _ -> Error error)
+           | Ok _ as ok -> ok
+           | Error _ -> Error error)
         | _ -> return (Error error))
      | None | Some (Range _) -> return (Error error))
 ;;

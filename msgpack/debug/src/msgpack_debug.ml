@@ -2,11 +2,11 @@ open! Core
 open! Async
 
 module Man_in_the_middle_debugger = Man_in_the_middle_debugger.Make (struct
-  type message = Msgpack.t
+    type message = Msgpack.t
 
-  let parser_ = Msgpack.Internal.Parser.msg
-  let to_string = Msgpack.string_of_t_exn ?bufsize:None
-end)
+    let parser_ = Msgpack.Internal.Parser.msg
+    let to_string = Msgpack.string_of_t_exn ?bufsize:None
+  end)
 
 let create_debug_printers
   ?(pp = Msgpack.pp ?pp_ext:None)
@@ -81,26 +81,26 @@ let connect_unix_peers_and_listen
       ~on_handler_error:`Raise
       client_socket (* Act as a server to the client. *)
       (fun (_ : Socket.Address.Unix.t) client_reader client_writer ->
-      let%bind (_ : _ Socket.t), server_reader, server_writer =
-        Tcp.connect server_socket (* Act as a client to the server. *)
-      in
-      let%bind () =
-        client_socket
-        |> Tcp.Where_to_listen.address
-        |> Socket.Address.Unix.to_string
-        |> Unix.unlink
-      in
-      let%bind () =
-        connect_peers_and_listen
-          ?pp
-          ?color
-          ~peer1:{ name = client_name; reader = client_reader; writer = client_writer }
-          ~peer2:{ name = server_name; reader = server_reader; writer = server_writer }
-          ~log:stderr
-          ()
-      in
-      Ivar.fill_exn terminated ();
-      return ())
+         let%bind (_ : _ Socket.t), server_reader, server_writer =
+           Tcp.connect server_socket (* Act as a client to the server. *)
+         in
+         let%bind () =
+           client_socket
+           |> Tcp.Where_to_listen.address
+           |> Socket.Address.Unix.to_string
+           |> Unix.unlink
+         in
+         let%bind () =
+           connect_peers_and_listen
+             ?pp
+             ?color
+             ~peer1:{ name = client_name; reader = client_reader; writer = client_writer }
+             ~peer2:{ name = server_name; reader = server_reader; writer = server_writer }
+             ~log:stderr
+             ()
+         in
+         Ivar.fill_exn terminated ();
+         return ())
   in
   let%bind () = Ivar.read terminated in
   Tcp.Server.close server

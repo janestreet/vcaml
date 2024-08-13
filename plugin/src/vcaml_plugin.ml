@@ -251,8 +251,8 @@ module Persistent = struct
         Private.attach_client client (Socket `Infer_from_parent_nvim) >>| ok_exn
       in
       (display_error_in_neovim'
-         := fun here error ->
-              Private.notify_nvim_of_error client here error |> don't_wait_for);
+       := fun here error ->
+            Private.notify_nvim_of_error client here error |> don't_wait_for);
       let%bind () =
         match !rpc_registration_failure with
         | None -> return ()

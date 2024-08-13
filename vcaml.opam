@@ -15,12 +15,14 @@ run-test: [
 depends: [
   "ocaml" {>= "5.1.0"}
   "async"
+  "async_kernel"
   "async_unix"
   "base_trie"
   "core"
   "core_kernel"
   "core_unix"
   "expect_test_helpers_async"
+  "expect_test_helpers_core"
   "jsonaf"
   "man_in_the_middle_debugger"
   "ppx_jane"
@@ -29,6 +31,7 @@ depends: [
   "textutils"
   "angstrom"                   {>= "0.15.0"}
   "angstrom-async"             {>= "0.15.0"}
+  "bigstringaf"
   "dune"                       {>= "3.11.0"}
   "faraday"                    {>= "0.8.1"}
   "re"                         {>= "1.8.0"}
