@@ -6,7 +6,7 @@ module Ui_event := Nvim_internal.Ui_event
 (** This module is internal to VCaml. *)
 
 module Buffer_event : sig
-  type changedtick [@@deriving sexp_of] [@@immediate]
+  type changedtick : immediate [@@deriving sexp_of]
 
   type t =
     | Changedtick of changedtick

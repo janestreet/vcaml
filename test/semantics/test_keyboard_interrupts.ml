@@ -81,7 +81,7 @@ let%expect_test "Keyboard interrupt aborts simple RPC request" =
       let%bind message = Reader.read_line reader in
       print_s [%sexp (message : string Reader.Read_result.t)];
       send_keys "\003";
-      let%bind sleep = sleep in
+      let%bind sleep in
       print_s [%message (sleep : unit Or_error.t)];
       let%bind () = attempt_to_quit ~tmp_dir ~client in
       return `Closed)
@@ -115,7 +115,7 @@ let on_keyboard_interrupt_abort_rpcrequest_and_notify_callback ~timeout ~time_so
     in
     match timeout with
     | None ->
-      let%map rpc_result = rpc_result in
+      let%map rpc_result in
       print_s [%message (rpc_result : unit Or_error.t)];
       `Closed
     | Some timeout ->

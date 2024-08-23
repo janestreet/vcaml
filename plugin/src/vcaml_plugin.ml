@@ -307,7 +307,7 @@ module Persistent = struct
     Async.Command.async
       ~behave_nicely_in_pipeline:false
       ~summary:description
-      (let%map_open.Async.Command param = param in
+      (let%map_open.Async.Command param in
        fun () ->
          match on_crash with
          | None -> f ~param

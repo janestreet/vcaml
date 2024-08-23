@@ -122,7 +122,7 @@ module Func = struct
     | Nullary expected_type ->
       let%map result = f [] in
       let open Or_error.Let_syntax in
-      let%bind result = result in
+      let%bind result in
       Type.of_msgpack expected_type result |> Or_error.tag ~tag:"Wrong return type"
     | Cons (typ, rest) ->
       fun arg -> apply_fn rest (fun args -> f (Type.to_msgpack typ arg :: args))
