@@ -97,7 +97,7 @@ let%expect_test "Crash while waiting for a response results in an error" =
     let%bind exit_or_signal = Process.wait nvim in
     print_s [%message "nvim exited" (exit_or_signal : Unix.Exit_or_signal.t)];
     [%expect {| ("nvim exited" (exit_or_signal (Ok ()))) |}];
-    let%bind result = result in
+    let%bind result in
     print_s (omit_unstable_writer_info [%sexp (result : unit Or_error.t)]);
     [%expect
       {|
@@ -147,7 +147,7 @@ let%expect_test "Crash during an RPC does not cause failure when sending respons
     let%bind () = Scheduler.yield_until_no_jobs_remain () in
     [%expect {| ("nvim exited" (exit_or_signal (Error (Exit_non_zero 1)))) |}];
     Ivar.fill_exn exited ();
-    let%bind result = result in
+    let%bind result in
     print_s [%sexp (result : unit Or_error.t)];
     [%expect
       {|
