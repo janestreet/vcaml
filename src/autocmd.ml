@@ -160,16 +160,18 @@ end
 module Group = struct
   include Int
 
-  let create here client ?clear_if_exists name =
+  let create ~(here : [%call_pos]) client ?clear_if_exists name =
     let opts =
       match clear_if_exists with
       | None -> String.Map.empty
       | Some clear -> String.Map.singleton "clear" (Msgpack.Bool clear)
     in
-    Nvim_internal.nvim_create_augroup ~name ~opts |> run here client
+    Nvim_internal.nvim_create_augroup ~name ~opts |> run ~here client
   ;;
 
-  let delete here client t = Nvim_internal.nvim_del_augroup_by_id ~id:t |> run here client
+  let delete ~(here : [%call_pos]) client t =
+    Nvim_internal.nvim_del_augroup_by_id ~id:t |> run ~here client
+  ;;
 end
 
 module Pattern_or_buffer = struct
@@ -225,7 +227,7 @@ type t =
   }
 [@@deriving sexp_of]
 
-let get here client ?group ?events ?patterns_or_buffer () =
+let get ~(here : [%call_pos]) client ?group ?events ?patterns_or_buffer () =
   let opts =
     let maybe name var conv = Option.map var ~f:(fun var -> name, conv var) in
     [ maybe "group" group (Type.to_msgpack Int)
@@ -254,11 +256,11 @@ let get here client ?group ?events ?patterns_or_buffer () =
       return
         { id; group; group_name; description; event; pattern_or_buffer; once; command })
     |> Or_error.combine_errors)
-  |> run here client
+  |> run ~here client
 ;;
 
 let rec create
-  here
+  ~(here : [%call_pos])
   client
   ?description
   ?once
@@ -273,14 +275,14 @@ let rec create
     match (patterns_or_buffer : Patterns_or_buffer.t) with
     | Patterns _ | Buffer (Id _) -> return patterns_or_buffer
     | Buffer Current ->
-      let%map buffer = Nvim.get_current_buf [%here] client in
+      let%map buffer = Nvim.get_current_buf ~here client in
       Patterns_or_buffer.Buffer (Id buffer)
   in
   let viml_or_rpc_name =
     match (command : unit Ocaml_from_nvim.Callback.t) with
     | Viml command -> `Viml command
     | Rpc rpc ->
-      `Rpc (Ocaml_from_nvim.Private.register_callback here client ~return_type:Nil rpc)
+      `Rpc (Ocaml_from_nvim.Private.register_callback ~here client ~return_type:Nil rpc)
   in
   let channel = Client.channel client in
   let command =
@@ -301,7 +303,7 @@ let rec create
     |> List.filter_opt
     |> String.Map.of_alist_exn
   in
-  let%bind id = Nvim_internal.nvim_create_autocmd ~event ~opts |> run here client in
+  let%bind id = Nvim_internal.nvim_create_autocmd ~event ~opts |> run ~here client in
   let%bind () =
     match viml_or_rpc_name, patterns_or_buffer with
     | `Viml _, _ | _, Patterns _ -> return ()
@@ -312,10 +314,10 @@ let rec create
          in the order they are defined. *)
       let group =
         let client = Type_equal.(conv Client.Private.eq) client in
-        Set_once.get_exn client.vcaml_internal_group [%here]
+        Set_once.get_exn client.vcaml_internal_group
       in
       create
-        here
+        ~here
         client
         ~description:[%string "Unregister %{name}"]
         ~once:true
@@ -336,9 +338,11 @@ endif |}])
   return id
 ;;
 
-let delete here client id = Nvim_internal.nvim_del_autocmd ~id |> run here client
+let delete ~(here : [%call_pos]) client id =
+  Nvim_internal.nvim_del_autocmd ~id |> run ~here client
+;;
 
-let clear here client ?patterns_or_buffer () ~group ~events =
+let clear ~(here : [%call_pos]) client ?patterns_or_buffer () ~group ~events =
   let opts =
     let event = events_to_msgpack events in
     let group =
@@ -353,10 +357,19 @@ let clear here client ?patterns_or_buffer () ~group ~events =
     |> List.filter_opt
     |> String.Map.of_alist_exn
   in
-  Nvim_internal.nvim_clear_autocmds ~opts |> run here client
+  Nvim_internal.nvim_clear_autocmds ~opts |> run ~here client
 ;;
 
-let exec here client ?group ?patterns_or_buffer ?modeline ?data () ~events =
+let exec
+  ~(here : [%call_pos])
+  client
+  ?group
+  ?patterns_or_buffer
+  ?modeline
+  ?data
+  ()
+  ~events
+  =
   let event = events_to_msgpack events in
   let opts =
     let maybe name var conv = Option.map var ~f:(fun var -> name, conv var) in
@@ -368,12 +381,12 @@ let exec here client ?group ?patterns_or_buffer ?modeline ?data () ~events =
     |> List.filter_opt
     |> String.Map.of_alist_exn
   in
-  Nvim_internal.nvim_exec_autocmds ~event ~opts |> run here client
+  Nvim_internal.nvim_exec_autocmds ~event ~opts |> run ~here client
 ;;
 
 module Private = struct
   let vcaml_internal_group client =
     let client = Type_equal.(conv Client.Private.eq) client in
-    Set_once.get_exn client.vcaml_internal_group [%here]
+    Set_once.get_exn client.vcaml_internal_group
   ;;
 end

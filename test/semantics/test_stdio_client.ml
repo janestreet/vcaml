@@ -40,11 +40,7 @@ let%expect_test "Simple test of [Stdio] client" =
                     Stdio
                 in
                 let%bind result =
-                  Nvim.eval_viml_expression
-                    [%here]
-                    client
-                    "'Hello, world!'"
-                    ~result_type:String
+                  Nvim.eval_viml_expression client "'Hello, world!'" ~result_type:String
                 in
                 let%map () = attempt_to_quit ~tmp_dir ~client |> Deferred.ok in
                 result)

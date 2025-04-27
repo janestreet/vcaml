@@ -1,4 +1,4 @@
-open Core
+open! Core
 open Async
 module Event = Nvim_internal.Ui_event
 
@@ -33,14 +33,14 @@ module Description : sig
 end
 
 val describe_attached_uis
-  :  Source_code_position.t
+  :  here:[%call_pos]
   -> _ Client.t
   -> Description.t list Deferred.Or_error.t
 
 (** Attach a UI to Neovim. Note that setting certain UI options implicitly sets other UI
     options despite the value passed here. See `:h ui-option` for details. *)
 val attach
-  :  Source_code_position.t
+  :  here:[%call_pos]
   -> _ Client.t
   -> width:int
   -> height:int
@@ -50,13 +50,13 @@ val attach
 
 module Untested : sig
   val set_focus
-    :  Source_code_position.t
+    :  here:[%call_pos]
     -> _ Client.t
     -> [ `Gained | `Lost ]
     -> unit Deferred.Or_error.t
 
   val try_resizing_grid
-    :  Source_code_position.t
+    :  here:[%call_pos]
     -> _ Client.t
     -> grid:int
     -> width:int
@@ -65,14 +65,14 @@ module Untested : sig
 
   (** Set the number of visible items in the menu. *)
   val popup_menu_set_height
-    :  Source_code_position.t
+    :  here:[%call_pos]
     -> _ Client.t
     -> height:int
     -> unit Deferred.Or_error.t
 
   (** Set the bounding box of the menu, including borders and sliders. *)
   val popup_menu_set_bounds
-    :  Source_code_position.t
+    :  here:[%call_pos]
     -> _ Client.t
     -> width:float
     -> height:float

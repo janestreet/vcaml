@@ -148,13 +148,12 @@ let with_client
                   - XDG_CONFIG_DIRS, which is used for stdpath("config_dirs")
                   - XDG_DATA_DIRS,   which is used for stdpath("data_dirs") *)
               ; "NVIM_RPLUGIN_MANIFEST", "rplugin.vim"
-              ; elide_backtraces_env_var, [%string "%{!Backtrace.elide#Bool}"]
+              ; elide_backtraces_env_var, [%string "%{Dynamic.get Backtrace.elide#Bool}"]
               ])
         in
         match env with
         | None -> base
-        | Some getenv ->
-          Core_unix.Env.expand ~base:(Lazy.from_val base) (getenv (`Tmpdir working_dir))
+        | Some getenv -> Core_unix.Env.expand ~base (getenv (`Tmpdir working_dir))
       in
       `Replace_raw env
     in
@@ -183,11 +182,8 @@ let with_client
         let open Deferred.Or_error.Let_syntax in
         let vim_did_enter = Ivar.create () in
         let%bind (_ : Autocmd.Id.t) =
-          let%bind group =
-            Autocmd.Group.create [%here] client "vim-did-enter-can-start-test"
-          in
+          let%bind group = Autocmd.Group.create client "vim-did-enter-can-start-test" in
           Autocmd.create
-            [%here]
             client
             ~description:"Vim finished initializing - can start test"
             ~group
@@ -199,7 +195,7 @@ let with_client
         in
         let%bind () =
           (* Neovim may have finished initializing before we registered the autocmd. *)
-          match%bind Nvim.get_vvar [%here] client "vim_did_enter" ~type_:Bool with
+          match%bind Nvim.get_vvar client "vim_did_enter" ~type_:Bool with
           | false -> return ()
           | true ->
             Ivar.fill_if_empty vim_did_enter ();
@@ -211,7 +207,7 @@ let with_client
              that would raise an error but is silenced with [:silent!], that will still
              get flagged here because [:silent!] sets [v:errmsg]. As a work-around, save
              [v:errmsg] before invoking [:silent!] and restore it afterward. *)
-          match%bind Nvim.get_vvar [%here] client "errmsg" ~type_:String with
+          match%bind Nvim.get_vvar client "errmsg" ~type_:String with
           | "" -> return ()
           | error -> Deferred.Or_error.error_string error
         in
@@ -403,7 +399,7 @@ module Test_ui = struct
     let open Deferred.Or_error.Let_syntax in
     let%bind reader =
       Ui.attach
-        here
+        ~here
         client
         ~width
         ~height
@@ -418,7 +414,7 @@ module Test_ui = struct
     return t
   ;;
 
-  let with_ui ?width ?height here client f =
+  let with_ui ?width ?height ~(here : [%call_pos]) client f =
     let open Deferred.Or_error.Let_syntax in
     let%bind t = attach here client ?width ?height in
     let%bind result = f t in
@@ -449,7 +445,7 @@ let rec get_screen_contents ui =
        |> Deferred.join)
 ;;
 
-let wait_until_text ?(timeout = Time_ns.Span.of_int_sec 2) here ui ~f =
+let wait_until_text ?(timeout = Time_ns.Span.of_int_sec 2) ~(here : [%call_pos]) ui ~f =
   let open Deferred.Or_error.Let_syntax in
   let wait_until_text ~f =
     let is_timed_out = ref false in
@@ -520,7 +516,7 @@ let with_ui_client
     ?before_connecting
     ?verbose
     ?warn_if_neovim_exits_early
-    (fun client -> Test_ui.with_ui [%here] ?width ?height client (fun ui -> f client ui))
+    (fun client -> Test_ui.with_ui ?width ?height client (fun ui -> f client ui))
 ;;
 
 let socket_client
@@ -558,7 +554,7 @@ module For_debugging = struct
         (Socket (`Address socket))
       >>| ok_exn
     in
-    let%bind attached_uis = Ui.describe_attached_uis [%here] client >>| ok_exn in
+    let%bind attached_uis = Ui.describe_attached_uis client >>| ok_exn in
     let width, height =
       attached_uis
       |> List.map ~f:(fun { width; height; _ } -> width, height)
@@ -567,7 +563,7 @@ module For_debugging = struct
       |> Tuple2.map ~f:(fun opt -> Option.value_exn opt)
     in
     let%bind result =
-      Test_ui.with_ui [%here] ~width ~height client (fun ui -> f client ui) >>| ok_exn
+      Test_ui.with_ui ~width ~height client (fun ui -> f client ui) >>| ok_exn
     in
     let%bind () = Client.close client in
     let%map () = done_logging in
@@ -588,8 +584,8 @@ module Private = struct
   let attach_client ?stdio_override ?time_source client connection_type =
     let () =
       match Sys.getenv elide_backtraces_env_var with
-      | Some "true" -> Backtrace.elide := true
-      | Some "false" -> Backtrace.elide := false
+      | Some "true" -> Dynamic.set_root Backtrace.elide true
+      | Some "false" -> Dynamic.set_root Backtrace.elide false
       | _ -> ()
     in
     let wrap_connection =
@@ -625,7 +621,6 @@ end
 let%expect_test "We cannot have two blocking RPCs with the same name" =
   let register_dummy_rpc_handler ~name client =
     Ocaml_from_nvim.register_request_blocking
-      [%here]
       (Connected client)
       ~name
       ~type_:Ocaml_from_nvim.Blocking.(return Nil)
@@ -644,7 +639,6 @@ let%expect_test "We cannot have two blocking RPCs with the same name" =
 let%expect_test "We cannot have two async RPCs with the same name" =
   let register_dummy_rpc_handler ~name client =
     Ocaml_from_nvim.register_request_async
-      [%here]
       (Connected client)
       ~name
       ~type_:Ocaml_from_nvim.Async.(unit)
@@ -667,13 +661,11 @@ let%expect_test "We can have an async RPC and a blocking RPC with the same name"
     with_client (fun client ->
       let name = "test" in
       Ocaml_from_nvim.register_request_blocking
-        [%here]
         (Connected client)
         ~name
         ~type_:Ocaml_from_nvim.Blocking.(return Nil)
         ~f:(fun ~run_in_background:_ ~client:_ -> Deferred.Or_error.return ());
       Ocaml_from_nvim.register_request_async
-        [%here]
         (Connected client)
         ~name
         ~type_:Ocaml_from_nvim.Async.(unit)
@@ -688,7 +680,6 @@ let%expect_test "We can have two separate Embedded connections with RPC handlers
   =
   let register_dummy_rpc_handler ~name client =
     Ocaml_from_nvim.register_request_blocking
-      [%here]
       (Connected client)
       ~name
       ~type_:Ocaml_from_nvim.Blocking.(return Nil)

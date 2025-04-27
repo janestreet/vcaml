@@ -122,8 +122,8 @@ end
     2. A range and a count cannot be passed simultaneously when [exec]ing a command.
 
     3. Since there is no way to distinguish a command that just takes a count from a
-    command that takes both a range and a count, we assume the command is well-defined and
-    model it as a command that takes a count.
+       command that takes both a range and a count, we assume the command is well-defined
+       and model it as a command that takes a count.
 
     However, it is important to note that ill-defined commands are not illegal - in fact,
     there are some built-in commands that are defined with [-range -count]. They are
@@ -188,7 +188,7 @@ end
 
 (** Create a new user-defined command. *)
 val create
-  :  Source_code_position.t
+  :  here:[%call_pos]
   -> _ Client.t
   -> ?keepscript:bool
   -> ?bang:bool
@@ -203,12 +203,12 @@ val create
   -> scope:[ `Global | `Buffer_local of Nvim_internal.Buffer.Or_current.t ]
   -> unit Ocaml_from_nvim.Callback.t
      (** Anonymous RPCs do not have access to modifiers, arguments, or ranges provided to
-      commands, so they are only suitable for implementing simple commands. *)
+         commands, so they are only suitable for implementing simple commands. *)
   -> unit Deferred.Or_error.t
 
 (** Delete a user-defined command. *)
 val delete
-  :  Source_code_position.t
+  :  here:[%call_pos]
   -> _ Client.t
   -> string
   -> scope:[ `Global | `Buffer_local of Nvim_internal.Buffer.Or_current.t ]
@@ -238,7 +238,7 @@ type 'a with_command_modifiers :=
   -> 'a
 
 type ('a, 'output) exec :=
-  Source_code_position.t
+  here:[%call_pos]
   -> 'a Client.t
   -> ?range_or_count:Range_or_count.t
   -> ?bang:bool
@@ -273,7 +273,7 @@ end
 
 (** Get a mapping of user-defined commands. *)
 val user_defined_commands
-  :  Source_code_position.t
+  :  here:[%call_pos]
   -> _ Client.t
   -> scope:[ `Global | `Buffer_local of Nvim_internal.Buffer.Or_current.t ]
   -> Definition.t Or_error.t String.Map.t Deferred.Or_error.t
@@ -325,7 +325,7 @@ module Fast : sig
   (** Parse text as you would write it on the command line and return a structured
       interpretation. *)
   val parse
-    :  Source_code_position.t
+    :  here:[%call_pos]
     -> _ Client.t
     -> string
     -> Parse_result.t Deferred.Or_error.t

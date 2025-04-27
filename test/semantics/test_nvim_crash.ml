@@ -21,7 +21,7 @@ let rec omit_unstable_writer_info : Sexp.t -> Sexp.t = function
 
 let%expect_test "Crash before sending a request results in an error" =
   Expect_test_helpers_async.within_temp_dir (fun () ->
-    Backtrace.elide := true;
+    Dynamic.set_root Backtrace.elide true;
     let%bind working_dir = Sys.getcwd () in
     let%bind client, nvim =
       let client = Client.create ~name:"test-client" ~on_error:`Raise in
@@ -40,7 +40,7 @@ let%expect_test "Crash before sending a request results in an error" =
     let%bind exit_or_signal = Process.wait nvim in
     print_s [%message "nvim exited" (exit_or_signal : Unix.Exit_or_signal.t)];
     [%expect {| ("nvim exited" (exit_or_signal (Error (Exit_non_zero 1)))) |}];
-    let%bind result = Nvim.get_current_buf [%here] client in
+    let%bind result = Nvim.get_current_buf client in
     let error = omit_unstable_writer_info [%sexp (result : Buffer.t Or_error.t)] in
     let expected_errors =
       (* There are some races around trying to send requests to Neovim as the writer is
@@ -72,13 +72,13 @@ let%expect_test "Crash before sending a request results in an error" =
     in
     if not (List.mem expected_errors error ~equal:Sexp.equal) then print_s error;
     [%expect {| |}];
-    Backtrace.elide := false;
+    Dynamic.set_root Backtrace.elide false;
     Client.close client)
 ;;
 
 let%expect_test "Crash while waiting for a response results in an error" =
   Expect_test_helpers_async.within_temp_dir (fun () ->
-    Backtrace.elide := true;
+    Dynamic.set_root Backtrace.elide true;
     let%bind working_dir = Sys.getcwd () in
     let%bind client, nvim =
       let client = Client.create ~name:"test-client" ~on_error:`Raise in
@@ -93,7 +93,7 @@ let%expect_test "Crash while waiting for a response results in an error" =
         ~time_source:(Time_source.read_only (Time_source.create ~now:Time_ns.epoch ()))
       >>| ok_exn
     in
-    let result = Command.exec [%here] client "quit" in
+    let result = Command.exec client "quit" in
     let%bind exit_or_signal = Process.wait nvim in
     print_s [%message "nvim exited" (exit_or_signal : Unix.Exit_or_signal.t)];
     [%expect {| ("nvim exited" (exit_or_signal (Ok ()))) |}];
@@ -111,13 +111,13 @@ let%expect_test "Crash while waiting for a response results in an error" =
               (Map (((String output) (Bool false))))))))))
         (("Called from" lib/vcaml/test/semantics/test_nvim_crash.ml:LINE:COL))))
       |}];
-    Backtrace.elide := false;
+    Dynamic.set_root Backtrace.elide false;
     Client.close client)
 ;;
 
 let%expect_test "Crash during an RPC does not cause failure when sending response" =
   Expect_test_helpers_async.within_temp_dir (fun () ->
-    Backtrace.elide := true;
+    Dynamic.set_root Backtrace.elide true;
     let%bind working_dir = Sys.getcwd () in
     let%bind client, nvim =
       let client = Client.create ~name:"test-client" ~on_error:`Raise in
@@ -135,7 +135,7 @@ let%expect_test "Crash during an RPC does not cause failure when sending respons
     let entered = Ivar.create () in
     let exited = Ivar.create () in
     let result =
-      block_nvim [%here] client ~f:(fun _ ->
+      block_nvim client ~f:(fun _ ->
         Ivar.fill_exn entered ();
         Ivar.read exited |> Deferred.ok)
     in
@@ -159,6 +159,6 @@ let%expect_test "Crash during an RPC does not cause failure when sending respons
             (Array ((String rpcrequest) (Array ((Int 1) (String anon_rpc__0)))))))))
         (("Called from" lib/vcaml/test/semantics/test_nvim_crash.ml:LINE:COL))))
       |}];
-    Backtrace.elide := false;
+    Dynamic.set_root Backtrace.elide false;
     Client.close client)
 ;;

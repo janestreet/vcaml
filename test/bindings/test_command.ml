@@ -9,7 +9,6 @@ let%expect_test "create, delete, user_defined_commands" =
     let test ~scope =
       let%bind () =
         Command.create
-          [%here]
           client
           ~bar:true
           ~nargs:One
@@ -19,12 +18,11 @@ let%expect_test "create, delete, user_defined_commands" =
           ~scope
           (Viml [%string {|echo "Hi, ".<q-args>|}])
       in
-      let%bind commands = Command.user_defined_commands [%here] client ~scope in
+      let%bind commands = Command.user_defined_commands client ~scope in
       print_s [%sexp (commands : Command.Definition.t Or_error.t String.Map.t)];
-      let%bind () = Command.delete [%here] client "SayHi" ~scope in
+      let%bind () = Command.delete client "SayHi" ~scope in
       let%bind () =
         Command.create
-          [%here]
           client
           ~nargs:At_most_one
           ~completion:(Custom { f = "CompleteFoobar" })
@@ -34,7 +32,7 @@ let%expect_test "create, delete, user_defined_commands" =
           ~scope
           (Viml [%string {|call Foobar(<line1>, <line2>)|}])
       in
-      let%bind commands = Command.user_defined_commands [%here] client ~scope in
+      let%bind commands = Command.user_defined_commands client ~scope in
       print_s [%sexp (commands : Command.Definition.t Or_error.t String.Map.t)];
       return ()
     in
@@ -75,7 +73,6 @@ let%expect_test "exec" =
   with_client (fun client ->
     let%bind () =
       Buffer.set_lines
-        [%here]
         client
         Current
         ~start:0
@@ -84,11 +81,9 @@ let%expect_test "exec" =
         (List.init 10 ~f:(fun idx -> Int.to_string (idx + 1)))
       >>| ok_exn
     in
-    let%bind () =
-      Command.exec [%here] client ~range_or_count:(Count 3) "delete" >>| ok_exn
-    in
+    let%bind () = Command.exec client ~range_or_count:(Count 3) "delete" >>| ok_exn in
     let show_buffer_lines () =
-      Buffer.get_lines [%here] client Current ~start:0 ~end_:(-1) ~strict_indexing:true
+      Buffer.get_lines client Current ~start:0 ~end_:(-1) ~strict_indexing:true
       >>| ok_exn
       >>| Buffer.With_changedtick.value
       >>| List.map ~f:(fun line -> Int.of_string (String.Utf8.to_string line))
@@ -99,19 +94,17 @@ let%expect_test "exec" =
     [%expect {| (4 5 6 7 8 9 10) |}];
     let%bind () =
       Command.exec
-        [%here]
         client
         ~range_or_count:(Range { start_inclusive = 4; end_inclusive = 6 })
         ~register:'x'
         "yank"
       >>| ok_exn
     in
-    let%bind () = Command.exec [%here] client ~bang:true ~register:'x' "put" >>| ok_exn in
+    let%bind () = Command.exec client ~bang:true ~register:'x' "put" >>| ok_exn in
     let%bind () = show_buffer_lines () in
     [%expect {| (7 8 9 4 5 6 7 8 9 10) |}];
     let%bind () =
       Command.exec_and_capture_output
-        [%here]
         client
         ~filter:(Only "9")
         ~range_or_count:(Range { start_inclusive = 1; end_inclusive = 10 })
@@ -130,11 +123,11 @@ let%expect_test "exec" =
 let%expect_test "parse" =
   with_client (fun client ->
     let open Deferred.Or_error.Let_syntax in
-    let parse here cmd =
-      let%map result = Command.Fast.parse here client cmd in
+    let parse ~(here : [%call_pos]) cmd =
+      let%map result = Command.Fast.parse ~here client cmd in
       print_s [%sexp (result : Command.Parse_result.t)]
     in
-    let%bind () = parse [%here] "sandbox filter! /foo/ :let" in
+    let%bind () = parse "sandbox filter! /foo/ :let" in
     [%expect
       {|
       ((name let) (range_or_count ()) (bang false) (bar false)
@@ -147,7 +140,7 @@ let%expect_test "parse" =
          (keepjumps false) (keepmarks false) (keeppatterns false) (lockmarks false)
          (noswapfile false) (tab ()) (verbose ()))))
       |}];
-    let%bind () = parse [%here] "confirm write | quit" in
+    let%bind () = parse "confirm write | quit" in
     [%expect
       {|
       ((name write) (range_or_count ()) (bang false) (bar true)
@@ -160,7 +153,7 @@ let%expect_test "parse" =
          (keepmarks false) (keeppatterns false) (lockmarks false)
          (noswapfile false) (tab ()) (verbose ()))))
       |}];
-    let%bind () = parse [%here] "3verbose 0tab sp" in
+    let%bind () = parse "3verbose 0tab sp" in
     [%expect
       {|
       ((name split) (range_or_count ()) (bang false) (bar true)
@@ -173,7 +166,7 @@ let%expect_test "parse" =
          (keepmarks false) (keeppatterns false) (lockmarks false)
          (noswapfile false) (tab (0)) (verbose (3)))))
       |}];
-    let%bind () = parse [%here] "silent! botright sp %" in
+    let%bind () = parse "silent! botright sp %" in
     [%expect
       {|
       ((name split) (range_or_count ()) (bang false) (bar true)
@@ -186,7 +179,7 @@ let%expect_test "parse" =
          (keepalt false) (keepjumps false) (keepmarks false) (keeppatterns false)
          (lockmarks false) (noswapfile false) (tab ()) (verbose ()))))
       |}];
-    let%bind () = parse [%here] "3d x" in
+    let%bind () = parse "3d x" in
     [%expect
       {|
       ((name delete)
@@ -202,7 +195,6 @@ let%expect_test "parse" =
       |}];
     let%bind () =
       Buffer.set_lines
-        [%here]
         client
         Current
         ~start:0
@@ -210,8 +202,8 @@ let%expect_test "parse" =
         ~strict_indexing:true
         (List.init 10 ~f:Int.to_string)
     in
-    let%bind () = Window.set_cursor [%here] client Current { row = 7; col = 0 } in
-    let%bind () = parse [%here] ".,$d" in
+    let%bind () = Window.set_cursor client Current { row = 7; col = 0 } in
+    let%bind () = parse ".,$d" in
     [%expect
       {|
       ((name delete)
@@ -231,9 +223,9 @@ let%expect_test "parse" =
 
 let%expect_test "parse fails for nonexistent command" =
   with_client (fun client ->
-    Backtrace.elide := true;
+    Dynamic.set_root Backtrace.elide true;
     let%bind () =
-      match%map Command.Fast.parse [%here] client "nonexistent" with
+      match%map Command.Fast.parse client "nonexistent" with
       | Ok parse_result ->
         print_s
           [%message
@@ -247,7 +239,7 @@ let%expect_test "parse fails for nonexistent command" =
         (error_type Exception))
        (("Called from" lib/vcaml/test/bindings/test_command.ml:LINE:COL)))
       |}];
-    Backtrace.elide := false;
+    Dynamic.set_root Backtrace.elide false;
     return (Ok ()))
 ;;
 
@@ -255,7 +247,7 @@ let%expect_test "parsing doesn't fail for a nonexistent nextcmd" =
   with_client (fun client ->
     let open Deferred.Let_syntax in
     let%bind () =
-      match%map Command.Fast.parse [%here] client "split | nonexistent" with
+      match%map Command.Fast.parse client "split | nonexistent" with
       | Error error -> print_s [%message "Test unexpectedly errored" (error : Error.t)]
       | Ok parse_result -> print_s [%sexp (parse_result : Command.Parse_result.t)]
     in
@@ -350,10 +342,10 @@ let%expect_test "[range_or_count] interpretation roundtrips in command definitio
     let scope = `Global in
     let test range_or_count =
       let%bind () =
-        Command.create [%here] client ?range_or_count () ~name ~scope (Viml command)
+        Command.create client ?range_or_count () ~name ~scope (Viml command)
       in
       let expected = Option.map range_or_count ~f:Range_or_count.Spec.to_string in
-      let%map commands = Command.user_defined_commands [%here] client ~scope in
+      let%map commands = Command.user_defined_commands client ~scope in
       let%tydi { range_or_count; _ } = Map.find_exn commands name |> ok_exn in
       let actual = Option.map range_or_count ~f:Range_or_count.Spec.to_string in
       print_s [%message (expected : string option) (actual : string option)]
@@ -376,15 +368,10 @@ let%expect_test "[range_or_count] interpretation roundtrips in command definitio
       |}];
     let test_ill_defined_case ~attr1 ~attr2 =
       let%bind () =
-        Command.exec
-          [%here]
-          client
-          ~bang:true
-          "command"
-          ~args:[ attr1; attr2; name; command ]
+        Command.exec client ~bang:true "command" ~args:[ attr1; attr2; name; command ]
       in
       let expected = Some [%string "%{attr1} %{attr2}"] in
-      let%map commands = Command.user_defined_commands [%here] client ~scope in
+      let%map commands = Command.user_defined_commands client ~scope in
       let%tydi { range_or_count; _ } = Map.find_exn commands name |> ok_exn in
       let actual = Option.map range_or_count ~f:Range_or_count.Spec.to_string in
       print_s [%message (expected : string option) (actual : string option)]
@@ -417,7 +404,6 @@ let%expect_test "Successfully exec a [-range=N] command by passing a count" =
     let open Deferred.Or_error.Let_syntax in
     let%bind () =
       Command.create
-        [%here]
         client
         ()
         ~range_or_count:
@@ -430,7 +416,7 @@ let%expect_test "Successfully exec a [-range=N] command by passing a count" =
         (Viml "echo <count>")
     in
     let%bind () =
-      Command.exec_and_capture_output [%here] client ~range_or_count:(Count 1) "ShowCount"
+      Command.exec_and_capture_output client ~range_or_count:(Count 1) "ShowCount"
       >>| print_endline
     in
     [%expect {| 1 |}];
@@ -446,7 +432,6 @@ let%expect_test "Compare native command invocations with range/count against str
        indirect influence) in the output clearer. *)
     let%bind () =
       Buffer.set_lines
-        [%here]
         client
         Current
         ~start:0
@@ -455,9 +440,7 @@ let%expect_test "Compare native command invocations with range/count against str
         (List.init 200 ~f:(fun _ -> ""))
       >>| ok_exn
     in
-    let%bind () =
-      Window.set_cursor [%here] client Current { row = 100; col = 0 } >>| ok_exn
-    in
+    let%bind () = Window.set_cursor client Current { row = 100; col = 0 } >>| ok_exn in
     let module Test = struct
       module Input = struct
         type t =
@@ -546,7 +529,6 @@ let%expect_test "Compare native command invocations with range/count against str
       let name = "Foo" in
       let%bind () =
         Command.exec
-          [%here]
           client
           ~bang:true
           "command"
@@ -578,7 +560,7 @@ let%expect_test "Compare native command invocations with range/count against str
             [%string "%{range}%{name}%{arg}"]
           in
           let%bind parse =
-            match%map Command.Fast.parse [%here] client command with
+            match%map Command.Fast.parse client command with
             | Error _ as error -> error
             | Ok { range_or_count; args; _ } ->
               Ok { Test.Output.Parse.range_or_count; args }
@@ -620,13 +602,12 @@ let%expect_test "Compare native command invocations with range/count against str
                      starting from line 3. *)
                   Some (Count count)
               in
-              Command.exec_and_capture_output ?range_or_count [%here] client name ~args
+              Command.exec_and_capture_output ?range_or_count client name ~args
               >>| Or_error.bind ~f:exec_of_output
               >>| Option.return
           in
           let%bind native_exec =
             Command.exec_and_capture_output
-              [%here]
               client
               "execute"
               ~args:[ [%string {|"%{command}"|}] ]
@@ -695,7 +676,6 @@ let%expect_test "Compare native command invocations with range/count against str
                      Some [ value ], None
                  in
                  Nvim.call_function
-                   [%here]
                    client
                    ~name:(`Viml "nvim_cmd")
                    ~type_:Nvim.Func.(Dict @-> Dict @-> return String)

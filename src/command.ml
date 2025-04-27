@@ -346,7 +346,7 @@ module Range_or_count = struct
 end
 
 let create
-  here
+  ~(here : [%call_pos])
   client
   ?keepscript
   ?bang
@@ -365,7 +365,7 @@ let create
     match scope with
     | `Global | `Buffer_local (Buffer.Or_current.Id _) -> Deferred.Or_error.return scope
     | `Buffer_local Current ->
-      let%map.Deferred.Or_error buffer = Nvim.get_current_buf [%here] client in
+      let%map.Deferred.Or_error buffer = Nvim.get_current_buf ~here client in
       `Buffer_local (Buffer.Or_current.Id buffer)
   in
   let%bind command =
@@ -373,7 +373,7 @@ let create
     | Viml command -> return command
     | Rpc rpc ->
       let name =
-        Ocaml_from_nvim.Private.register_callback here client ~return_type:Nil rpc
+        Ocaml_from_nvim.Private.register_callback ~here client ~return_type:Nil rpc
       in
       let channel = Client.channel client in
       let%map () =
@@ -381,7 +381,7 @@ let create
         | `Global -> return ()
         | `Buffer_local buffer ->
           Autocmd.create
-            here
+            ~here
             client
             ~description:[%string "Unregister %{name}"]
             ~once:true
@@ -427,16 +427,16 @@ endif |}])
     | `Global -> Nvim_internal.nvim_create_user_command
     | `Buffer_local buffer -> Nvim_internal.nvim_buf_create_user_command ~buffer
   in
-  query ~name ~command:(String command) ~opts |> run here client
+  query ~name ~command:(String command) ~opts |> run ~here client
 ;;
 
-let delete here client name ~scope =
+let delete ~(here : [%call_pos]) client name ~scope =
   let query =
     match scope with
     | `Global -> Nvim_internal.nvim_del_user_command
     | `Buffer_local buffer -> Nvim_internal.nvim_buf_del_user_command ~buffer
   in
-  query ~name |> run here client
+  query ~name |> run ~here client
 ;;
 
 let exec_internal
@@ -541,7 +541,7 @@ let exec_internal
   in
   let opts = [ "output", Msgpack.Bool output ] |> String.Map.of_alist_exn in
   match%bind
-    Nvim_internal.nvim_cmd ~cmd ~opts |> map_witness ~f:map_witness_f |> run here client
+    Nvim_internal.nvim_cmd ~cmd ~opts |> map_witness ~f:map_witness_f |> run ~here client
   with
   | Ok _ as ok -> return ok
   | Error error ->
@@ -567,7 +567,7 @@ let exec_internal
           in
           Nvim_internal.nvim_cmd ~cmd ~opts
           |> map_witness ~f:map_witness_f
-          |> run here client
+          |> run ~here client
           >>| (function
            | Ok _ as ok -> ok
            | Error _ -> Error error)
@@ -575,7 +575,7 @@ let exec_internal
      | None | Some (Range _) -> return (Error error))
 ;;
 
-let exec here client =
+let exec ~(here : [%call_pos]) client =
   exec_internal
     ~output:false
     ~map_witness_f:(function
@@ -586,7 +586,7 @@ let exec here client =
     client
 ;;
 
-let exec_and_capture_output here client =
+let exec_and_capture_output ~(here : [%call_pos]) client =
   exec_internal ~output:true ~map_witness_f:Or_error.return here client
 ;;
 
@@ -634,7 +634,7 @@ module Definition = struct
   ;;
 end
 
-let user_defined_commands here client ~scope =
+let user_defined_commands ~(here : [%call_pos]) client ~scope =
   let query =
     match scope with
     | `Global -> Nvim_internal.nvim_get_commands
@@ -645,7 +645,7 @@ let user_defined_commands here client ~scope =
      [Msgpack.t] values. *)
   query ~opts:String.Map.empty
   |> map_witness ~f:(Fn.compose Or_error.return (Map.map ~f:Definition.of_msgpack))
-  |> run here client
+  |> run ~here client
 ;;
 
 module Parse_result = struct
@@ -846,12 +846,12 @@ module Parse_result = struct
 end
 
 module Fast = struct
-  let parse here client str =
+  let parse ~(here : [%call_pos]) client str =
     (* [opts] is not used by this version of Neovim, but may be used in the future. If we
        expose it, we should do so in a typeful way rather than asking the user to build
        [Msgpack.t] values. *)
     Nvim_internal.nvim_parse_cmd ~str ~opts:String.Map.empty
     |> map_witness ~f:Parse_result.of_msgpack_map
-    |> run here client
+    |> run ~here client
   ;;
 end

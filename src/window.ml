@@ -3,13 +3,17 @@ open Async
 open Import
 include Nvim_internal.Window
 
-let get_buf here client t = Nvim_internal.nvim_win_get_buf ~window:t |> run here client
-
-let set_buf here client t ~buffer =
-  Nvim_internal.nvim_win_set_buf ~window:t ~buffer |> run here client
+let get_buf ~(here : [%call_pos]) client t =
+  Nvim_internal.nvim_win_get_buf ~window:t |> run ~here client
 ;;
 
-let exists here client t = Nvim_internal.nvim_win_is_valid ~window:t |> run here client
+let set_buf ~(here : [%call_pos]) client t ~buffer =
+  Nvim_internal.nvim_win_set_buf ~window:t ~buffer |> run ~here client
+;;
+
+let exists ~(here : [%call_pos]) client t =
+  Nvim_internal.nvim_win_is_valid ~window:t |> run ~here client
+;;
 
 module When_this_is_the_buffer's_last_window = struct
   type t =
@@ -17,7 +21,7 @@ module When_this_is_the_buffer's_last_window = struct
     | Unload of { if_modified : [ `Hide | `Abort_if_hiding_is_disabled ] }
 end
 
-let close here client t ~when_this_is_the_buffer's_last_window =
+let close ~(here : [%call_pos]) client t ~when_this_is_the_buffer's_last_window =
   (match when_this_is_the_buffer's_last_window with
    | When_this_is_the_buffer's_last_window.Hide -> Nvim_internal.nvim_win_hide ~window:t
    | Unload { if_modified } ->
@@ -27,62 +31,62 @@ let close here client t ~when_this_is_the_buffer's_last_window =
        | `Abort_if_hiding_is_disabled -> false
      in
      Nvim_internal.nvim_win_close ~window:t ~force)
-  |> run here client
+  |> run ~here client
 ;;
 
-let get_height here client t =
-  Nvim_internal.nvim_win_get_height ~window:t |> run here client
+let get_height ~(here : [%call_pos]) client t =
+  Nvim_internal.nvim_win_get_height ~window:t |> run ~here client
 ;;
 
-let set_height here client t ~height =
-  Nvim_internal.nvim_win_set_height ~window:t ~height |> run here client
+let set_height ~(here : [%call_pos]) client t ~height =
+  Nvim_internal.nvim_win_set_height ~window:t ~height |> run ~here client
 ;;
 
-let get_width here client t =
-  Nvim_internal.nvim_win_get_width ~window:t |> run here client
+let get_width ~(here : [%call_pos]) client t =
+  Nvim_internal.nvim_win_get_width ~window:t |> run ~here client
 ;;
 
-let set_width here client t ~width =
-  Nvim_internal.nvim_win_set_width ~window:t ~width |> run here client
+let set_width ~(here : [%call_pos]) client t ~width =
+  Nvim_internal.nvim_win_set_width ~window:t ~width |> run ~here client
 ;;
 
-let get_cursor here client t =
+let get_cursor ~(here : [%call_pos]) client t =
   Nvim_internal.nvim_win_get_cursor ~window:t
   |> map_witness ~f:(fun (row, col) -> Ok { Position.One_indexed_row.row; col })
-  |> run here client
+  |> run ~here client
 ;;
 
-let set_cursor here client t { Position.One_indexed_row.row; col } =
-  Nvim_internal.nvim_win_set_cursor ~window:t ~pos:(row, col) |> run here client
+let set_cursor ~(here : [%call_pos]) client t { Position.One_indexed_row.row; col } =
+  Nvim_internal.nvim_win_set_cursor ~window:t ~pos:(row, col) |> run ~here client
 ;;
 
-let get_var here client t name ~type_ =
+let get_var ~(here : [%call_pos]) client t name ~type_ =
   Nvim_internal.nvim_win_get_var ~window:t ~name
   |> map_witness ~f:(Type.of_msgpack type_)
-  |> run here client
+  |> run ~here client
 ;;
 
-let set_var here client t name ~type_ ~value =
+let set_var ~(here : [%call_pos]) client t name ~type_ ~value =
   let value = Type.to_msgpack type_ value in
-  Nvim_internal.nvim_win_set_var ~window:t ~name ~value |> run here client
+  Nvim_internal.nvim_win_set_var ~window:t ~name ~value |> run ~here client
 ;;
 
-let delete_var here client t name =
-  Nvim_internal.nvim_win_del_var ~window:t ~name |> run here client
+let delete_var ~(here : [%call_pos]) client t name =
+  Nvim_internal.nvim_win_del_var ~window:t ~name |> run ~here client
 ;;
 
-let get_tab here client t =
-  Nvim_internal.nvim_win_get_tabpage ~window:t |> run here client
+let get_tab ~(here : [%call_pos]) client t =
+  Nvim_internal.nvim_win_get_tabpage ~window:t |> run ~here client
 ;;
 
-let get_number here client t =
-  Nvim_internal.nvim_win_get_number ~window:t |> run here client
+let get_number ~(here : [%call_pos]) client t =
+  Nvim_internal.nvim_win_get_number ~window:t |> run ~here client
 ;;
 
-let get_position here client t =
+let get_position ~(here : [%call_pos]) client t =
   Nvim_internal.nvim_win_get_position ~window:t
   |> map_witness ~f:(fun (row, col) -> Ok { Position.row; col })
-  |> run here client
+  |> run ~here client
 ;;
 
 module Config = struct
@@ -467,18 +471,18 @@ module Config = struct
   ;;
 end
 
-let get_config here client t =
+let get_config ~(here : [%call_pos]) client t =
   Nvim_internal.nvim_win_get_config ~window:t
   |> map_witness ~f:Config.of_msgpack_map
-  |> run here client
+  |> run ~here client
 ;;
 
-let set_config here client t config =
+let set_config ~(here : [%call_pos]) client t config =
   Nvim_internal.nvim_win_set_config ~window:t ~config:(Config.to_msgpack_map config)
-  |> run here client
+  |> run ~here client
 ;;
 
-let open_ here client ?(noautocmd = false) () ~buffer ~enter ~config ~minimal_style =
+let open_ ~here client ?(noautocmd = false) () ~buffer ~enter ~config ~minimal_style =
   let config =
     Config.to_msgpack_map config
     |> Core.Map.add_exn ~key:"noautocmd" ~data:(Bool noautocmd)
@@ -489,7 +493,7 @@ let open_ here client ?(noautocmd = false) () ~buffer ~enter ~config ~minimal_st
     | true -> Core.Map.add_exn config ~key:"style" ~data:(String "minimal")
   in
   Nvim_internal.nvim_open_win ~buffer ~enter ~config
-  |> run here client
+  |> run ~here client
   >>| function
   | Error _ as error -> error
   | Ok t ->
@@ -502,12 +506,30 @@ let open_ here client ?(noautocmd = false) () ~buffer ~enter ~config ~minimal_st
      | _ -> Ok t)
 ;;
 
-let open_floating here client ?noautocmd () ~buffer ~enter ~config ~minimal_style =
-  open_ here client ?noautocmd () ~buffer ~enter ~config:(Floating config) ~minimal_style
+let open_floating
+  ~(here : [%call_pos])
+  client
+  ?noautocmd
+  ()
+  ~buffer
+  ~enter
+  ~config
+  ~minimal_style
+  =
+  open_ ~here client ?noautocmd () ~buffer ~enter ~config:(Floating config) ~minimal_style
 ;;
 
-let open_external here client ?noautocmd () ~buffer ~enter ~config ~minimal_style =
-  open_ here client ?noautocmd () ~buffer ~enter ~config:(External config) ~minimal_style
+let open_external
+  ~(here : [%call_pos])
+  client
+  ?noautocmd
+  ()
+  ~buffer
+  ~enter
+  ~config
+  ~minimal_style
+  =
+  open_ ~here client ?noautocmd () ~buffer ~enter ~config:(External config) ~minimal_style
 ;;
 
 module Statusline = Statusline [@@alert "-vcaml_do_not_export"]
@@ -515,9 +537,17 @@ module Winbar = Statusline [@@alert "-vcaml_do_not_export"]
 module Statuscolumn = Statusline [@@alert "-vcaml_do_not_export"]
 
 module Fast = struct
-  let eval_statusline here client t ?max_width ?fill_char ~include_highlights statusline =
+  let eval_statusline
+    ~(here : [%call_pos])
+    client
+    t
+    ?max_width
+    ?fill_char
+    ~include_highlights
+    statusline
+    =
     Statusline.eval
-      here
+      ~here
       client
       ?window:(Or_current.to_id t)
       ?max_width
@@ -528,7 +558,7 @@ module Fast = struct
   ;;
 
   let eval_statuscolumn
-    here
+    ~(here : [%call_pos])
     client
     t
     ?max_width
@@ -538,7 +568,7 @@ module Fast = struct
     statuscolumn
     =
     Statusline.eval
-      here
+      ~here
       client
       ?window:(Or_current.to_id t)
       ?max_width
@@ -548,9 +578,17 @@ module Fast = struct
       statuscolumn
   ;;
 
-  let eval_winbar here client t ?max_width ?fill_char ~include_highlights statuscolumn =
+  let eval_winbar
+    ~(here : [%call_pos])
+    client
+    t
+    ?max_width
+    ?fill_char
+    ~include_highlights
+    statuscolumn
+    =
     Statusline.eval
-      here
+      ~here
       client
       ?window:(Or_current.to_id t)
       ?max_width
@@ -597,29 +635,29 @@ module Option = struct
 
   (*$*)
 
-  let get_dynamic_info (type a) here client (t : a t) =
+  let get_dynamic_info (type a) ~(here : [%call_pos]) client (t : a t) =
     Nvim_internal.nvim_get_option_info ~name:(to_string t)
     |> map_witness
          ~f:(Dynamic_option_info.of_msgpack_map ~default_of_msgpack:(of_msgpack t))
-    |> run here client
+    |> run ~here client
   ;;
 
-  let get here client window t =
+  let get ~(here : [%call_pos]) client window t =
     Nvim_internal.nvim_get_option_value
       ~name:(to_string t)
       ~opts:(String.Map.singleton "win" (Or_current.to_msgpack window))
     |> map_witness ~f:(of_msgpack t)
-    |> run here client
+    |> run ~here client
   ;;
 
-  let set here client window t value =
+  let set ~(here : [%call_pos]) client window t value =
     Nvim_internal.nvim_set_option_value
       ~name:(to_string t)
       ~value:(to_msgpack t value)
       ~opts:
         ([ "win", Or_current.to_msgpack window; "scope", String "local" ]
          |> String.Map.of_alist_exn)
-    |> run here client
+    |> run ~here client
   ;;
 
   module Per_buffer = struct
@@ -814,54 +852,57 @@ module Option = struct
 
     (*$*)
 
-    let get_dynamic_info (type a g) here client (t : (a, g) t) =
+    let get_dynamic_info (type a g) ~(here : [%call_pos]) client (t : (a, g) t) =
       Nvim_internal.nvim_get_option_info ~name:(to_string t)
       |> map_witness
            ~f:(Dynamic_option_info.of_msgpack_map ~default_of_msgpack:(of_msgpack t))
-      |> run here client
+      |> run ~here client
     ;;
   end
 
-  let get_for_current_buffer_in_window here client window t =
+  let get_for_current_buffer_in_window ~(here : [%call_pos]) client window t =
     Nvim_internal.nvim_get_option_value
       ~name:(Per_buffer.to_string t)
       ~opts:(String.Map.singleton "win" (Or_current.to_msgpack window))
     |> map_witness ~f:(Per_buffer.of_msgpack t)
-    |> run here client
+    |> run ~here client
   ;;
 
-  let set_for_current_buffer_in_window here client window t value =
+  let set_for_current_buffer_in_window ~(here : [%call_pos]) client window t value =
     Nvim_internal.nvim_set_option_value
       ~name:(Per_buffer.to_string t)
       ~value:(Per_buffer.to_msgpack t value)
       ~opts:
         ([ "win", Or_current.to_msgpack window; "scope", String "local" ]
          |> String.Map.of_alist_exn)
-    |> run here client
+    |> run ~here client
   ;;
 
-  let get_global here client window t =
+  let get_global ~(here : [%call_pos]) client window t =
     Nvim_internal.nvim_get_option_value
       ~name:(Per_buffer.to_string t)
       ~opts:
         ([ "win", Or_current.to_msgpack window; "scope", String "global" ]
          |> String.Map.of_alist_exn)
     |> map_witness ~f:(Per_buffer.of_msgpack t)
-    |> run here client
+    |> run ~here client
   ;;
 
-  let set_global here client window t value =
+  let set_global ~(here : [%call_pos]) client window t value =
     Nvim_internal.nvim_set_option_value
       ~name:(Per_buffer.to_string t)
       ~value:(Per_buffer.to_msgpack t value)
       ~opts:
         ([ "win", Or_current.to_msgpack window; "scope", String "global" ]
          |> String.Map.of_alist_exn)
-    |> run here client
+    |> run ~here client
   ;;
 
-  let set_default here client t value = set_global here client Current t value
-  let get_default here client t = get_global here client Current t
+  let set_default ~(here : [%call_pos]) client t value =
+    set_global ~here client Current t value
+  ;;
+
+  let get_default ~(here : [%call_pos]) client t = get_global ~here client Current t
   let set_for_new_buffers_opened_in_window = set_global
   let get_for_new_buffers_opened_in_window = get_global
 end

@@ -9,15 +9,15 @@ open Vcaml_test_helpers
 let with_client = with_client ~warn_if_neovim_exits_early:false
 
 let%expect_test "Sending request with a closed client" =
-  Backtrace.elide := true;
+  Dynamic.set_root Backtrace.elide true;
   let%map () =
     with_client (fun client ->
       let%bind () = Client.close client in
       Expect_test_helpers_async.require_does_raise_async (fun () ->
-        Nvim.get_current_buf [%here] client >>| ok_exn)
+        Nvim.get_current_buf client >>| ok_exn)
       |> Deferred.ok)
   in
-  Backtrace.elide := false;
+  Dynamic.set_root Backtrace.elide false;
   [%expect
     {|
     (("Failed to send Msgpack RPC message: writer is closed"
@@ -31,17 +31,16 @@ let%expect_test "Sending request with a closed client" =
 ;;
 
 let%expect_test "Sending notification with a closed client" =
-  Backtrace.elide := true;
+  Dynamic.set_root Backtrace.elide true;
   let%map () =
     with_client (fun client ->
       let%bind () = Client.close client in
       Expect_test_helpers_async.require_does_raise_async (fun () ->
         let open Expert.Notifier in
-        notify [%here] client ~name:(`Viml "nvim_get_current_buf") ~type_:Func.unit
-        >>| ok_exn)
+        notify client ~name:(`Viml "nvim_get_current_buf") ~type_:Func.unit >>| ok_exn)
       |> Deferred.ok)
   in
-  Backtrace.elide := false;
+  Dynamic.set_root Backtrace.elide false;
   [%expect
     {|
     (("Failed to send Msgpack RPC message: writer is closed"
@@ -54,7 +53,7 @@ let%expect_test "Sending notification with a closed client" =
 ;;
 
 let%expect_test "Sending response with a closed client" =
-  Backtrace.elide := true;
+  Dynamic.set_root Backtrace.elide true;
   let%map () =
     with_client (fun client ->
       (* We use this low-level hook instead of closing the client inside the RPC because
@@ -66,7 +65,6 @@ let%expect_test "Sending response with a closed client" =
       let function_name = "rpc" in
       let () =
         Ocaml_from_nvim.register_request_blocking
-          [%here]
           (Connected client)
           ~name:function_name
           ~type_:Ocaml_from_nvim.Blocking.(return Nil)
@@ -75,7 +73,6 @@ let%expect_test "Sending response with a closed client" =
       let channel = Client.channel client in
       Expect_test_helpers_async.require_does_raise_async (fun () ->
         Nvim.call_function
-          [%here]
           client
           ~name:(`Viml "rpcrequest")
           ~type_:Nvim.Func.(Int @-> String @-> return Nil)
@@ -85,7 +82,7 @@ let%expect_test "Sending response with a closed client" =
       |> Deferred.ok)
   in
   Private.before_sending_response_hook_for_tests := None;
-  Backtrace.elide := false;
+  Dynamic.set_root Backtrace.elide false;
   [%expect
     {|
     (("Consumer left without responding" (
@@ -104,13 +101,12 @@ let%expect_test "Sending response with a closed client" =
 ;;
 
 let%expect_test "Client closes inside RPC" =
-  Backtrace.elide := true;
+  Dynamic.set_root Backtrace.elide true;
   let%map () =
     with_client (fun client ->
       let function_name = "rpc" in
       let () =
         Ocaml_from_nvim.register_request_blocking
-          [%here]
           (Connected client)
           ~name:function_name
           ~type_:Ocaml_from_nvim.Blocking.(return Nil)
@@ -119,7 +115,6 @@ let%expect_test "Client closes inside RPC" =
       let channel = Client.channel client in
       Expect_test_helpers_async.require_does_raise_async (fun () ->
         Nvim.call_function
-          [%here]
           client
           ~name:(`Viml "rpcrequest")
           ~type_:Nvim.Func.(Int @-> String @-> return Nil)
@@ -128,7 +123,7 @@ let%expect_test "Client closes inside RPC" =
         >>| ok_exn)
       |> Deferred.ok)
   in
-  Backtrace.elide := false;
+  Dynamic.set_root Backtrace.elide false;
   [%expect
     {|
     (("Consumer left without responding" (

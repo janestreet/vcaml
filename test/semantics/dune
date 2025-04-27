@@ -4,7 +4,7 @@
  (libraries async async.async_quickcheck core core_unix
    expect_test_helpers_async msgpack nvim_internal core_kernel.reversed_list
    core_unix.signal_unix base_trie core_unix.unix_pseudo_terminal vcaml
-   vcaml.test.helpers core_kernel.vec)
+   vcaml.test.helpers)
  (preprocessor_deps config_ext.h)
  (preprocess
   (pps ppx_jane ppx_optcomp))

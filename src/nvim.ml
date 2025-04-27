@@ -51,21 +51,21 @@ module Key_modifier = struct
   include Comparable.Make_plain (T)
 end
 
-let channels here client =
+let channels ~(here : [%call_pos]) client =
   let client = Type_equal.conv Client.Private.eq client in
-  Client.Private.nvim_list_chans here client
+  Client.Private.nvim_list_chans ~here client
 ;;
 
-let exec_viml here client code =
+let exec_viml ~(here : [%call_pos]) client code =
   Nvim_internal.nvim_exec2 ~src:code ~opts:String.Map.empty
   |> map_witness ~f:(fun result ->
     match Map.find result "output" with
     | None -> Ok ()
     | Some output -> Or_error.error_s [%message "Unexpected output" (output : Msgpack.t)])
-  |> run here client
+  |> run ~here client
 ;;
 
-let exec_viml_and_capture_output here client code =
+let exec_viml_and_capture_output ~(here : [%call_pos]) client code =
   Nvim_internal.nvim_exec2
     ~src:code
     ~opts:(String.Map.singleton "output" (Msgpack.Bool true))
@@ -78,27 +78,29 @@ let exec_viml_and_capture_output here client code =
       Or_error.error_s
         [%message
           "Unexpectedly missing output in result" (result : Msgpack.t String.Map.t)])
-  |> run here client
+  |> run ~here client
 ;;
 
-let exec_lua here client code =
+let exec_lua ~(here : [%call_pos]) client code =
   Nvim_internal.nvim_exec_lua ~code ~args:[]
   |> map_witness ~f:(Type.of_msgpack Nil)
-  |> run here client
+  |> run ~here client
 ;;
 
-let list_bufs here client = Nvim_internal.nvim_list_bufs |> run here client
+let list_bufs ~(here : [%call_pos]) client =
+  Nvim_internal.nvim_list_bufs |> run ~here client
+;;
 
-let get_channel_info here client chan =
+let get_channel_info ~(here : [%call_pos]) client chan =
   Nvim_internal.nvim_get_chan_info ~chan
   |> map_witness ~f:Channel_info.of_msgpack_map
-  |> run here client
+  |> run ~here client
 ;;
 
-let eval_viml_expression here client expr ~result_type =
+let eval_viml_expression ~(here : [%call_pos]) client expr ~result_type =
   Nvim_internal.nvim_eval ~expr
   |> map_witness ~f:(Type.of_msgpack result_type)
-  |> run here client
+  |> run ~here client
 ;;
 
 module Func = struct
@@ -130,7 +132,7 @@ module Func = struct
 end
 
 (* Changes here should probably have analogous changes in [Notifier.notify]. *)
-let call_function here client ~name ~type_ =
+let call_function ~(here : [%call_pos]) client ~name ~type_ =
   Func.apply_fn type_ (fun args ->
     (match name with
      | `Viml name -> Nvim_internal.nvim_call_function ~fn:name ~args
@@ -141,41 +143,49 @@ let call_function here client ~name ~type_ =
             if it raises an error. *)
          ~code:[%string {| local result = (%{name})(...); return result |}]
          ~args)
-    |> run here client)
+    |> run ~here client)
 ;;
 
-let get_current_buf here client = Nvim_internal.nvim_get_current_buf |> run here client
-
-let set_current_buf here client buffer =
-  Nvim_internal.nvim_set_current_buf ~buffer |> run here client
+let get_current_buf ~(here : [%call_pos]) client =
+  Nvim_internal.nvim_get_current_buf |> run ~here client
 ;;
 
-let list_tabs here client = Nvim_internal.nvim_list_tabpages |> run here client
-
-let get_current_tab here client =
-  Nvim_internal.nvim_get_current_tabpage |> run here client
+let set_current_buf ~(here : [%call_pos]) client buffer =
+  Nvim_internal.nvim_set_current_buf ~buffer |> run ~here client
 ;;
 
-let set_current_tab here client tabpage =
-  Nvim_internal.nvim_set_current_tabpage ~tabpage |> run here client
+let list_tabs ~(here : [%call_pos]) client =
+  Nvim_internal.nvim_list_tabpages |> run ~here client
 ;;
 
-let set_client_info here client ?version ?attributes ?client_type () =
+let get_current_tab ~(here : [%call_pos]) client =
+  Nvim_internal.nvim_get_current_tabpage |> run ~here client
+;;
+
+let set_current_tab ~(here : [%call_pos]) client tabpage =
+  Nvim_internal.nvim_set_current_tabpage ~tabpage |> run ~here client
+;;
+
+let set_client_info ~(here : [%call_pos]) client ?version ?attributes ?client_type () =
   let client = Type_equal.conv Client.Private.eq client in
-  Client.Private.nvim_set_client_info here client ?version ?attributes ?client_type ()
+  Client.Private.nvim_set_client_info ~here client ?version ?attributes ?client_type ()
 ;;
 
-let get_current_win here client = Nvim_internal.nvim_get_current_win |> run here client
-
-let set_current_win here client window =
-  Nvim_internal.nvim_set_current_win ~window |> run here client
+let get_current_win ~(here : [%call_pos]) client =
+  Nvim_internal.nvim_get_current_win |> run ~here client
 ;;
 
-let list_wins here client = Nvim_internal.nvim_list_wins |> run here client
+let set_current_win ~(here : [%call_pos]) client window =
+  Nvim_internal.nvim_set_current_win ~window |> run ~here client
+;;
+
+let list_wins ~(here : [%call_pos]) client =
+  Nvim_internal.nvim_list_wins |> run ~here client
+;;
 
 type keys_with_replaced_keycodes = string
 
-let replace_termcodes here client str ~replace_keycodes =
+let replace_termcodes ~(here : [%call_pos]) client str ~replace_keycodes =
   (* [from_part] is a legacy Vim parameter that should be [true]. Always replace <lt> when
      replacing keycodes (almost surely behavior we want, and simplifies the API). *)
   Nvim_internal.nvim_replace_termcodes
@@ -183,13 +193,13 @@ let replace_termcodes here client str ~replace_keycodes =
     ~from_part:true
     ~do_lt:replace_keycodes
     ~special:replace_keycodes
-  |> run here client
+  |> run ~here client
 ;;
 
 let replace_termcodes_only = replace_termcodes ~replace_keycodes:false
 let replace_termcodes_and_keycodes = replace_termcodes ~replace_keycodes:true
 
-let feedkeys here client keys ~mode =
+let feedkeys ~(here : [%call_pos]) client keys ~mode =
   (* The docs advise setting [escape_ks = true] (escape the K_SPECIAL byte) when passing
      an unescaped string. The K_SPECIAL byte is 0x80, and appears in multi-byte key codes.
      seandewar (Neovim dev) did not recall uses of K_SPECIAL outside of key codes, but was
@@ -204,18 +214,18 @@ let feedkeys here client keys ~mode =
     | `Raw keys -> keys, true
     | `Keycodes keys -> keys, false
   in
-  Nvim_internal.nvim_feedkeys ~keys ~mode ~escape_ks |> run here client
+  Nvim_internal.nvim_feedkeys ~keys ~mode ~escape_ks |> run ~here client
 ;;
 
-let get_color_by_name here client name =
+let get_color_by_name ~(here : [%call_pos]) client name =
   Nvim_internal.nvim_get_color_by_name ~name
   |> map_witness ~f:(function
     | -1 -> Or_error.error_s [%message "Unrecognized color" (name : string)]
     | color -> Color.True_color.of_24bit_int color)
-  |> run here client
+  |> run ~here client
 ;;
 
-let get_color_map here client =
+let get_color_map ~(here : [%call_pos]) client =
   Nvim_internal.nvim_get_color_map
   |> map_witness ~f:(fun color_map ->
     color_map
@@ -223,7 +233,7 @@ let get_color_map here client =
       let%bind.Or_error bits = Type.of_msgpack Int bits in
       Color.True_color.of_24bit_int bits)
     |> Map.combine_errors)
-  |> run here client
+  |> run ~here client
 ;;
 
 let parse_highlight
@@ -260,13 +270,13 @@ let parse_highlight
 
 module Highlight_id = Int
 
-let get_hl_id_by_name here client name =
-  Nvim_internal.nvim_get_hl_id_by_name ~name |> run here client
+let get_hl_id_by_name ~(here : [%call_pos]) client name =
+  Nvim_internal.nvim_get_hl_id_by_name ~name |> run ~here client
 ;;
 
 let get_hl_by_name
   (type a)
-  here
+  ~(here : [%call_pos])
   client
   ?(ns_id = Color.Namespace.global)
   name
@@ -276,12 +286,12 @@ let get_hl_by_name
     ~ns_id:(Color.Namespace.to_int ns_id)
     ~opts:(String.Map.singleton "name" (Msgpack.String name))
   |> map_witness ~f:(parse_highlight ~color_depth)
-  |> run here client
+  |> run ~here client
 ;;
 
 let get_hl_by_id
   (type a)
-  here
+  ~(here : [%call_pos])
   client
   ?(ns_id = Color.Namespace.global)
   hl_id
@@ -291,48 +301,57 @@ let get_hl_by_id
     ~ns_id:(Color.Namespace.to_int ns_id)
     ~opts:(String.Map.singleton "id" (Msgpack.Int hl_id))
   |> map_witness ~f:(parse_highlight ~color_depth)
-  |> run here client
+  |> run ~here client
 ;;
 
-let get_var here client name ~type_ =
+let get_var ~(here : [%call_pos]) client name ~type_ =
   Nvim_internal.nvim_get_var ~name
   |> map_witness ~f:(Type.of_msgpack type_)
-  |> run here client
+  |> run ~here client
 ;;
 
-let set_var here client name ~type_ ~value =
+let set_var ~(here : [%call_pos]) client name ~type_ ~value =
   let value = Type.to_msgpack type_ value in
-  Nvim_internal.nvim_set_var ~name ~value |> run here client
+  Nvim_internal.nvim_set_var ~name ~value |> run ~here client
 ;;
 
-let delete_var here client name = Nvim_internal.nvim_del_var ~name |> run here client
+let delete_var ~(here : [%call_pos]) client name =
+  Nvim_internal.nvim_del_var ~name |> run ~here client
+;;
 
-let get_vvar here client name ~type_ =
+let get_vvar ~(here : [%call_pos]) client name ~type_ =
   Nvim_internal.nvim_get_vvar ~name
   |> map_witness ~f:(Type.of_msgpack type_)
-  |> run here client
+  |> run ~here client
 ;;
 
-let set_vvar here client name ~type_ ~value =
+let set_vvar ~(here : [%call_pos]) client name ~type_ ~value =
   let value = Type.to_msgpack type_ value in
-  Nvim_internal.nvim_set_vvar ~name ~value |> run here client
+  Nvim_internal.nvim_set_vvar ~name ~value |> run ~here client
 ;;
 
-let list_runtime_paths here client =
-  Nvim_internal.nvim_list_runtime_paths |> run here client
+let list_runtime_paths ~(here : [%call_pos]) client =
+  Nvim_internal.nvim_list_runtime_paths |> run ~here client
 ;;
 
-let out_write here client str = Nvim_internal.nvim_out_write ~str |> run here client
+let out_write ~(here : [%call_pos]) client str =
+  Nvim_internal.nvim_out_write ~str |> run ~here client
+;;
 
 (* For some reason this isn't a supported API function like [err_writeln]. *)
-let out_writeln here client str =
-  Nvim_internal.nvim_out_write ~str:(str ^ "\n") |> run here client
+let out_writeln ~(here : [%call_pos]) client str =
+  Nvim_internal.nvim_out_write ~str:(str ^ "\n") |> run ~here client
 ;;
 
-let err_write here client str = Nvim_internal.nvim_err_write ~str |> run here client
-let err_writeln here client str = Nvim_internal.nvim_err_writeln ~str |> run here client
+let err_write ~(here : [%call_pos]) client str =
+  Nvim_internal.nvim_err_write ~str |> run ~here client
+;;
 
-let echo here client message ~add_to_history =
+let err_writeln ~(here : [%call_pos]) client str =
+  Nvim_internal.nvim_err_writeln ~str |> run ~here client
+;;
+
+let echo ~(here : [%call_pos]) client message ~add_to_history =
   (* [opts] is not used by this version of Neovim, but may be used in the future. If we
      expose it, we should do so in a typeful way rather than asking the user to build
      [Msgpack.t] values. *)
@@ -340,13 +359,13 @@ let echo here client message ~add_to_history =
     ~chunks:(Highlighted_text.to_msgpack message)
     ~history:add_to_history
     ~opts:String.Map.empty
-  |> run here client
+  |> run ~here client
 ;;
 
 module Tabline = Statusline [@@alert "-vcaml_do_not_export"]
 
 module Fast = struct
-  let get_mode here client =
+  let get_mode ~(here : [%call_pos]) client =
     Nvim_internal.nvim_get_mode
     |> map_witness ~f:(fun mode_info ->
       let open Or_error.Let_syntax in
@@ -360,13 +379,15 @@ module Fast = struct
         find_or_error_and_convert mode_info "blocking" (Type.of_msgpack Bool)
       in
       Ok { Mode.With_blocking_info.mode; blocking })
-    |> run here client
+    |> run ~here client
   ;;
 
-  let input here client keys = Nvim_internal.nvim_input ~keys |> run here client
+  let input ~(here : [%call_pos]) client keys =
+    Nvim_internal.nvim_input ~keys |> run ~here client
+  ;;
 
   let input_mouse
-    here
+    ~(here : [%call_pos])
     client
     ?(modifiers = Key_modifier.Set.empty)
     ?(grid = 0)
@@ -397,14 +418,21 @@ module Fast = struct
       |> String.concat
     in
     Nvim_internal.nvim_input_mouse ~button ~action ~modifier ~grid ~row ~col
-    |> run here client
+    |> run ~here client
   ;;
 
-  let eval_tabline here client ?max_width ?fill_char ~include_highlights statusline =
-    Tabline.eval here client ?max_width ?fill_char ~include_highlights Tabline statusline
+  let eval_tabline
+    ~(here : [%call_pos])
+    client
+    ?max_width
+    ?fill_char
+    ~include_highlights
+    statusline
+    =
+    Tabline.eval ~here client ?max_width ?fill_char ~include_highlights Tabline statusline
   ;;
 
-  let find_runtime_file_matching here client ~pattern =
+  let find_runtime_file_matching ~(here : [%call_pos]) client ~pattern =
     Nvim_internal.nvim_get_runtime_file ~name:pattern ~all:false
     |> map_witness ~f:(function
       | [] -> Ok None
@@ -415,25 +443,25 @@ module Fast = struct
             "[nvim_get_runtime_file] returned multiple files when [all = false] was \
              passed"
               (files : string list)])
-    |> run here client
+    |> run ~here client
   ;;
 
-  let all_runtime_files_matching here client ~pattern =
-    Nvim_internal.nvim_get_runtime_file ~name:pattern ~all:true |> run here client
+  let all_runtime_files_matching ~(here : [%call_pos]) client ~pattern =
+    Nvim_internal.nvim_get_runtime_file ~name:pattern ~all:true |> run ~here client
   ;;
 end
 
-let paste here client data =
+let paste ~(here : [%call_pos]) client data =
   (* We set [crlf:false] here because VCaml already is UNIX-specific. If we change it in
      the future to support Windows we can expose this option, but for now it just
      clutters the API unnecessarily. *)
   let data = String.concat data ~sep:"\n" in
   Nvim_internal.nvim_paste ~data ~crlf:false ~phase:(-1)
-  |> run here client
+  |> run ~here client
   |> Deferred.Or_error.ignore_m
 ;;
 
-let paste_stream here client =
+let paste_stream ~(here : [%call_pos]) client =
   let open Async in
   let flushed = Ivar.create () in
   let writer =
@@ -448,7 +476,7 @@ let paste_stream here client =
       let%bind () =
         Pipe.iter reader ~f:(fun data ->
           match%bind
-            Nvim_internal.nvim_paste ~data ~crlf:false ~phase:!phase |> run here client
+            Nvim_internal.nvim_paste ~data ~crlf:false ~phase:!phase |> run ~here client
           with
           | Ok true ->
             phase := 2;
@@ -465,7 +493,7 @@ let paste_stream here client =
         | true -> return ()
         | false ->
           Nvim_internal.nvim_paste ~data:"" ~crlf:false ~phase:3
-          |> run here client
+          |> run ~here client
           >>| Or_error.ignore_m
           >>| (function
            | Ok () -> ()
@@ -484,7 +512,7 @@ module Text_mode = struct
     | Blockwise of { width : int }
 end
 
-let put here client ?text_mode lines ~where ~place_cursor =
+let put ~(here : [%call_pos]) client ?text_mode lines ~where ~place_cursor =
   let type_ =
     match (text_mode : Text_mode.t option) with
     | None -> "" (* Inferred from contents. *)
@@ -502,19 +530,19 @@ let put here client ?text_mode lines ~where ~place_cursor =
     | `At_start_of_text -> false
     | `At_end_of_text -> true
   in
-  Nvim_internal.nvim_put ~lines ~type_ ~after ~follow |> run here client
+  Nvim_internal.nvim_put ~lines ~type_ ~after ~follow |> run ~here client
 ;;
 
 (* The <CR> is buffered and then used to reply to the prompt. The side-effect of this
    dance is that the prompt is echoed to the screen. The <C-u> is used to clear pending
    input that the user might have actually typed (e.g., from mashing the keyboard while
    waiting). *)
-let echo_in_rpcrequest here client message =
+let echo_in_rpcrequest ~(here : [%call_pos]) client message =
   let message = String.substr_replace_all message ~pattern:"'" ~with_:"'.\"'\".'" in
   [ T (Nvim_internal.nvim_input ~keys:"<C-u><CR>")
   ; T (Nvim_internal.nvim_eval ~expr:(sprintf "input('%s')" message))
   ]
-  |> Atomic.run here client
+  |> Atomic.run ~here client
   |> Deferred.Result.map_error ~f:Atomic.Error.to_error
   |> Deferred.Or_error.ignore_m
 ;;
@@ -538,7 +566,7 @@ module Log_level = struct
   ;;
 end
 
-let notify here client log_level message =
+let notify ~(here : [%call_pos]) client log_level message =
   (* [opts] is not used by this version of Neovim, but may be used in the future. If we
      expose it, we should do so in a typeful way rather than asking the user to build
      [Msgpack.t] values. *)
@@ -547,25 +575,25 @@ let notify here client log_level message =
     ~log_level:(Log_level.to_int log_level)
     ~opts:String.Map.empty
   |> map_witness ~f:(Type.of_msgpack Nil)
-  |> run here client
+  |> run ~here client
 ;;
 
-let send_to_channel here client ~channel data =
-  Nvim_internal.nvim_chan_send ~chan:channel ~data |> run here client
+let send_to_channel ~(here : [%call_pos]) client ~channel data =
+  Nvim_internal.nvim_chan_send ~chan:channel ~data |> run ~here client
 ;;
 
-let get_current_line here client =
+let get_current_line ~(here : [%call_pos]) client =
   Nvim_internal.nvim_get_current_line
   |> map_witness ~f:(fun line -> Ok (String.Utf8.of_string_unchecked line))
-  |> run here client
+  |> run ~here client
 ;;
 
-let set_current_line here client line =
-  Nvim_internal.nvim_set_current_line ~line |> run here client
+let set_current_line ~(here : [%call_pos]) client line =
+  Nvim_internal.nvim_set_current_line ~line |> run ~here client
 ;;
 
-let delete_current_line here client =
-  Nvim_internal.nvim_del_current_line |> run here client
+let delete_current_line ~(here : [%call_pos]) client =
+  Nvim_internal.nvim_del_current_line |> run ~here client
 ;;
 
 module Context_type = struct
@@ -603,7 +631,7 @@ module Context_type = struct
   ;;
 end
 
-let get_context here client context_types =
+let get_context ~(here : [%call_pos]) client context_types =
   let opts =
     let context_types =
       context_types
@@ -617,17 +645,17 @@ let get_context here client context_types =
   |> map_witness ~f:(fun map ->
     Or_error.try_with (fun () ->
       Map.map_keys_exn (module Context_type) map ~f:Context_type.of_string))
-  |> run here client
+  |> run ~here client
 ;;
 
-let load_context here client context =
+let load_context ~(here : [%call_pos]) client context =
   let context = Map.map_keys_exn (module String) context ~f:Context_type.to_string in
   Nvim_internal.nvim_load_context ~dict:context
   |> map_witness ~f:(Type.of_msgpack Nil)
-  |> run here client
+  |> run ~here client
 ;;
 
-let get_mark here client sym =
+let get_mark ~(here : [%call_pos]) client sym =
   (* [opts] is not used by this version of Neovim, but may be used in the future. If we
      expose it, we should do so in a typeful way rather than asking the user to build
      [Msgpack.t] values. *)
@@ -641,23 +669,23 @@ let get_mark here client sym =
          let mark = { Mark.sym; pos = { row; col } } in
          Ok (Some (buffer, mark)))
     | _ -> failwith "Malformed result from [nvim_get_mark]")
-  |> run here client
+  |> run ~here client
 ;;
 
-let delete_mark here client sym =
+let delete_mark ~(here : [%call_pos]) client sym =
   Nvim_internal.nvim_del_mark ~name:(Char.to_string sym)
   |> map_witness ~f:(function
     | true -> Ok ()
     | false -> Or_error.error_s [%message "Failed to delete mark" (sym : char)])
-  |> run here client
+  |> run ~here client
 ;;
 
-let get_display_width_of_text here client text =
-  Nvim_internal.nvim_strwidth ~text |> run here client
+let get_display_width_of_text ~(here : [%call_pos]) client text =
+  Nvim_internal.nvim_strwidth ~text |> run ~here client
 ;;
 
-let set_current_dir here client dir =
-  Nvim_internal.nvim_set_current_dir ~dir |> run here client
+let set_current_dir ~(here : [%call_pos]) client dir =
+  Nvim_internal.nvim_set_current_dir ~dir |> run ~here client
 ;;
 
 module Option = struct
@@ -1496,25 +1524,27 @@ module Option = struct
 
   (*$*)
 
-  let get (type a) here client (t : a t) : a Deferred.Or_error.t =
+  let get (type a) ~(here : [%call_pos]) client (t : a t) : a Deferred.Or_error.t =
     Nvim_internal.nvim_get_option_value ~name:(to_string t) ~opts:String.Map.empty
     |> map_witness ~f:(of_msgpack t)
-    |> run here client
+    |> run ~here client
   ;;
 
-  let set (type a) here client (t : a t) (value : a) : unit Deferred.Or_error.t =
+  let set (type a) ~(here : [%call_pos]) client (t : a t) (value : a)
+    : unit Deferred.Or_error.t
+    =
     Nvim_internal.nvim_set_option_value
       ~name:(to_string t)
       ~value:(to_msgpack t value)
       ~opts:String.Map.empty
-    |> run here client
+    |> run ~here client
   ;;
 
-  let get_dynamic_info (type a) here client (t : a t) =
+  let get_dynamic_info (type a) ~(here : [%call_pos]) client (t : a t) =
     Nvim_internal.nvim_get_option_info ~name:(to_string t)
     |> map_witness
          ~f:(Dynamic_option_info.of_msgpack_map ~default_of_msgpack:(of_msgpack t))
-    |> run here client
+    |> run ~here client
   ;;
 end
 

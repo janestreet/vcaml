@@ -10,7 +10,6 @@ let start_buffer_updates ~time_source ~zone ~client ~buffer =
   Time_source.run_at_intervals' time_source Time_ns.Span.second (fun () ->
     match%bind
       Buffer.set_lines
-        [%here]
         client
         (Id buffer)
         ~start:0
@@ -32,17 +31,17 @@ let on_startup client =
       Test { time_source }, Time_source.read_only time_source, Time_ns_unix.Zone.utc
   in
   let%bind buffer =
-    let%bind buffer = Buffer.create [%here] client ~listed:false ~scratch:true in
-    let%bind () = Buffer.Option.set [%here] client (Id buffer) Bufhidden "wipe" in
+    let%bind buffer = Buffer.create client ~listed:false ~scratch:true in
+    let%bind () = Buffer.Option.set client (Id buffer) Bufhidden "wipe" in
     (* We block Neovim for this sequence of commands so that they are not interleaved by
        unrelated logic. *)
-    block_nvim [%here] client ~f:(fun client ->
-      let%bind original_window = Nvim.get_current_win [%here] client in
-      let%bind () = Command.exec [%here] client "split" in
-      let%bind () = Nvim.set_current_buf [%here] client buffer in
-      let%bind () = Window.set_height [%here] client Current ~height:1 in
-      let%bind () = Window.Option.set [%here] client Current Winfixheight true in
-      let%bind () = Nvim.set_current_win [%here] client original_window in
+    block_nvim client ~f:(fun client ->
+      let%bind original_window = Nvim.get_current_win client in
+      let%bind () = Command.exec client "split" in
+      let%bind () = Nvim.set_current_buf client buffer in
+      let%bind () = Window.set_height client Current ~height:1 in
+      let%bind () = Window.Option.set client Current Winfixheight true in
+      let%bind () = Nvim.set_current_win client original_window in
       return buffer)
   in
   start_buffer_updates ~time_source ~zone ~client ~buffer;
@@ -53,8 +52,7 @@ let on_startup client =
    during regular use. *)
 let advance_time_for_test =
   Vcaml_plugin.Persistent.Rpc.create_async
-    [%here]
-    ~name:"advance-time"
+    "advance-time"
     ~type_:Ocaml_from_nvim.Async.unit
     ~f:(fun state ~client:_ ->
       match state with

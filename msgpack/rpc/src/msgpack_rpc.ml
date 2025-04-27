@@ -59,8 +59,8 @@ let close_connection t reason =
   | false ->
     Bus.write t.connection_closed reason;
     Bus.close t.connection_closed;
-    let reader = Set_once.get_exn t.reader [%here] in
-    let writer = Set_once.get_exn t.writer [%here] in
+    let reader = Set_once.get_exn t.reader in
+    let writer = Set_once.get_exn t.writer in
     (* We can close the [Reader.t] because even though there still may be unconsumed
        data, we have already responded to all the pending requests. *)
     don't_wait_for
@@ -135,8 +135,8 @@ let event_loop t =
 ;;
 
 let connect t reader writer =
-  Set_once.set_exn t.reader [%here] reader;
-  Set_once.set_exn t.writer [%here] writer;
+  Set_once.set_exn t.reader reader;
+  Set_once.set_exn t.writer writer;
   don't_wait_for (event_loop t);
   (* If the [write] system call fails, close the connection. *)
   don't_wait_for
@@ -150,7 +150,6 @@ let create ~on_error =
        implement it as a bus rather than as an ivar to allow listeners to unsubscribe,
        thereby avoiding a memory leak. *)
     Bus.create_exn
-      [%here]
       Arity1
       ~on_subscription_after_first_write:Raise
       ~on_callback_raise:Core.Error.raise
@@ -189,7 +188,7 @@ let write_message t ~query ~on_successful_flush =
     let subscriber =
       (* We subscribe to [t.connection_closed] before calling [write] to avoid a race
          where the write fails and we miss the message that the connection was closed. *)
-      Bus.subscribe_exn t.connection_closed [%here] ~f:(Ivar.fill_exn connection_closed)
+      Bus.subscribe_exn t.connection_closed ~f:(Ivar.fill_exn connection_closed)
     in
     let connection_closed = Ivar.read connection_closed in
     Writer.write writer (Msgpack.string_of_t_exn query);

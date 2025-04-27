@@ -8,8 +8,7 @@ let%expect_test "Events are typed correctly" =
     let typed_events = Autocmd.Event.all in
     let%bind documented_events, missing_events =
       let%bind runtime =
-        Nvim.eval_viml_expression [%here] client "$VIMRUNTIME" ~result_type:String
-        >>| ok_exn
+        Nvim.eval_viml_expression client "$VIMRUNTIME" ~result_type:String >>| ok_exn
       in
       let%map tags = Reader.file_lines (runtime ^/ "doc/tags") in
       List.filter_map tags ~f:(fun line ->
@@ -62,7 +61,7 @@ let%expect_test "get, create, delete, clear" =
     let all_events = Nonempty_list.of_list_exn Autocmd.Event.all in
     let print_summary () =
       let%map autocmds =
-        Autocmd.get [%here] client ()
+        Autocmd.get client ()
         >>| Maybe_group.Map.of_list_with_key_multi ~get_key:(fun { Autocmd.group; _ } ->
           group)
         >>| Map.map ~f:(fun autocmds -> List.length autocmds)
@@ -87,29 +86,26 @@ let%expect_test "get, create, delete, clear" =
        ((group (15)) (count 1)) ((group (17)) (count 1)))
       |}];
     let%bind () =
-      Autocmd.get [%here] client ()
+      Autocmd.get client ()
       >>| List.map ~f:(fun event -> event.Autocmd.group)
       >>| List.filter_opt
       >>| List.dedup_and_sort ~compare:Autocmd.Group.compare
       >>= Deferred.Or_error.List.iter ~how:`Sequential ~f:(fun group ->
-        Autocmd.clear [%here] client () ~group:(`Group group) ~events:all_events)
+        Autocmd.clear client () ~group:(`Group group) ~events:all_events)
     in
     let%bind () = print_summary () in
     [%expect {| (((group ()) (count 10))) |}];
-    let%bind () =
-      Autocmd.clear [%here] client () ~group:`Not_in_any_group ~events:all_events
-    in
+    let%bind () = Autocmd.clear client () ~group:`Not_in_any_group ~events:all_events in
     let%bind () = print_summary () in
     [%expect {| () |}];
     let get_and_print ?group ?events ?patterns_or_buffer () =
-      Autocmd.get [%here] client ?group ?events ?patterns_or_buffer ()
+      Autocmd.get client ?group ?events ?patterns_or_buffer ()
       >>| List.iter ~f:(fun autocmd -> print_s [%sexp (autocmd : Autocmd.t)])
     in
-    let%bind group1 = Autocmd.Group.create [%here] client "MyGroup1" in
-    let%bind group2 = Autocmd.Group.create [%here] client "MyGroup2" in
+    let%bind group1 = Autocmd.Group.create client "MyGroup1" in
+    let%bind group2 = Autocmd.Group.create client "MyGroup2" in
     let%bind autocmd1 =
       Autocmd.create
-        [%here]
         client
         ~description:"First autocmd"
         ~once:true
@@ -121,7 +117,6 @@ let%expect_test "get, create, delete, clear" =
     in
     let%bind (_ : Autocmd.Id.t) =
       Autocmd.create
-        [%here]
         client
         ~description:"Second autocmd"
         ~group:group2
@@ -131,7 +126,6 @@ let%expect_test "get, create, delete, clear" =
     in
     let%bind (_ : Autocmd.Id.t) =
       Autocmd.create
-        [%here]
         client
         ~description:"Third autocmd"
         ~group:group2
@@ -183,7 +177,6 @@ let%expect_test "get, create, delete, clear" =
       |}];
     let%bind () =
       Autocmd.clear
-        [%here]
         client
         ~patterns_or_buffer:(Patterns [ "*" ])
         ()
@@ -201,7 +194,7 @@ let%expect_test "get, create, delete, clear" =
        (description ("First autocmd")) (event WinEnter)
        (pattern_or_buffer (Buffer 1)) (once true) (command "echo 'Hello!'"))
       |}];
-    let%bind () = Autocmd.Group.delete [%here] client group2 in
+    let%bind () = Autocmd.Group.delete client group2 in
     let%bind () = get_and_print () in
     [%expect
       {|
@@ -209,7 +202,7 @@ let%expect_test "get, create, delete, clear" =
        (description ("First autocmd")) (event WinEnter)
        (pattern_or_buffer (Buffer 1)) (once true) (command "echo 'Hello!'"))
       |}];
-    let%bind () = Autocmd.delete [%here] client autocmd1 in
+    let%bind () = Autocmd.delete client autocmd1 in
     let%bind () = get_and_print () in
     [%expect {| |}];
     return ())
@@ -218,10 +211,9 @@ let%expect_test "get, create, delete, clear" =
 let%expect_test "exec" =
   with_ui_client ~args:[ "--noplugin" ] (fun client ui ->
     let open Deferred.Or_error.Let_syntax in
-    let%bind group = Autocmd.Group.create [%here] client "Test group" in
+    let%bind group = Autocmd.Group.create client "Test group" in
     let%bind (_ : Autocmd.Id.t) =
       Autocmd.create
-        [%here]
         client
         ~description:"Say hello"
         ~group
@@ -230,7 +222,7 @@ let%expect_test "exec" =
         (Viml {| echo "Hello!" |})
     in
     let%bind () =
-      Autocmd.exec [%here] client () ~events:[ User ] ~patterns_or_buffer:(Buffer Current)
+      Autocmd.exec client () ~events:[ User ] ~patterns_or_buffer:(Buffer Current)
     in
     let%bind () = get_screen_contents ui >>| print_endline in
     [%expect

@@ -1,8 +1,8 @@
 open Core
 
-(** This module represents information about Neovim options that can change over time.
-    The static option information is used to generate the typed VCaml bindings, and should
-    not be of interest to plugins. *)
+(** This module represents information about Neovim options that can change over time. The
+    static option information is used to generate the typed VCaml bindings, and should not
+    be of interest to plugins. *)
 
 module Last_set_loc : sig
   type t =

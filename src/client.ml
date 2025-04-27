@@ -165,9 +165,7 @@ module Private = struct
 
     type blocking =
       run_in_background:
-        (Source_code_position.t
-         -> f:([ `asynchronous ] T.t -> unit Deferred.Or_error.t)
-         -> unit)
+        (here:[%call_pos] -> ([ `asynchronous ] T.t -> unit Deferred.Or_error.t) -> unit)
       -> [ `blocking ] T.t
       -> Msgpack.t list
       -> Msgpack.t Deferred.Or_error.t
@@ -180,11 +178,10 @@ module Private = struct
     type 'kind t =
       { channel : int Set_once.t
       ; name : string
-      ; register_request_async :
-          Source_code_position.t -> name:string -> f:Callbacks.async -> unit
+      ; register_request_async : here:[%call_pos] -> string -> f:Callbacks.async -> unit
       ; register_request_blocking :
-          Source_code_position.t
-          -> name:string
+          here:[%call_pos]
+          -> string
           -> f:Callbacks.blocking
           -> on_keyboard_interrupt:(unit -> unit)
           -> unit
@@ -193,13 +190,13 @@ module Private = struct
       ; registered_methods : unit -> Method_info.t String.Map.t
       ; call_nvim_api_fn :
           'a 'b.
-          Source_code_position.t
+          here:[%call_pos]
           -> ('a, 'b) Message_type.t
           -> 'a Api_result.t
           -> 'b Deferred.Or_error.t
       ; keyboard_interrupts : (unit, read_write) Bvar.t
       ; on_error : Vcaml_error.t -> unit
-      ; notify_nvim_of_error : Source_code_position.t -> Error.t -> unit Deferred.t
+      ; notify_nvim_of_error : here:[%call_pos] -> Error.t -> unit Deferred.t
       ; subscription_manager : Subscription_manager.t
       ; close : unit -> unit Deferred.t
       ; vcaml_internal_group : int Set_once.t
@@ -227,12 +224,12 @@ module Private = struct
 
     let name t = t.name
 
-    let register_request_async here t ~name ~f =
+    let register_request_async ~(here : [%call_pos]) t ~name ~f =
       Hashtbl.add t.async_callbacks ~key:name ~data:(here, f)
       |> asynchronous_rpcs_must_be_unique ~name
     ;;
 
-    let register_request_blocking here t ~name ~f ~on_keyboard_interrupt =
+    let register_request_blocking ~(here : [%call_pos]) t ~name ~f ~on_keyboard_interrupt =
       Hashtbl.add
         t.blocking_callbacks
         ~key:name
@@ -242,7 +239,7 @@ module Private = struct
   end
 
   let nvim_set_client_info
-    here
+    ~(here : [%call_pos])
     t
     ?(version =
       { Client_info.Version.major = None
@@ -280,10 +277,10 @@ module Private = struct
       ~type_:client_type
       ~methods
       ~attributes
-    |> t.call_nvim_api_fn here Request
+    |> t.call_nvim_api_fn ~here Request
   ;;
 
-  let nvim_list_chans here t =
+  let nvim_list_chans ~(here : [%call_pos]) t =
     Nvim_internal.nvim_list_chans
     |> map_witness ~f:(fun channels ->
       channels
@@ -291,7 +288,7 @@ module Private = struct
         let%bind.Or_error channel = Type.of_msgpack Dict channel in
         Channel_info.of_msgpack_map channel)
       |> Or_error.combine_errors)
-    |> t.call_nvim_api_fn here Request
+    |> t.call_nvim_api_fn ~here Request
   ;;
 end
 
@@ -379,7 +376,7 @@ let connect
          |> Result.map_error ~f:(tag_callsite here))
   in
   let call_nvim_api_fn
-    here
+    ~(here : [%call_pos])
     message_type
     api_result
     ~permission_to_run
@@ -454,21 +451,21 @@ let connect
      close happens on shutdown. *)
   Shutdown.at_shutdown close;
   let background_request_sequencer = Throttle.Sequencer.create () in
-  let notify_nvim_of_error here error =
+  let notify_nvim_of_error ~(here : [%call_pos]) error =
     let error = tag_callsite here (Error.tag error ~tag:name) in
     Nvim_internal.nvim_err_writeln ~str:(Error.to_string_hum error)
     |> call_nvim_api_fn
-         [%here]
          Notification
          ~permission_to_run:permission_to_run_in_background
          ~request_sequencer:background_request_sequencer
          ~expiration_reason:Permission_expiration_is_a_bug
     |> Deferred.ignore_m
   in
-  let try_with here ~f =
+  let try_with ~(here : [%call_pos]) f =
     Monitor.try_with_join_or_error
       ~rest:
-        (`Call (fun exn -> don't_wait_for (notify_nvim_of_error here (Error.of_exn exn))))
+        (`Call
+          (fun exn -> don't_wait_for (notify_nvim_of_error ~here (Error.of_exn exn))))
       f
   in
   let client_is_ready = Ivar.create () in
@@ -500,7 +497,7 @@ let connect
     ; close
     ; vcaml_internal_group = Set_once.create ()
     }
-  and run_in_background here ~f =
+  and run_in_background ~(here : [%call_pos]) f =
     don't_wait_for
       (let%bind () = Ivar.read client_is_ready in
        let%bind () =
@@ -510,14 +507,14 @@ let connect
             [exit] is invoked. *)
          Nvim_lock.Permission_to_run.value_available permission_to_run_in_background
        in
-       match%bind try_with here ~f:(fun () -> f t) with
+       match%bind try_with ~here (fun () -> f t) with
        | Ok () -> return ()
-       | Error error -> notify_nvim_of_error here error)
-  and register_request_async here ~name ~f =
+       | Error error -> notify_nvim_of_error ~here error)
+  and register_request_async ~(here : [%call_pos]) name ~f =
     Msgpack_rpc.register_notification_handler rpc ~name ~f:(fun params ->
-      run_in_background here ~f:(fun t -> f t params))
+      run_in_background ~here (fun t -> f t params))
     |> asynchronous_rpcs_must_be_unique ~name
-  and register_request_blocking here ~name ~f ~on_keyboard_interrupt =
+  and register_request_blocking ~(here : [%call_pos]) name ~f ~on_keyboard_interrupt =
     Msgpack_rpc.register_request_handler
       rpc
       ~name
@@ -553,7 +550,7 @@ let connect
                    (https://github.com/neovim/neovim/issues/19932#issuecomment-1226467468).
                 *)
                 call_nvim_api_fn
-                  here
+                  ~here
                   ~request_sequencer
                   ~permission_to_run
                   ~expiration_reason:Permission_expiration_is_a_bug
@@ -576,7 +573,7 @@ let connect
           in
           let t = { t with call_nvim_api_fn } in
           let%bind () = flush_neovim_event_queue [%here] ~permission_to_run in
-          try_with here ~f:(fun () -> f ~run_in_background t args)
+          try_with ~here (fun () -> f ~run_in_background t args)
         in
         (* In the case of a keyboard interrupt we want to return an [Ok] result instead of
            an [Error] because we don't want to display an error message to the user. We
@@ -595,7 +592,7 @@ let connect
                 upon result (fun _ -> expiration_reason := `Rpc_returned);
                 let%map () =
                   call_nvim_api_fn
-                    [%here]
+                    ~here
                     Notification
                     ~permission_to_run
                     ~request_sequencer
@@ -652,13 +649,13 @@ let connect
   in
   Msgpack_rpc.set_default_notification_handler rpc ~f:(fun ~name _ ->
     don't_wait_for
-      (notify_nvim_of_error [%here] (Error.of_string [%string "Unknown method %{name}"])));
+      (notify_nvim_of_error (Error.of_string [%string "Unknown method %{name}"])));
   Hashtbl.iteri async_callbacks ~f:(fun ~key:name ~data:(here, f) ->
-    register_request_async here ~name ~f);
+    register_request_async ~here name ~f);
   Hashtbl.iteri
     blocking_callbacks
     ~f:(fun ~key:name ~data:(here, f, `on_keyboard_interrupt on_keyboard_interrupt) ->
-      register_request_blocking here ~name ~f ~on_keyboard_interrupt);
+      register_request_blocking ~here name ~f ~on_keyboard_interrupt);
   (* It's important that we not establish the connection until after we've registered the
      handlers. *)
   Msgpack_rpc.connect rpc reader writer;
@@ -670,9 +667,9 @@ let connect
       ~type_:"remote"
       ~methods:String.Map.empty
       ~attributes:String.Map.empty
-    |> t.call_nvim_api_fn [%here] Request
+    |> t.call_nvim_api_fn Request
   in
-  let%bind.Deferred.Or_error channels = nvim_list_chans [%here] t in
+  let%bind.Deferred.Or_error channels = nvim_list_chans t in
   List.find_map channels ~f:(fun channel ->
     let open Option.Let_syntax in
     let%bind client = channel.client in
@@ -683,15 +680,15 @@ let connect
   |> function
   | None -> Deferred.Or_error.error_string "Failed to find current client in channel list"
   | Some channel_id ->
-    Set_once.set_exn t.channel [%here] channel_id;
-    let%bind.Deferred.Or_error () = nvim_set_client_info [%here] t () in
+    Set_once.set_exn t.channel channel_id;
+    let%bind.Deferred.Or_error () = nvim_set_client_info t () in
     let%bind.Deferred.Or_error vcaml_internal_group =
       Nvim_internal.nvim_create_augroup
         ~name:[%string "vcaml_internal__%{name}__%{uuid}"]
         ~opts:String.Map.empty
-      |> t.call_nvim_api_fn [%here] Request
+      |> t.call_nvim_api_fn Request
     in
-    Set_once.set_exn t.vcaml_internal_group [%here] vcaml_internal_group;
+    Set_once.set_exn t.vcaml_internal_group vcaml_internal_group;
     Ivar.fill_exn client_is_ready ();
     Deferred.Or_error.return t
 ;;
@@ -718,47 +715,46 @@ let flatten_vcaml_errors error ~anticipated_header =
        vim_error error_type message ~backtrace:(inner_backtrace @ backtrace))
 ;;
 
-let block_nvim' here t ~f =
-  let channel = Set_once.get_exn t.channel [%here] in
+let block_nvim' ~(here : [%call_pos]) t ~f =
+  let channel = Set_once.get_exn t.channel in
   let name = t.name_anonymous_blocking_request () in
   let result = Set_once.create () in
   t.register_request_blocking
-    transparent_pos
-    ~on_keyboard_interrupt:(fun () ->
-      Set_once.set_exn result [%here] `Keyboard_interrupted)
-    ~name
+    ~here:transparent_pos
+    name
+    ~on_keyboard_interrupt:(fun () -> Set_once.set_exn result `Keyboard_interrupted)
     ~f:(fun ~run_in_background:_ t _args ->
       t.unregister_request_blocking ~name;
       let%map.Deferred.Or_error result' =
         Deferred.Or_error.try_with_join (fun () -> f t)
       in
-      Set_once.set_if_none result [%here] (`Ok result');
+      Set_once.set_if_none result (`Ok result');
       Msgpack.Nil);
   let%map response =
     Nvim_internal.nvim_call_function ~fn:"rpcrequest" ~args:[ Int channel; String name ]
     |> map_witness ~f:(Type.of_msgpack Nil)
-    |> t.call_nvim_api_fn here Request
+    |> t.call_nvim_api_fn ~here Request
   in
   match response with
   | Error error ->
     let anticipated_header =
-      let channel = Set_once.get_exn t.channel [%here] in
+      let channel = Set_once.get_exn t.channel in
       [%string "Vim:Error invoking '%{name}' on channel %{channel#Int} (%{t.name}):\n"]
     in
     let error = flatten_vcaml_errors error ~anticipated_header in
     `Error error
-  | Ok () -> Set_once.get_exn result [%here]
+  | Ok () -> Set_once.get_exn result
 ;;
 
-let block_nvim here t ~f =
-  match%map block_nvim' here t ~f with
+let block_nvim ~(here : [%call_pos]) t ~f =
+  match%map block_nvim' ~here t ~f with
   | `Ok result -> Ok result
   | `Error error -> Error error
   | `Keyboard_interrupted ->
     Error (vim_error Exception (Atom "Keyboard interrupt") |> tag_callsite here)
 ;;
 
-let channel t = Set_once.get_exn t.channel [%here]
+let channel t = Set_once.get_exn t.channel
 
 module Maybe_connected = struct
   type nonrec 'kind t =
@@ -777,8 +773,8 @@ open struct
       |> tag_callsite line5
       |> tag_callsite line6
     in
-    let original_bt = !Backtrace.elide in
-    Backtrace.elide := false;
+    let original_bt = Dynamic.get Backtrace.elide in
+    Dynamic.set_root Backtrace.elide false;
     print_s [%sexp (test () : Error.t)];
     [%expect
       {|
@@ -788,7 +784,7 @@ open struct
         ("Called from" lib/vcaml/src/client.ml:5:16)
         ("Called from" lib/vcaml/src/client.ml:6:16)))
       |}];
-    Backtrace.elide := true;
+    Dynamic.set_root Backtrace.elide true;
     print_s [%sexp (test () : Error.t)];
     [%expect
       {|
@@ -798,7 +794,7 @@ open struct
         ("Called from" lib/vcaml/src/client.ml:LINE:COL)
         ("Called from" lib/vcaml/src/client.ml:LINE:COL)))
       |}];
-    Backtrace.elide := original_bt;
+    Dynamic.set_root Backtrace.elide original_bt;
     return ()
   ;;
 

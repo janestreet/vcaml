@@ -8,6 +8,7 @@ open Import
 open Unshadow
 
 (** Note that (1) this is not the full set of modes that [nvim_get_mode] can return, and
+
     (2) the string representations of these modes and the modes returned by
     [nvim_get_mode] are different. Thus we should not try to unify the types. *)
 module Mode = struct
@@ -129,7 +130,7 @@ let of_msgpack_map map =
    mappings for mapmode-nvo by default. '!' is not a recognized mode, so it silently
    returns mappings for 'nvo' instead of 'ic'. To fix this, we need to individually
    query for 'i' and 'c' (and 'l') and join the results together. *)
-let get here client ~scope ~mode =
+let get ~(here : [%call_pos]) client ~scope ~mode =
   let query =
     match scope with
     | `Global -> Nvim_internal.nvim_get_keymap
@@ -157,7 +158,7 @@ let get here client ~scope ~mode =
       |> List.map ~f:of_msgpack_map
       |> Or_error.combine_errors
       |> Or_error.map ~f:List.concat)
-    |> run here client)
+    |> run ~here client)
   (* Because 'i' and 'c' will produce duplicate entries for '!' mappings, we need to
      dedup the results after querying each. *)
   >>|? List.dedup_and_sort ~compare
@@ -167,7 +168,7 @@ let set_internal
   (type a)
   ~(return_type : a Type.t)
   ~expr
-  here
+  ~here
   client
   ?(replace_keycodes = true)
   ?(recursive = false)
@@ -185,21 +186,23 @@ let set_internal
     match scope with
     | `Global | `Buffer_local (Buffer.Or_current.Id _) -> Deferred.Or_error.return scope
     | `Buffer_local Current ->
-      let%map.Deferred.Or_error buffer = Nvim.get_current_buf [%here] client in
+      let%map.Deferred.Or_error buffer = Nvim.get_current_buf client in
       `Buffer_local (Buffer.Or_current.Id buffer)
   in
   let%bind rhs =
     match (rhs : a Ocaml_from_nvim.Callback.t) with
     | Viml rhs -> return rhs
     | Rpc rpc ->
-      let name = Ocaml_from_nvim.Private.register_callback here client ~return_type rpc in
+      let name =
+        Ocaml_from_nvim.Private.register_callback ~here client ~return_type rpc
+      in
       let channel = Client.channel client in
       let%map () =
         match scope with
         | `Global -> return ()
         | `Buffer_local buffer ->
           Autocmd.create
-            here
+            ~here
             client
             ~description:[%string "Unregister %{name}"]
             ~once:true
@@ -245,21 +248,23 @@ endif |}])
     | "" -> boolean_opts
     | _ -> ("desc", String description) :: boolean_opts
   in
-  query ~mode ~lhs ~rhs ~opts:(String.Map.of_alist_exn opts) |> run here client
+  query ~mode ~lhs ~rhs ~opts:(String.Map.of_alist_exn opts) |> run ~here client
 ;;
 
-let set here client =
-  set_internal ~return_type:Nil ~expr:false here client ?replace_keycodes:None
+let set ~(here : [%call_pos]) client =
+  set_internal ~return_type:Nil ~expr:false ~here client ?replace_keycodes:None
 ;;
 
-let set_expr here client = set_internal ~return_type:String ~expr:true here client
+let set_expr ~(here : [%call_pos]) client =
+  set_internal ~return_type:String ~expr:true ~here client
+;;
 
-let unset here client ~scope ~lhs ~mode =
+let unset ~(here : [%call_pos]) client ~scope ~lhs ~mode =
   let query =
     match scope with
     | `Global -> Nvim_internal.nvim_del_keymap
     | `Buffer_local buffer -> Nvim_internal.nvim_buf_del_keymap ~buffer
   in
   let mode = Mode.to_string mode in
-  query ~mode ~lhs |> run here client
+  query ~mode ~lhs |> run ~here client
 ;;

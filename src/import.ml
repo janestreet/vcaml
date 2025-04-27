@@ -2,9 +2,15 @@ open Core
 open Async
 include Import0
 
-let run here client api_result =
+let run
+  (* this function shouldn't be called by users, so it's not [call_pos] in order to 
+      make sure that we thread the correct positions through *)
+  ~(here : Source_code_position.t)
+  client
+  api_result
+  =
   let client = Type_equal.conv Client.Private.eq client in
-  client.call_nvim_api_fn here Request api_result
+  client.call_nvim_api_fn ~here Request api_result
 ;;
 
 module Atomic = struct
@@ -44,7 +50,7 @@ module Atomic = struct
     ;;
   end
 
-  let run here client calls =
+  let run ~(here : [%call_pos]) client calls =
     let calls =
       List.map calls ~f:(fun (T { name; params; witness = _ }) ->
         Msgpack.Array [ String name; Array params ])
@@ -55,7 +61,7 @@ module Atomic = struct
       let api_result = Nvim_internal.nvim_call_atomic ~calls in
       { api_result with witness = Object }
     in
-    match%map run here client nvim_call_atomic with
+    match%map run ~here client nvim_call_atomic with
     | Error error -> Error (Error.Msgpack_rpc_error error, here)
     | Ok (Array [ Array results; Nil ]) -> Ok results
     | Ok
@@ -71,12 +77,12 @@ end
 
 let run2
   (type a b)
-  here
+  ~(here : [%call_pos])
   client
   (api_result1 : a Api_result.t)
   (api_result2 : b Api_result.t)
   =
-  match%map Atomic.run here client [ T api_result1; T api_result2 ] with
+  match%map Atomic.run ~here client [ T api_result1; T api_result2 ] with
   | Error error -> Error (Atomic.Error.to_error error)
   | Ok [ result1; result2 ] ->
     let open Or_error.Let_syntax in
@@ -107,7 +113,16 @@ module Statusline = struct
       | Statuscol of { one_indexed_row : int }
   end
 
-  let eval here client ?window ?max_width ?fill_char ~include_highlights kind str =
+  let eval
+    ~(here : [%call_pos])
+    client
+    ?window
+    ?max_width
+    ?fill_char
+    ~include_highlights
+    kind
+    str
+    =
     let opts =
       let kind =
         match (kind : Kind.t) with
@@ -178,7 +193,7 @@ module Statusline = struct
              Ok (Some highlighted_text))
       in
       return { text; display_width; highlights })
-    |> run here client
+    |> run ~here client
   ;;
 end
 (* Prevent accidental export as [module Statusline = Statusline]. *)

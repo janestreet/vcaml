@@ -21,7 +21,7 @@ end
 
 let run_with_changedtick_check here client ?changedtick t api_result =
   match changedtick with
-  | None -> run here client api_result
+  | None -> run ~here client api_result
   | Some changedtick ->
     let changedtick = int_of_changedtick changedtick in
     let bufnr =
@@ -32,7 +32,7 @@ let run_with_changedtick_check here client ?changedtick t api_result =
     let changedtick_now = sprintf "nvim_buf_get_var(%d, 'changedtick')" bufnr in
     (match%map
        run2
-         here
+         ~here
          client
          (* Note that even though we call [echoerr] here, the semantics of Neovim's remote
             API are that when an error is encountered it's returned to the plugin over RPC
@@ -52,36 +52,47 @@ let run_with_changedtick_check here client ?changedtick t api_result =
 
 let run_and_get_changedtick here client t api_result =
   let%map.Deferred.Or_error value, changedtick =
-    run2 here client api_result (Nvim_internal.nvim_buf_get_changedtick ~buffer:t)
+    run2 ~here client api_result (Nvim_internal.nvim_buf_get_changedtick ~buffer:t)
   in
   { With_changedtick.value; changedtick = changedtick_of_int changedtick }
 ;;
 
-let get_changedtick here client t =
+let get_changedtick ~(here : [%call_pos]) client t =
   let%map.Deferred.Or_error changedtick =
-    run here client (Nvim_internal.nvim_buf_get_changedtick ~buffer:t)
+    run ~here client (Nvim_internal.nvim_buf_get_changedtick ~buffer:t)
   in
   changedtick_of_int changedtick
 ;;
 
-let get_name here client t = Nvim_internal.nvim_buf_get_name ~buffer:t |> run here client
-
-let set_name here client t name =
-  Nvim_internal.nvim_buf_set_name ~buffer:t ~name |> run here client
+let get_name ~(here : [%call_pos]) client t =
+  Nvim_internal.nvim_buf_get_name ~buffer:t |> run ~here client
 ;;
 
-let get_lines here client t ~start ~end_ ~strict_indexing =
+let set_name ~(here : [%call_pos]) client t name =
+  Nvim_internal.nvim_buf_set_name ~buffer:t ~name |> run ~here client
+;;
+
+let get_lines ~(here : [%call_pos]) client t ~start ~end_ ~strict_indexing =
   Nvim_internal.nvim_buf_get_lines ~buffer:t ~start ~end_ ~strict_indexing
   |> map_witness ~f:(fun lines -> Ok (List.map lines ~f:String.Utf8.of_string_unchecked))
   |> run_and_get_changedtick here client t
 ;;
 
-let set_lines here client ?changedtick t ~start ~end_ ~strict_indexing replacement =
+let set_lines
+  ~(here : [%call_pos])
+  client
+  ?changedtick
+  t
+  ~start
+  ~end_
+  ~strict_indexing
+  replacement
+  =
   Nvim_internal.nvim_buf_set_lines ~buffer:t ~start ~end_ ~strict_indexing ~replacement
   |> run_with_changedtick_check here client ?changedtick t
 ;;
 
-let get_text here client t ~start_row ~start_col ~end_row ~end_col =
+let get_text ~(here : [%call_pos]) client t ~start_row ~start_col ~end_row ~end_col =
   (* [opts] is not used by this version of Neovim, but may be used in the future. If we
      expose it, we should do so in a typeful way rather than asking the user to build
      [Msgpack.t] values. *)
@@ -97,7 +108,7 @@ let get_text here client t ~start_row ~start_col ~end_row ~end_col =
 ;;
 
 let set_text
-  here
+  ~(here : [%call_pos])
   client
   ?changedtick
   t
@@ -117,39 +128,45 @@ let set_text
   |> run_with_changedtick_check here client ?changedtick t
 ;;
 
-let create here client ~listed ~scratch =
+let create ~(here : [%call_pos]) client ~listed ~scratch =
   Nvim_internal.nvim_create_buf ~listed ~scratch
   |> map_witness ~f:(fun t ->
     match (t :> int) with
     | 0 -> Or_error.error_string "nvim_create_buf failed (returned 0)"
     | _ -> Ok t)
-  |> run here client
+  |> run ~here client
 ;;
 
-let find_by_name_or_create here client name =
+let find_by_name_or_create ~(here : [%call_pos]) client name =
   Nvim_internal.nvim_call_function ~fn:"bufadd" ~args:[ String name ]
   |> map_witness ~f:of_msgpack
-  |> run here client
+  |> run ~here client
 ;;
 
-let nvim_buf_delete here client t ~only_unload ~even_if_modified =
+let nvim_buf_delete ~(here : [%call_pos]) client t ~only_unload ~even_if_modified =
   let opts =
     [ "force", Msgpack.Bool even_if_modified; "unload", Msgpack.Bool only_unload ]
     |> String.Map.of_alist_exn
   in
   (* This function's name is a bit misleading because it actually only ever does :bwipeout
      or :bunload depending on the passed options, but it never does :bdelete. *)
-  Nvim_internal.nvim_buf_delete ~buffer:t ~opts |> run here client
+  Nvim_internal.nvim_buf_delete ~buffer:t ~opts |> run ~here client
 ;;
 
 let unload = nvim_buf_delete ~only_unload:true
 let wipeout = nvim_buf_delete ~only_unload:false
-let loaded here client t = Nvim_internal.nvim_buf_is_loaded ~buffer:t |> run here client
-let exists here client t = Nvim_internal.nvim_buf_is_valid ~buffer:t |> run here client
 
-let get_buffer here client or_current =
+let loaded ~(here : [%call_pos]) client t =
+  Nvim_internal.nvim_buf_is_loaded ~buffer:t |> run ~here client
+;;
+
+let exists ~(here : [%call_pos]) client t =
+  Nvim_internal.nvim_buf_is_valid ~buffer:t |> run ~here client
+;;
+
+let get_buffer ~(here : [%call_pos]) client or_current =
   match (or_current : Or_current.t) with
-  | Current -> run here client Nvim_internal.nvim_get_current_buf
+  | Current -> run ~here client Nvim_internal.nvim_get_current_buf
   | Id id -> return (Ok id)
 ;;
 
@@ -161,8 +178,8 @@ let get_buffer here client or_current =
    If it is open, the call fails. If it's closed, we transition the state to
    [Subscribing] to again fail any new calls to [subscribe], and fill the ivar that
    enables the resubscription once we have finished detaching. *)
-let subscribe here client ?(send_buffer = true) t =
-  let%bind.Deferred.Or_error t = get_buffer here client t in
+let subscribe ~(here : [%call_pos]) client ?(send_buffer = true) t =
+  let%bind.Deferred.Or_error t = get_buffer ~here client t in
   let subscription_manager =
     (Type_equal.(conv Client.Private.eq) client).subscription_manager
   in
@@ -180,7 +197,7 @@ let subscribe here client ?(send_buffer = true) t =
      possibly not to be, [preview], proved invalid in tests. *)
   match%map
     Nvim_internal.nvim_buf_attach ~buffer:(Id t) ~send_buffer ~opts:String.Map.empty
-    |> run here client
+    |> run ~here client
   with
   | Ok false -> failed_to_attach ()
   | Error error -> failed_to_attach ~error ()
@@ -188,27 +205,27 @@ let subscribe here client ?(send_buffer = true) t =
     upon (Pipe.closed reader) (fun () ->
       don't_wait_for
         (Nvim_internal.nvim_buf_detach ~buffer:(Id t)
-         |> run [%here] client
+         |> run ~here:[%here] client
          |> Deferred.ignore_m));
     Ok reader
 ;;
 
-let get_var here client t name ~type_ =
+let get_var ~(here : [%call_pos]) client t name ~type_ =
   Nvim_internal.nvim_buf_get_var ~buffer:t ~name
   |> map_witness ~f:(Type.of_msgpack type_)
-  |> run here client
+  |> run ~here client
 ;;
 
-let set_var here client t name ~type_ ~value =
+let set_var ~(here : [%call_pos]) client t name ~type_ ~value =
   let value = Type.to_msgpack type_ value in
-  Nvim_internal.nvim_buf_set_var ~buffer:t ~name ~value |> run here client
+  Nvim_internal.nvim_buf_set_var ~buffer:t ~name ~value |> run ~here client
 ;;
 
-let delete_var here client t name =
-  Nvim_internal.nvim_buf_del_var ~buffer:t ~name |> run here client
+let delete_var ~(here : [%call_pos]) client t name =
+  Nvim_internal.nvim_buf_del_var ~buffer:t ~name |> run ~here client
 ;;
 
-let get_mark here client t ~sym =
+let get_mark ~(here : [%call_pos]) client t ~sym =
   Nvim_internal.nvim_buf_get_mark ~buffer:t ~name:(Char.to_string sym)
   |> map_witness ~f:(function
     | 0, 0 ->
@@ -218,7 +235,7 @@ let get_mark here client t ~sym =
   |> run_and_get_changedtick here client t
 ;;
 
-let set_mark here client ?changedtick t mark =
+let set_mark ~(here : [%call_pos]) client ?changedtick t mark =
   (* [opts] is not used by this version of Neovim, but may be used in the future. If we
      expose it, we should do so in a typeful way rather than asking the user to build
      [Msgpack.t] values. *)
@@ -236,28 +253,28 @@ let set_mark here client ?changedtick t mark =
   |> run_with_changedtick_check here client ?changedtick t
 ;;
 
-let delete_mark here client t sym =
+let delete_mark ~(here : [%call_pos]) client t sym =
   Nvim_internal.nvim_buf_del_mark ~buffer:t ~name:(Char.to_string sym)
   |> map_witness ~f:(function
     | true -> Ok ()
     | false ->
       Or_error.error_s
         [%message "Mark not set in buffer" ~buffer:(t : Or_current.t) (sym : char)])
-  |> run here client
+  |> run ~here client
 ;;
 
-let line_count here client t =
+let line_count ~(here : [%call_pos]) client t =
   Nvim_internal.nvim_buf_line_count ~buffer:t |> run_and_get_changedtick here client t
 ;;
 
-let get_byte_offset_of_line here client t ~line:index =
+let get_byte_offset_of_line ~(here : [%call_pos]) client t ~line:index =
   Nvim_internal.nvim_buf_get_offset ~buffer:t ~index
   |> run_and_get_changedtick here client t
 ;;
 
 module Untested = struct
   let add_highlight
-    here
+    ~(here : [%call_pos])
     client
     ?changedtick
     t
@@ -278,13 +295,13 @@ module Untested = struct
     |> Deferred.Or_error.ignore_m
   ;;
 
-  let clear_namespace here client t ~namespace ~line_start ~line_end =
+  let clear_namespace ~(here : [%call_pos]) client t ~namespace ~line_start ~line_end =
     Nvim_internal.nvim_buf_clear_namespace
       ~buffer:t
       ~ns_id:(Namespace.id namespace)
       ~line_start
       ~line_end
-    |> run here client
+    |> run ~here client
   ;;
 
   module Extmark = struct
@@ -306,7 +323,7 @@ module Untested = struct
 
   let set_extmark_internal
     ~map_witness_f
-    here
+    ~(here : [%call_pos])
     client
     ~buffer
     ~namespace
@@ -339,7 +356,7 @@ module Untested = struct
     ()
     =
     let open Deferred.Or_error.Let_syntax in
-    let%bind buffer = get_buffer here client buffer in
+    let%bind buffer = get_buffer ~here client buffer in
     let opts =
       let module M = Msgpack in
       (* [bind] is bind-like but passes from the option monad to the list monad. *)
@@ -428,10 +445,10 @@ module Untested = struct
     |> run_with_changedtick_check here client ?changedtick (Id buffer)
   ;;
 
-  let create_extmark here client ?changedtick buffer ~namespace =
+  let create_extmark ~(here : [%call_pos]) client ?changedtick buffer ~namespace =
     set_extmark_internal
       ~map_witness_f:(fun ~buffer id -> Ok { Extmark.id; namespace; buffer })
-      here
+      ~here
       client
       ~buffer
       ~namespace
@@ -439,10 +456,15 @@ module Untested = struct
       ?changedtick
   ;;
 
-  let update_extmark here client ?changedtick { Extmark.id; namespace; buffer } =
+  let update_extmark
+    ~(here : [%call_pos])
+    client
+    ?changedtick
+    { Extmark.id; namespace; buffer }
+    =
     set_extmark_internal
       ~map_witness_f:(fun ~buffer:(_ : t) (_ : int) -> Ok ())
-      here
+      ~here
       client
       ~buffer:(Id buffer)
       ~namespace
@@ -450,7 +472,7 @@ module Untested = struct
       ?changedtick
   ;;
 
-  let delete_extmark here client extmark =
+  let delete_extmark ~(here : [%call_pos]) client extmark =
     Nvim_internal.nvim_buf_del_extmark
       ~buffer:(Id extmark.Extmark.buffer)
       ~ns_id:(Namespace.id extmark.namespace)
@@ -458,10 +480,10 @@ module Untested = struct
     |> map_witness ~f:(function
       | true -> Ok ()
       | false -> Or_error.error_s [%message "Invalid extmark" ~_:(extmark : Extmark.t)])
-    |> run here client
+    |> run ~here client
   ;;
 
-  let get_extmark here client { Extmark.id; namespace; buffer } =
+  let get_extmark ~(here : [%call_pos]) client { Extmark.id; namespace; buffer } =
     let opts = [ "details", Msgpack.Bool false ] |> String.Map.of_alist_exn in
     Nvim_internal.nvim_buf_get_extmark_by_id
       ~buffer:(Id buffer)
@@ -475,7 +497,12 @@ module Untested = struct
     |> run_and_get_changedtick here client (Id buffer)
   ;;
 
-  let get_extmark_with_details here client ?hl_groups { Extmark.id; namespace; buffer } =
+  let get_extmark_with_details
+    ~(here : [%call_pos])
+    client
+    ?hl_groups
+    { Extmark.id; namespace; buffer }
+    =
     let opts =
       let maybe name var conv = Option.map var ~f:(fun var -> name, conv var) in
       [ Some ("details", Msgpack.Bool true)
@@ -508,7 +535,7 @@ module Untested = struct
   let all_extmarks_internal
     ~map_witness_f
     ~details
-    here
+    ~(here : [%call_pos])
     client
     ?start_inclusive
     ?end_inclusive
@@ -518,7 +545,7 @@ module Untested = struct
     t
     ~namespace
     =
-    let%bind.Deferred.Or_error buffer = get_buffer here client t in
+    let%bind.Deferred.Or_error buffer = get_buffer ~here client t in
     let opts =
       let maybe name var conv = Option.map var ~f:(fun var -> name, conv var) in
       [ Some ("details", Msgpack.Bool details)
@@ -559,7 +586,7 @@ module Untested = struct
     |> run_and_get_changedtick here client t
   ;;
 
-  let all_extmarks here client =
+  let all_extmarks ~(here : [%call_pos]) client =
     all_extmarks_internal
       ~map_witness_f:(fun ~buffer ~namespace extmarks ->
         extmarks
@@ -572,11 +599,11 @@ module Untested = struct
         |> Or_error.combine_errors)
       ~details:false
       ?hl_groups:None
-      here
+      ~here
       client
   ;;
 
-  let all_extmarks_with_details here client =
+  let all_extmarks_with_details ~(here : [%call_pos]) client =
     all_extmarks_internal
       ~map_witness_f:(fun ~buffer ~namespace extmarks ->
         extmarks
@@ -589,7 +616,7 @@ module Untested = struct
           | _ -> Or_error.error_string "malformed result from [nvim_buf_get_extmarks]")
         |> Or_error.combine_errors)
       ~details:true
-      here
+      ~here
       client
   ;;
 end
@@ -1044,31 +1071,31 @@ module Option = struct
 
   (*$*)
 
-  let set_local here client buffer t value =
+  let set_local ~(here : [%call_pos]) client buffer t value =
     Nvim_internal.nvim_set_option_value
       ~name:(to_string t)
       ~value:(to_msgpack t value)
       ~opts:(String.Map.singleton "buf" (Or_current.to_msgpack buffer))
-    |> run here client
+    |> run ~here client
   ;;
 
-  let get_global here client t =
+  let get_global ~(here : [%call_pos]) client t =
     Nvim_internal.nvim_get_option_value
       ~name:(to_string t)
       ~opts:(String.Map.singleton "scope" (Msgpack.String "global"))
     |> map_witness ~f:(of_msgpack t)
-    |> run here client
+    |> run ~here client
   ;;
 
-  let set_global here client t value =
+  let set_global ~(here : [%call_pos]) client t value =
     Nvim_internal.nvim_set_option_value
       ~name:(to_string t)
       ~value:(to_msgpack t value)
       ~opts:(String.Map.singleton "scope" (Msgpack.String "global"))
-    |> run here client
+    |> run ~here client
   ;;
 
-  let get (type a g) here client buffer (t : (a, g) t) =
+  let get (type a g) ~(here : [%call_pos]) client buffer (t : (a, g) t) =
     let bufnr = Or_current.to_msgpack buffer in
     match kind t with
     | None | Copied ->
@@ -1076,7 +1103,7 @@ module Option = struct
         ~name:(to_string t)
         ~opts:(String.Map.singleton "buf" bufnr)
       |> map_witness ~f:(of_msgpack t)
-      |> run here client
+      |> run ~here client
     | Global ->
       (* Unfortunately, [nvim_option_get_value] does not provide a way to reliably get the
          effective option value for an arbitrary buffer. Even if we first called it with
@@ -1090,7 +1117,7 @@ module Option = struct
       in
       Nvim_internal.nvim_exec_lua ~code ~args:[ bufnr; String (to_string t) ]
       |> map_witness ~f:(of_msgpack t)
-      |> run here client
+      |> run ~here client
   ;;
 
   let set = set_local
@@ -1099,20 +1126,20 @@ module Option = struct
   let set_for_new_buffers = set_global
   let get_for_new_buffers = get_global
 
-  let get_dynamic_info (type a g) here client (t : (a, g) t) =
+  let get_dynamic_info (type a g) ~(here : [%call_pos]) client (t : (a, g) t) =
     Nvim_internal.nvim_get_option_info ~name:(to_string t)
     |> map_witness
          ~f:(Dynamic_option_info.of_msgpack_map ~default_of_msgpack:(of_msgpack t))
-    |> run here client
+    |> run ~here client
   ;;
 end
 
-let open_term here client t =
+let open_term ~(here : [%call_pos]) client t =
   let open Deferred.Or_error.Let_syntax in
   (* Calling [nvim_open_term] in a modified buffer loses the modifications, so we first
      ensure that the buffer is not modified. *)
-  let%bind buffer = get_buffer here client t in
-  match%bind Option.get here client (Id buffer) Modified with
+  let%bind buffer = get_buffer ~here client t in
+  match%bind Option.get ~here client (Id buffer) Modified with
   | true -> Deferred.Or_error.error_string "Cannot open terminal in modified buffer."
   | false ->
     (* As of Neovim 0.9.1, [opts] is Lua-specific. *)
@@ -1122,5 +1149,5 @@ let open_term here client t =
         Or_error.error_s
           [%message "nvim_open_term failed (returned 0)" ~buffer:(t : Or_current.t)]
       | channel -> Ok channel)
-    |> run here client
+    |> run ~here client
 ;;

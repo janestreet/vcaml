@@ -117,7 +117,7 @@ module Async = struct
   end
 end
 
-let register_request_async_internal here client ~name ~type_ ~f ~wrap_f =
+let register_request_async_internal ~(here : [%call_pos]) client ~name ~type_ ~f ~wrap_f =
   let f client params =
     match Async.valid_number_of_args type_ (List.length params) with
     | false ->
@@ -135,15 +135,15 @@ let register_request_async_internal here client ~name ~type_ ~f ~wrap_f =
   in
   match (client : _ Client.Maybe_connected.t) with
   | Not_connected client ->
-    Client.Private.Not_connected.register_request_async here client ~name ~f
+    Client.Private.Not_connected.register_request_async ~here client ~name ~f
   | Connected client ->
     let client = Type_equal.conv Client.Private.eq client in
-    client.register_request_async here ~name ~f
+    client.register_request_async ~here name ~f
 ;;
 
 let register_request_blocking_internal
   ?(on_keyboard_interrupt = ignore)
-  here
+  ~(here : [%call_pos])
   client
   ~name
   ~type_
@@ -166,19 +166,19 @@ let register_request_blocking_internal
   match (client : _ Client.Maybe_connected.t) with
   | Not_connected client ->
     Client.Private.Not_connected.register_request_blocking
-      here
+      ~here
       client
       ~name
       ~f
       ~on_keyboard_interrupt
   | Connected client ->
     let client = Type_equal.conv Client.Private.eq client in
-    client.register_request_blocking here ~name ~f ~on_keyboard_interrupt
+    client.register_request_blocking ~here name ~f ~on_keyboard_interrupt
 ;;
 
-let register_request_async here client ~name ~type_ ~f =
+let register_request_async ~(here : [%call_pos]) client ~name ~type_ ~f =
   register_request_async_internal
-    here
+    ~here
     client
     ~name
     ~type_
@@ -186,10 +186,17 @@ let register_request_async here client ~name ~type_ ~f =
     ~wrap_f:(fun f -> f ())
 ;;
 
-let register_request_blocking ?on_keyboard_interrupt here client ~name ~type_ ~f =
+let register_request_blocking
+  ?on_keyboard_interrupt
+  ~(here : [%call_pos])
+  client
+  ~name
+  ~type_
+  ~f
+  =
   register_request_blocking_internal
     ?on_keyboard_interrupt
-    here
+    ~here
     client
     ~name
     ~type_
@@ -197,12 +204,12 @@ let register_request_blocking ?on_keyboard_interrupt here client ~name ~type_ ~f
     ~wrap_f:(fun f -> f ())
 ;;
 
-let subscribe_to_broadcast here client ~name =
-  Nvim_internal.nvim_subscribe ~event:name |> run here client
+let subscribe_to_broadcast ~(here : [%call_pos]) client ~name =
+  Nvim_internal.nvim_subscribe ~event:name |> run ~here client
 ;;
 
-let unsubscribe_from_broadcast here client ~name =
-  Nvim_internal.nvim_unsubscribe ~event:name |> run here client
+let unsubscribe_from_broadcast ~(here : [%call_pos]) client ~name =
+  Nvim_internal.nvim_unsubscribe ~event:name |> run ~here client
 ;;
 
 module Callback = struct
@@ -210,8 +217,8 @@ module Callback = struct
     { on_keyboard_interrupt : (unit -> unit) option
     ; f :
         run_in_background:
-          (Source_code_position.t
-           -> f:([ `asynchronous ] Client.t -> unit Deferred.Or_error.t)
+          (here:[%call_pos]
+           -> ([ `asynchronous ] Client.t -> unit Deferred.Or_error.t)
            -> unit)
         -> client:[ `blocking ] Client.t
         -> 'a Deferred.Or_error.t
@@ -225,13 +232,18 @@ module Callback = struct
 end
 
 module Private = struct
-  let register_callback here client ~return_type { Callback.on_keyboard_interrupt; f } =
+  let register_callback
+    ~(here : [%call_pos])
+    client
+    ~return_type
+    { Callback.on_keyboard_interrupt; f }
+    =
     let name =
       (Type_equal.conv Client.Private.eq client).name_anonymous_blocking_request ()
     in
     register_request_blocking
       ?on_keyboard_interrupt
-      here
+      ~here
       (Connected client)
       ~name
       ~type_:(Nullary return_type)

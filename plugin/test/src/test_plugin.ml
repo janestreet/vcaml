@@ -19,7 +19,7 @@ let%expect_test "Oneshot" =
        echo "Current buffer: ".Rpcrequest('bufnr') |}
   in
   let%map output =
-    with_client (fun client -> Nvim.exec_viml_and_capture_output [%here] client code)
+    with_client (fun client -> Nvim.exec_viml_and_capture_output client code)
   in
   print_endline output;
   [%expect
@@ -29,10 +29,9 @@ let%expect_test "Oneshot" =
     |}]
 ;;
 
-let start_plugin here ~client ~subcommand =
+let start_plugin ~(here : [%call_pos]) ~client ~subcommand () =
   let%bind () =
     Nvim.exec_lua
-      [%here]
       client
       {| if not OnStartup then
            function OnStartup(channel)
@@ -43,7 +42,7 @@ let start_plugin here ~client ~subcommand =
   in
   match%map
     Nvim.call_function
-      here
+      ~here
       client
       ~name:(`Viml "jobstart")
       ~type_:Nvim.Func.(Array String @-> return Int)
@@ -59,8 +58,8 @@ let%expect_test "Persistent plugin shows errors when they occur during [on_start
   let test ~subcommand =
     let%map screen =
       with_ui_client (fun client ui ->
-        let%bind () = start_plugin [%here] ~client ~subcommand in
-        wait_until_text [%here] ui ~f:(String.is_substring ~substring:"Failure"))
+        let%bind () = start_plugin ~client ~subcommand () in
+        wait_until_text ui ~f:(String.is_substring ~substring:"Failure"))
     in
     print_endline screen
   in
@@ -150,9 +149,9 @@ let%expect_test "Persistent plugin shows errors when they occur during VimL [not
     in
     let%map screen =
       with_ui_client (fun client ui ->
-        let%bind () = Nvim.exec_viml [%here] client vimscript >>| ok_exn in
-        let%bind () = start_plugin [%here] ~client ~subcommand:"notify-fn-viml" in
-        wait_until_text [%here] ui ~f:(String.is_substring ~substring:"Failure"))
+        let%bind () = Nvim.exec_viml client vimscript >>| ok_exn in
+        let%bind () = start_plugin ~client ~subcommand:"notify-fn-viml" () in
+        wait_until_text ui ~f:(String.is_substring ~substring:"Failure"))
     in
     print_endline screen
   in
@@ -199,13 +198,13 @@ let%expect_test "Persistent plugin shows errors when they occur during Lua [noti
     let lua = {| function OnStartup() vim.cmd [[ echoerr "Failure" ]] end |} in
     let%map screen =
       with_ui_client (fun client ui ->
-        let%bind () = Nvim.exec_lua [%here] client lua >>| ok_exn in
+        let%bind () = Nvim.exec_lua client lua >>| ok_exn in
         let%bind () =
           (* The [OnStartup] lua function is called by default since it's needed in other
              tests too. *)
-          start_plugin [%here] ~client ~subcommand:"default"
+          start_plugin ~client ~subcommand:"default" ()
         in
-        wait_until_text [%here] ui ~f:(String.is_substring ~substring:"Failure"))
+        wait_until_text ui ~f:(String.is_substring ~substring:"Failure"))
     in
     print_endline screen
   in
@@ -256,9 +255,9 @@ let%expect_test "Persistent plugin shows errors when they occur during async RPC
     in
     let%map screen =
       with_ui_client (fun client ui ->
-        let%bind () = Nvim.exec_lua [%here] client lua >>| ok_exn in
-        let%bind () = start_plugin [%here] ~client ~subcommand in
-        wait_until_text [%here] ui ~f:(String.is_substring ~substring:"Failure"))
+        let%bind () = Nvim.exec_lua client lua >>| ok_exn in
+        let%bind () = start_plugin ~client ~subcommand () in
+        wait_until_text ui ~f:(String.is_substring ~substring:"Failure"))
     in
     print_endline screen
   in
@@ -382,9 +381,9 @@ let%expect_test "Persistent plugin shows errors when they occur during blocking 
     in
     let%map screen =
       with_ui_client (fun client ui ->
-        let%bind () = Nvim.exec_lua [%here] client lua >>| ok_exn in
-        let%bind () = start_plugin [%here] ~client ~subcommand in
-        wait_until_text [%here] ui ~f:(String.is_substring ~substring:"Failure"))
+        let%bind () = Nvim.exec_lua client lua >>| ok_exn in
+        let%bind () = start_plugin ~client ~subcommand () in
+        wait_until_text ui ~f:(String.is_substring ~substring:"Failure"))
     in
     print_endline screen
   in

@@ -7,8 +7,8 @@ let%expect_test "get_height, set_height" =
   let%bind () =
     with_client (fun client ->
       let open Deferred.Or_error.Let_syntax in
-      let%bind () = Window.set_height [%here] client Current ~height:10 in
-      let%bind height = Window.get_height [%here] client Current in
+      let%bind () = Window.set_height client Current ~height:10 in
+      let%bind height = Window.get_height client Current in
       print_s [%message (height : int)];
       return ())
   in
@@ -20,9 +20,9 @@ let%expect_test "get_width, set_width" =
   let%bind () =
     with_client (fun client ->
       let open Deferred.Or_error.Let_syntax in
-      let%bind () = Command.exec [%here] client "vsplit" in
-      let%bind () = Window.set_width [%here] client Current ~width:10 in
-      let%bind width = Window.get_width [%here] client Current in
+      let%bind () = Command.exec client "vsplit" in
+      let%bind () = Window.set_width client Current ~width:10 in
+      let%bind width = Window.get_width client Current in
       print_s [%message (width : int)];
       return ())
   in
@@ -34,11 +34,11 @@ let%expect_test "get_cursor, set_cursor" =
   let%bind () =
     with_client (fun client ->
       let open Deferred.Or_error.Let_syntax in
-      let%bind () = Nvim.feedkeys [%here] client (`Raw "ithisisatest") ~mode:"n" in
-      let%bind { row; col } = Window.get_cursor [%here] client Current in
+      let%bind () = Nvim.feedkeys client (`Raw "ithisisatest") ~mode:"n" in
+      let%bind { row; col } = Window.get_cursor client Current in
       print_s [%message (row : int) (col : int)];
-      let%bind () = Window.set_cursor [%here] client Current { row = 1; col = 5 } in
-      let%bind position = Window.get_cursor [%here] client Current in
+      let%bind () = Window.set_cursor client Current { row = 1; col = 5 } in
+      let%bind position = Window.get_cursor client Current in
       print_s [%sexp (position : Position.One_indexed_row.t)];
       return ())
   in
@@ -54,10 +54,10 @@ let%expect_test "get_buf, set_buf" =
   let%bind () =
     with_client (fun client ->
       let open Deferred.Or_error.Let_syntax in
-      let%bind buffer = Buffer.create [%here] client ~listed:false ~scratch:true in
+      let%bind buffer = Buffer.create client ~listed:false ~scratch:true in
       print_s [%sexp (buffer : Buffer.t)];
-      let%bind () = Window.set_buf [%here] client Current ~buffer in
-      let%bind buffer = Window.get_buf [%here] client Current in
+      let%bind () = Window.set_buf client Current ~buffer in
+      let%bind buffer = Window.get_buf client Current in
       print_s [%sexp (buffer : Buffer.t)];
       return ())
   in
@@ -70,19 +70,19 @@ let%expect_test "get_buf, set_buf" =
 ;;
 
 let%expect_test "get_var, set_var, delete_var" =
-  Backtrace.elide := true;
+  Dynamic.set_root Backtrace.elide true;
   let%bind () =
     with_client (fun client ->
       let open Deferred.Or_error.Let_syntax in
-      let%bind () = Window.set_var [%here] client Current "foo" ~type_:Bool ~value:true in
-      let%bind.Deferred value = Window.get_var [%here] client Current "foo" ~type_:Bool in
+      let%bind () = Window.set_var client Current "foo" ~type_:Bool ~value:true in
+      let%bind.Deferred value = Window.get_var client Current "foo" ~type_:Bool in
       print_s [%sexp (value : bool Or_error.t)];
-      let%bind () = Window.delete_var [%here] client Current "foo" in
-      let%bind.Deferred value = Window.get_var [%here] client Current "foo" ~type_:Bool in
+      let%bind () = Window.delete_var client Current "foo" in
+      let%bind.Deferred value = Window.get_var client Current "foo" ~type_:Bool in
       print_s [%sexp (value : bool Or_error.t)];
       return ())
   in
-  Backtrace.elide := false;
+  Dynamic.set_root Backtrace.elide false;
   [%expect
     {|
     (Ok true)
@@ -96,38 +96,38 @@ let%expect_test "get_var, set_var, delete_var" =
 let%expect_test "API for window-local options" =
   with_client (fun client ->
     let open Deferred.Or_error.Let_syntax in
-    let%bind buffer = Nvim.get_current_buf [%here] client in
+    let%bind buffer = Nvim.get_current_buf client in
     let print_spell () =
       let%bind current_buffer =
-        Window.Option.get_for_current_buffer_in_window [%here] client Current Spell
+        Window.Option.get_for_current_buffer_in_window client Current Spell
       in
       let%map new_buffers =
-        Window.Option.get_for_new_buffers_opened_in_window [%here] client Current Spell
+        Window.Option.get_for_new_buffers_opened_in_window client Current Spell
       in
       print_s [%message (current_buffer : bool) (new_buffers : bool)]
     in
     let fresh_buffer () =
       (* By marking the buffer modified we ensure [enew] creates a fresh one. *)
-      let%bind () = Buffer.Option.set [%here] client Current Modified true in
-      Command.exec [%here] client "enew"
+      let%bind () = Buffer.Option.set client Current Modified true in
+      Command.exec client "enew"
     in
     let%bind () = print_spell () in
     [%expect {| ((current_buffer false) (new_buffers false)) |}];
     let%bind () = fresh_buffer () in
     let%bind () =
-      Window.Option.set_for_current_buffer_in_window [%here] client Current Spell true
+      Window.Option.set_for_current_buffer_in_window client Current Spell true
     in
     let%bind () = print_spell () in
     [%expect {| ((current_buffer true) (new_buffers false)) |}];
     let%bind () =
-      Window.Option.set_for_new_buffers_opened_in_window [%here] client Current Spell true
+      Window.Option.set_for_new_buffers_opened_in_window client Current Spell true
     in
     let%bind () = print_spell () in
     [%expect {| ((current_buffer true) (new_buffers true)) |}];
     let%bind () = fresh_buffer () in
     let%bind () = print_spell () in
     [%expect {| ((current_buffer true) (new_buffers true)) |}];
-    let%bind () = Window.set_buf [%here] client Current ~buffer in
+    let%bind () = Window.set_buf client Current ~buffer in
     let%bind () = print_spell () in
     [%expect {| ((current_buffer false) (new_buffers true)) |}];
     return ())
@@ -141,23 +141,23 @@ let%expect_test "API for window-local options" =
 let%expect_test "API for special window-local options" =
   with_client (fun client ->
     let open Deferred.Or_error.Let_syntax in
-    let%bind buffer = Nvim.get_current_buf [%here] client in
+    let%bind buffer = Nvim.get_current_buf client in
     let print_winfixheight () =
-      let%map winfixheight = Window.Option.get [%here] client Current Winfixheight in
+      let%map winfixheight = Window.Option.get client Current Winfixheight in
       printf "%b\n" winfixheight
     in
     let fresh_buffer () =
       (* By marking the buffer modified we ensure [enew] creates a fresh one. *)
-      let%bind () = Buffer.Option.set [%here] client Current Modified true in
-      Command.exec [%here] client "enew"
+      let%bind () = Buffer.Option.set client Current Modified true in
+      Command.exec client "enew"
     in
     let%bind () = print_winfixheight () in
     [%expect {| false |}];
     let%bind () = fresh_buffer () in
-    let%bind () = Window.Option.set [%here] client Current Winfixheight true in
+    let%bind () = Window.Option.set client Current Winfixheight true in
     let%bind () = print_winfixheight () in
     [%expect {| true |}];
-    let%bind () = Window.set_buf [%here] client Current ~buffer in
+    let%bind () = Window.set_buf client Current ~buffer in
     let%bind () = print_winfixheight () in
     [%expect {| true |}];
     return ())
@@ -166,19 +166,19 @@ let%expect_test "API for special window-local options" =
 let%expect_test "API for global-local window options" =
   with_client (fun client ->
     let open Deferred.Or_error.Let_syntax in
-    let%bind buffer = Nvim.get_current_buf [%here] client in
+    let%bind buffer = Nvim.get_current_buf client in
     let print_listchars () =
       let%bind current_listchars =
-        Window.Option.get_for_current_buffer_in_window [%here] client Current Listchars
+        Window.Option.get_for_current_buffer_in_window client Current Listchars
       in
-      let%map default_listchars = Window.Option.get_default [%here] client Listchars in
+      let%map default_listchars = Window.Option.get_default client Listchars in
       print_s
         [%message (current_listchars : string list) (default_listchars : string list)]
     in
     let fresh_buffer () =
       (* By marking the buffer modified we ensure [enew] creates a fresh one. *)
-      let%bind () = Buffer.Option.set [%here] client Current Modified true in
-      Command.exec [%here] client "enew"
+      let%bind () = Buffer.Option.set client Current Modified true in
+      Command.exec client "enew"
     in
     let%bind () = print_listchars () in
     [%expect
@@ -188,20 +188,15 @@ let%expect_test "API for global-local window options" =
       |}];
     let%bind () = fresh_buffer () in
     let%bind () =
-      Window.Option.set_for_current_buffer_in_window
-        [%here]
-        client
-        Current
-        Listchars
-        [ "tab:??" ]
+      Window.Option.set_for_current_buffer_in_window client Current Listchars [ "tab:??" ]
     in
     let%bind () = print_listchars () in
     [%expect
       {| ((current_listchars (tab:??)) (default_listchars ("tab:> " trail:- nbsp:+))) |}];
-    let%bind () = Window.Option.set_default [%here] client Listchars [ "tab:!!" ] in
+    let%bind () = Window.Option.set_default client Listchars [ "tab:!!" ] in
     let%bind () = print_listchars () in
     [%expect {| ((current_listchars (tab:??)) (default_listchars (tab:!!))) |}];
-    let%bind () = Window.set_buf [%here] client Current ~buffer in
+    let%bind () = Window.set_buf client Current ~buffer in
     let%bind () = print_listchars () in
     [%expect {| ((current_listchars (tab:!!)) (default_listchars (tab:!!))) |}];
     return ())
@@ -210,15 +205,15 @@ let%expect_test "API for global-local window options" =
 let%expect_test "exists, close" =
   with_client (fun client ->
     let open Deferred.Or_error.Let_syntax in
-    let%bind () = Command.exec [%here] client "new" in
-    let%bind window = Nvim.get_current_win [%here] client in
-    let%bind valid = Window.exists [%here] client window in
+    let%bind () = Command.exec client "new" in
+    let%bind window = Nvim.get_current_win client in
+    let%bind valid = Window.exists client window in
     print_s [%sexp (valid : bool)];
     [%expect {| true |}];
     let%bind () =
-      Window.close [%here] client Current ~when_this_is_the_buffer's_last_window:Hide
+      Window.close client Current ~when_this_is_the_buffer's_last_window:Hide
     in
-    let%bind valid = Window.exists [%here] client window in
+    let%bind valid = Window.exists client window in
     print_s [%sexp (valid : bool)];
     [%expect {| false |}];
     return ())
@@ -226,22 +221,20 @@ let%expect_test "exists, close" =
 
 let%expect_test "close semantics" =
   with_client (fun client ->
-    Backtrace.elide := true;
-    let%bind buffer =
-      Buffer.create [%here] client ~listed:true ~scratch:false >>| ok_exn
-    in
-    let%bind () = Buffer.Option.set [%here] client (Id buffer) Modified true >>| ok_exn in
+    Dynamic.set_root Backtrace.elide true;
+    let%bind buffer = Buffer.create client ~listed:true ~scratch:false >>| ok_exn in
+    let%bind () = Buffer.Option.set client (Id buffer) Modified true >>| ok_exn in
     let test ~hidden when_this_is_the_buffer's_last_window =
       let%map result =
         let open Deferred.Or_error.Let_syntax in
-        let%bind () = Nvim.Option.set [%here] client Hidden hidden in
+        let%bind () = Nvim.Option.set client Hidden hidden in
         let%bind () =
-          Command.exec [%here] client "sbuffer" ~range_or_count:(Count (buffer :> int))
+          Command.exec client "sbuffer" ~range_or_count:(Count (buffer :> int))
         in
         let%bind () =
-          Window.close [%here] client Current ~when_this_is_the_buffer's_last_window
+          Window.close client Current ~when_this_is_the_buffer's_last_window
         in
-        let%bind bufloaded = Buffer.loaded [%here] client buffer in
+        let%bind bufloaded = Buffer.loaded client buffer in
         return [%message (bufloaded : bool)]
       in
       print_s [%sexp (result : Sexp.t Or_error.t)]
@@ -269,16 +262,16 @@ let%expect_test "close semantics" =
          (error_type Exception))
         (("Called from" lib/vcaml/test/bindings/test_window.ml:LINE:COL))))
       |}];
-    Backtrace.elide := false;
+    Dynamic.set_root Backtrace.elide false;
     Deferred.Or_error.return ())
 ;;
 
 let%expect_test "get_number, get_tab, get_position" =
   with_client (fun client ->
     let open Deferred.Or_error.Let_syntax in
-    let%bind number = Window.get_number [%here] client Current in
-    let%bind tab = Window.get_tab [%here] client Current in
-    let%bind position = Window.get_position [%here] client Current in
+    let%bind number = Window.get_number client Current in
+    let%bind tab = Window.get_tab client Current in
+    let%bind position = Window.get_position client Current in
     print_s [%message (number : int) (tab : Tabpage.t) (position : Position.t)];
     [%expect {| ((number 1) (tab 1) (position ((row 0) (col 0)))) |}];
     return ())
@@ -287,13 +280,12 @@ let%expect_test "get_number, get_tab, get_position" =
 let%expect_test "open_floating, get_config, set_config" =
   with_ui_client (fun client ui ->
     let open Deferred.Or_error.Let_syntax in
-    let%bind config = Window.get_config [%here] client Current in
+    let%bind config = Window.get_config client Current in
     print_s [%sexp (config : Window.Config.t option)];
     [%expect {| () |}];
-    let%bind buffer = Buffer.create [%here] client ~listed:false ~scratch:true in
+    let%bind buffer = Buffer.create client ~listed:false ~scratch:true in
     let%bind () =
       Buffer.set_lines
-        [%here]
         client
         (Id buffer)
         ~start:0
@@ -303,7 +295,6 @@ let%expect_test "open_floating, get_config, set_config" =
     in
     let%bind window =
       Window.open_floating
-        [%here]
         client
         ()
         ~buffer:(Id buffer)
@@ -320,13 +311,13 @@ let%expect_test "open_floating, get_config, set_config" =
           }
         ~minimal_style:true
     in
-    let print_screen_and_config here =
+    let print_screen_and_config ~(here : [%call_pos]) () =
       let%bind screen = get_screen_contents ui in
       print_endline screen;
-      let%map config = Window.get_config here client (Id window) in
+      let%map config = Window.get_config ~here client (Id window) in
       print_s [%sexp (config : Window.Config.t option)]
     in
-    let%bind () = print_screen_and_config [%here] in
+    let%bind () = print_screen_and_config () in
     [%expect
       {|
       ╭────────────────────────────────────────────────────────────────────────────────╮
@@ -379,7 +370,6 @@ let%expect_test "open_floating, get_config, set_config" =
       |}];
     let%bind () =
       Window.set_config
-        [%here]
         client
         (Id window)
         (Floating
@@ -401,7 +391,7 @@ let%expect_test "open_floating, get_config, set_config" =
            ; title = None
            })
     in
-    let%bind () = print_screen_and_config [%here] in
+    let%bind () = print_screen_and_config () in
     [%expect
       {|
       ╭────────────────────────────────────────────────────────────────────────────────╮
@@ -451,7 +441,6 @@ let%expect_test "open_floating, get_config, set_config" =
       |}];
     let%bind () =
       Buffer.set_lines
-        [%here]
         client
         Current
         ~start:0
@@ -459,10 +448,9 @@ let%expect_test "open_floating, get_config, set_config" =
         ~strict_indexing:true
         (List.init 30 ~f:(fun nr -> [%string "This is line %{nr#Int}"]))
     in
-    let%bind () = Window.set_cursor [%here] client Current { row = 21; col = 14 } in
+    let%bind () = Window.set_cursor client Current { row = 21; col = 14 } in
     let%bind () =
       Buffer.set_lines
-        [%here]
         client
         (Id buffer)
         ~start:0
@@ -472,7 +460,6 @@ let%expect_test "open_floating, get_config, set_config" =
     in
     let%bind () =
       Window.set_config
-        [%here]
         client
         (Id window)
         (Floating
@@ -487,7 +474,7 @@ let%expect_test "open_floating, get_config, set_config" =
            ; title = None
            })
     in
-    let%bind () = print_screen_and_config [%here] in
+    let%bind () = print_screen_and_config () in
     [%expect
       {|
       ╭────────────────────────────────────────────────────────────────────────────────╮
@@ -530,7 +517,6 @@ let%expect_test "open_floating, get_config, set_config" =
       |}];
     let%bind () =
       Buffer.set_lines
-        [%here]
         client
         Current
         ~start:25
@@ -540,7 +526,6 @@ let%expect_test "open_floating, get_config, set_config" =
     in
     let%bind () =
       Buffer.set_lines
-        [%here]
         client
         (Id buffer)
         ~start:0
@@ -550,7 +535,6 @@ let%expect_test "open_floating, get_config, set_config" =
     in
     let%bind () =
       Window.set_config
-        [%here]
         client
         (Id window)
         (Floating
@@ -567,7 +551,7 @@ let%expect_test "open_floating, get_config, set_config" =
                Some { text = [ { text = "Diagnostic"; hl_group = None } ]; pos = Center }
            })
     in
-    let%bind () = print_screen_and_config [%here] in
+    let%bind () = print_screen_and_config () in
     [%expect
       {|
       ╭────────────────────────────────────────────────────────────────────────────────╮
@@ -628,7 +612,6 @@ let%expect_test "open_external" =
     let open Deferred.Or_error.Let_syntax in
     let%bind (_ : Ui.Event.t Pipe.Reader.t) =
       Ui.attach
-        [%here]
         client
         ~width:80
         ~height:30
@@ -636,10 +619,9 @@ let%expect_test "open_external" =
         ~only_enable_options_supported_by_other_attached_uis:true
     in
     let%bind () = Clock_ns.after Time_ns.Span.second |> Deferred.ok in
-    let%bind buffer = Buffer.create [%here] client ~listed:false ~scratch:true in
+    let%bind buffer = Buffer.create client ~listed:false ~scratch:true in
     let%bind window =
       Window.open_external
-        [%here]
         client
         ()
         ~buffer:(Id buffer)
@@ -647,11 +629,11 @@ let%expect_test "open_external" =
         ~config:{ width = 20; height = 2; focusable = false; border = None; title = None }
         ~minimal_style:true
     in
-    let print_config here =
-      let%map config = Window.get_config here client (Id window) in
+    let print_config ~(here : [%call_pos]) () =
+      let%map config = Window.get_config ~here client (Id window) in
       print_s [%sexp (config : Window.Config.t option)]
     in
-    let%bind () = print_config [%here] in
+    let%bind () = print_config () in
     [%expect
       {| ((External ((width 20) (height 2) (focusable false) (border ()) (title ())))) |}];
     return ())
@@ -660,11 +642,10 @@ let%expect_test "open_external" =
 let%expect_test "eval_statusline" =
   with_client (fun client ->
     let open Deferred.Or_error.Let_syntax in
-    let%bind () = Command.exec [%here] client "file" ~args:[ "foo.txt" ] in
+    let%bind () = Command.exec client "file" ~args:[ "foo.txt" ] in
     let test ~include_highlights =
       let%map statusline =
         Window.Fast.eval_statusline
-          [%here]
           client
           Current
           ~max_width:25
@@ -690,11 +671,10 @@ let%expect_test "eval_statusline" =
 let%expect_test "eval_winbar" =
   with_client (fun client ->
     let open Deferred.Or_error.Let_syntax in
-    let%bind () = Command.exec [%here] client "file" ~args:[ "foo.txt" ] in
+    let%bind () = Command.exec client "file" ~args:[ "foo.txt" ] in
     let test ~include_highlights =
       let%map winbar =
         Window.Fast.eval_winbar
-          [%here]
           client
           Current
           ~max_width:25
@@ -721,12 +701,11 @@ let%expect_test "eval_statuscolumn" =
   with_client (fun client ->
     let open Deferred.Or_error.Let_syntax in
     let%bind () =
-      Window.Option.set_for_current_buffer_in_window [%here] client Current Number true
+      Window.Option.set_for_current_buffer_in_window client Current Number true
     in
     let test ~include_highlights =
       let%map statuscolumn =
         Window.Fast.eval_statuscolumn
-          [%here]
           client
           Current
           ~max_width:5

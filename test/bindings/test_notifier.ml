@@ -5,7 +5,7 @@ open Vcaml_test_helpers
 module Notifier = Vcaml.Expert.Notifier
 
 let get_current_channel ~client =
-  let%map.Deferred.Or_error channels = Nvim.channels [%here] client in
+  let%map.Deferred.Or_error channels = Nvim.channels client in
   List.hd_exn channels
 ;;
 
@@ -20,14 +20,12 @@ let%expect_test "Simple asynchronous notification" =
       in
       let name = "async_func" in
       Ocaml_from_nvim.register_request_async
-        [%here]
         (Connected client)
         ~name
         ~type_:Ocaml_from_nvim.Async.unit
         ~f:(fun ~client:_ -> Deferred.Or_error.return (Ivar.fill_exn result "Called!"));
       let%bind () =
         Notifier.notify
-          [%here]
           client
           ~name:(`Viml "rpcnotify")
           ~type_:Notifier.Func.(Int @-> String @-> unit)
@@ -53,11 +51,7 @@ let%expect_test "Bad asynchronous notification" =
             Ivar.fill_exn result "Received asynchronous failure message"))
       (fun client ->
         let%bind.Deferred.Or_error () =
-          Notifier.notify
-            [%here]
-            client
-            ~name:(`Viml "bad-function")
-            ~type_:Notifier.Func.unit
+          Notifier.notify client ~name:(`Viml "bad-function") ~type_:Notifier.Func.unit
         in
         Ivar.read result |> Deferred.ok)
   in

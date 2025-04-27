@@ -3,7 +3,7 @@
  (public_name vcaml)
  (libraries async core_kernel.bus core core_unix msgpack msgpack_rpc
    core_kernel.nonempty_list nvim_internal core_kernel.reversed_list
-   semantic_version core_kernel.uuid core_unix.uuid core_kernel.vec)
+   semantic_version core_kernel.uuid core_unix.uuid)
  (flags :standard -alert -vcaml_private)
  (preprocess
   (pps ppx_jane)))

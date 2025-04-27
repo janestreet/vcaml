@@ -47,14 +47,14 @@ end
     interrupted. *)
 val register_request_blocking
   :  ?on_keyboard_interrupt:(unit -> unit)
-  -> Source_code_position.t
+  -> here:[%call_pos]
   -> _ Client.Maybe_connected.t
   -> name:string
   -> type_:'fn Blocking.t
   -> f:
        (run_in_background:
-          (Source_code_position.t
-           -> f:([ `asynchronous ] Client.t -> unit Deferred.Or_error.t)
+          (here:[%call_pos]
+           -> ([ `asynchronous ] Client.t -> unit Deferred.Or_error.t)
            -> unit)
         -> client:[ `blocking ] Client.t
         -> 'fn)
@@ -64,7 +64,7 @@ val register_request_blocking
     via [rpcnotify]. When [f] runs, Neovim may be in a different state than it was at the
     time when the request was made. *)
 val register_request_async
-  :  Source_code_position.t
+  :  here:[%call_pos]
   -> _ Client.Maybe_connected.t
   -> name:string
   -> type_:'fn Async.t
@@ -75,13 +75,13 @@ val register_request_async
     When the RPC [name] is called from an [rpcnotify] broadcast, the RPC will only be sent
     to channels that have subscribed to broadcasts for [name]. *)
 val subscribe_to_broadcast
-  :  Source_code_position.t
+  :  here:[%call_pos]
   -> _ Client.t
   -> name:string
   -> unit Deferred.Or_error.t
 
 val unsubscribe_from_broadcast
-  :  Source_code_position.t
+  :  here:[%call_pos]
   -> _ Client.t
   -> name:string
   -> unit Deferred.Or_error.t
@@ -104,8 +104,8 @@ module Callback : sig
   val anon_rpc
     :  ?on_keyboard_interrupt:(unit -> unit)
     -> (run_in_background:
-          (Source_code_position.t
-           -> f:([ `asynchronous ] Client.t -> unit Deferred.Or_error.t)
+          (here:[%call_pos]
+           -> ([ `asynchronous ] Client.t -> unit Deferred.Or_error.t)
            -> unit)
         -> client:[ `blocking ] Client.t
         -> 'a Deferred.Or_error.t)
@@ -115,15 +115,15 @@ end
 module Private : sig
   val register_request_blocking
     :  ?on_keyboard_interrupt:(unit -> unit)
-    -> Source_code_position.t
+    -> here:[%call_pos]
     -> _ Client.Maybe_connected.t
     -> name:string
     -> type_:'fn Blocking.t
     -> f:
          ('b
           -> run_in_background:
-               (Source_code_position.t
-                -> f:([ `asynchronous ] Client.t -> unit Deferred.Or_error.t)
+               (here:[%call_pos]
+                -> ([ `asynchronous ] Client.t -> unit Deferred.Or_error.t)
                 -> unit)
           -> client:[ `blocking ] Client.t
           -> 'fn)
@@ -131,7 +131,7 @@ module Private : sig
     -> unit
 
   val register_request_async
-    :  Source_code_position.t
+    :  here:[%call_pos]
     -> _ Client.Maybe_connected.t
     -> name:string
     -> type_:'fn Async.t
@@ -140,7 +140,7 @@ module Private : sig
     -> unit
 
   val register_callback
-    :  Source_code_position.t
+    :  here:[%call_pos]
     -> _ Client.t
     -> return_type:'a Type.t
     -> 'a Callback.anon_rpc

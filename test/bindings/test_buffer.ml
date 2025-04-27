@@ -7,7 +7,7 @@ let with_event_printing ~f =
   (* These tests may be fragile; the nvim docs don't specify exactly how
      [nvim_buf_lines_event] events are grouped or reported. *)
   with_client (fun client ->
-    let%bind events = Buffer.subscribe [%here] client Current >>| ok_exn in
+    let%bind events = Buffer.subscribe client Current >>| ok_exn in
     Async.don't_wait_for
     @@ Async.Pipe.iter events ~f:(fun event ->
       print_s [%message (event : Buffer.Event.t)];
@@ -29,7 +29,7 @@ let%expect_test "initial event received" =
 let%expect_test "events for some edits" =
   let%bind () =
     with_event_printing ~f:(fun client ->
-      Nvim.feedkeys [%here] client (`Raw "ohello, world!") ~mode:"nx")
+      Nvim.feedkeys client (`Raw "ohello, world!") ~mode:"nx")
   in
   [%expect
     {|
@@ -50,10 +50,10 @@ let%expect_test "feedkeys, get_lines, events for those edits" =
   let%bind () =
     with_event_printing ~f:(fun client ->
       let open Deferred.Or_error.Let_syntax in
-      let%bind () = Nvim.feedkeys [%here] client (`Raw "ihello") ~mode:"nx" in
-      let%bind () = Nvim.feedkeys [%here] client (`Raw "oworld") ~mode:"nx" in
+      let%bind () = Nvim.feedkeys client (`Raw "ihello") ~mode:"nx" in
+      let%bind () = Nvim.feedkeys client (`Raw "oworld") ~mode:"nx" in
       let%map lines =
-        Buffer.get_lines [%here] client Current ~start:0 ~end_:(-1) ~strict_indexing:true
+        Buffer.get_lines client Current ~start:0 ~end_:(-1) ~strict_indexing:true
       in
       print_s [%message (lines : String.Utf8.t list Buffer.With_changedtick.t)])
   in
@@ -82,7 +82,6 @@ let%expect_test "set_lines, events for those edits" =
       let open Deferred.Or_error.Let_syntax in
       let%bind () =
         Buffer.set_lines
-          [%here]
           client
           Current
           ~start:0
@@ -91,7 +90,7 @@ let%expect_test "set_lines, events for those edits" =
           [ "this"; "is"; "an"; "edit" ]
       in
       let%bind lines =
-        Buffer.get_lines [%here] client Current ~start:0 ~end_:(-1) ~strict_indexing:true
+        Buffer.get_lines client Current ~start:0 ~end_:(-1) ~strict_indexing:true
       in
       print_s [%message (lines : String.Utf8.t list Buffer.With_changedtick.t)];
       return ())
@@ -110,15 +109,14 @@ let%expect_test "set_lines, events for those edits" =
 ;;
 
 let%expect_test "changedtick, get_text, set_text" =
-  Backtrace.elide := true;
+  Dynamic.set_root Backtrace.elide true;
   let%bind () =
     with_client (fun client ->
       let open Deferred.Or_error.Let_syntax in
-      let%bind changedtick = Buffer.get_changedtick [%here] client Current in
+      let%bind changedtick = Buffer.get_changedtick client Current in
       print_s [%message (changedtick : Buffer.changedtick)];
       let%bind () =
         Buffer.set_text
-          [%here]
           client
           Current
           ~changedtick
@@ -129,12 +127,11 @@ let%expect_test "changedtick, get_text, set_text" =
           [ "test" ]
       in
       let prevtick = changedtick in
-      let%bind changedtick = Buffer.get_changedtick [%here] client Current in
+      let%bind changedtick = Buffer.get_changedtick client Current in
       print_s [%message (changedtick : Buffer.changedtick)];
       let%bind () =
         match%map.Deferred
           Buffer.set_text
-            [%here]
             client
             Current
             ~changedtick:prevtick
@@ -152,14 +149,7 @@ let%expect_test "changedtick, get_text, set_text" =
             [%message "Unexpectedly got [Ok ()] even when changedtick is too old"]
       in
       let%bind text_and_changedtick =
-        Buffer.get_text
-          [%here]
-          client
-          Current
-          ~start_row:0
-          ~start_col:0
-          ~end_row:0
-          ~end_col:80
+        Buffer.get_text client Current ~start_row:0 ~start_col:0 ~end_row:0 ~end_col:80
       in
       print_s
         [%sexp (text_and_changedtick : String.Utf8.t list Buffer.With_changedtick.t)];
@@ -176,7 +166,7 @@ let%expect_test "changedtick, get_text, set_text" =
       (("Called from" lib/vcaml/test/bindings/test_buffer.ml:LINE:COL))))
     ((value (test)) (changedtick 3))
     |}];
-  Backtrace.elide := false;
+  Dynamic.set_root Backtrace.elide false;
   return ()
 ;;
 
@@ -184,9 +174,9 @@ let%expect_test "create, set_name, get_name" =
   let%bind () =
     with_client (fun client ->
       let open Deferred.Or_error.Let_syntax in
-      let%bind buffer = Buffer.create [%here] client ~listed:true ~scratch:false in
-      let%bind () = Buffer.set_name [%here] client (Id buffer) "foobar" in
-      let%bind name = Buffer.get_name [%here] client (Id buffer) in
+      let%bind buffer = Buffer.create client ~listed:true ~scratch:false in
+      let%bind () = Buffer.set_name client (Id buffer) "foobar" in
+      let%bind name = Buffer.get_name client (Id buffer) in
       print_s [%message (buffer : Buffer.t) (name : string)];
       return ())
   in
@@ -198,13 +188,11 @@ let%expect_test "find_by_name_or_create no name prefixes" =
   let%bind () =
     with_client (fun client ->
       let open Deferred.Or_error.Let_syntax in
-      let%bind original_buf = Nvim.get_current_buf [%here] client in
+      let%bind original_buf = Nvim.get_current_buf client in
       let original_buf_name = "original_buffer_name" in
-      let%bind () = Buffer.set_name [%here] client (Id original_buf) original_buf_name in
-      let%bind new_buf = Buffer.find_by_name_or_create [%here] client "new_buffer_name" in
-      let%bind found_buf =
-        Buffer.find_by_name_or_create [%here] client original_buf_name
-      in
+      let%bind () = Buffer.set_name client (Id original_buf) original_buf_name in
+      let%bind new_buf = Buffer.find_by_name_or_create client "new_buffer_name" in
+      let%bind found_buf = Buffer.find_by_name_or_create client original_buf_name in
       print_s
         [%message (original_buf : Buffer.t) (new_buf : Buffer.t) (found_buf : Buffer.t)];
       return ())
@@ -217,12 +205,8 @@ let%expect_test "find_by_name_or_create name prefixes" =
   let%bind () =
     with_client (fun client ->
       let open Deferred.Or_error.Let_syntax in
-      let%bind new_buf =
-        Buffer.find_by_name_or_create [%here] client "test_buffer_name"
-      in
-      let%bind new_buf_prefix_name =
-        Buffer.find_by_name_or_create [%here] client "test_buffer"
-      in
+      let%bind new_buf = Buffer.find_by_name_or_create client "test_buffer_name" in
+      let%bind new_buf_prefix_name = Buffer.find_by_name_or_create client "test_buffer" in
       print_s [%message (new_buf : Buffer.t) (new_buf_prefix_name : Buffer.t)];
       return ())
   in
@@ -234,9 +218,9 @@ let%expect_test "find_by_name_or_create buffers with weird characters" =
   let%bind () =
     with_client (fun client ->
       let open Deferred.Or_error.Let_syntax in
-      let%bind buf_with_whitespace = Buffer.find_by_name_or_create [%here] client "  " in
-      let%bind buf_with_slash = Buffer.find_by_name_or_create [%here] client "\\" in
-      let%bind buf_with_quotes = Buffer.find_by_name_or_create [%here] client "\"\"" in
+      let%bind buf_with_whitespace = Buffer.find_by_name_or_create client "  " in
+      let%bind buf_with_slash = Buffer.find_by_name_or_create client "\\" in
+      let%bind buf_with_quotes = Buffer.find_by_name_or_create client "\"\"" in
       print_s
         [%message
           (buf_with_whitespace : Buffer.t)
@@ -250,14 +234,11 @@ let%expect_test "find_by_name_or_create buffers with weird characters" =
 
 let%expect_test "API for buffer-local options" =
   with_client (fun client ->
-    let%bind buffer = Nvim.get_current_buf [%here] client >>| ok_exn in
+    let%bind buffer = Nvim.get_current_buf client >>| ok_exn in
     let print_modifiability buffer =
-      let%bind modifiable =
-        Buffer.Option.get [%here] client buffer Modifiable >>| ok_exn
-      in
+      let%bind modifiable = Buffer.Option.get client buffer Modifiable >>| ok_exn in
       let%map actually_modifiable =
         Buffer.set_lines
-          [%here]
           client
           buffer
           ~start:0
@@ -270,26 +251,24 @@ let%expect_test "API for buffer-local options" =
     in
     let print_new_buffer_modifiability () =
       let%map new_buffers_are_modifiable =
-        Buffer.Option.get_for_new_buffers [%here] client Modifiable >>| ok_exn
+        Buffer.Option.get_for_new_buffers client Modifiable >>| ok_exn
       in
       print_s [%message (new_buffers_are_modifiable : bool)]
     in
     let%bind () = print_modifiability Current in
     [%expect {| ((modifiable true) (actually_modifiable true)) |}];
-    let%bind () = Buffer.Option.set [%here] client Current Modifiable false >>| ok_exn in
+    let%bind () = Buffer.Option.set client Current Modifiable false >>| ok_exn in
     let%bind () = print_modifiability Current in
     [%expect {| ((modifiable false) (actually_modifiable false)) |}];
-    let%bind () = Buffer.Option.set [%here] client Current Modifiable true >>| ok_exn in
+    let%bind () = Buffer.Option.set client Current Modifiable true >>| ok_exn in
     let%bind () = print_new_buffer_modifiability () in
     [%expect {| (new_buffers_are_modifiable true) |}];
-    let%bind () =
-      Buffer.Option.set_for_new_buffers [%here] client Modifiable false >>| ok_exn
-    in
+    let%bind () = Buffer.Option.set_for_new_buffers client Modifiable false >>| ok_exn in
     let%bind () = print_new_buffer_modifiability () in
     [%expect {| (new_buffers_are_modifiable false) |}];
     let%bind () = print_modifiability Current in
     [%expect {| ((modifiable true) (actually_modifiable true)) |}];
-    let%bind () = Command.exec [%here] client "new" >>| ok_exn in
+    let%bind () = Command.exec client "new" >>| ok_exn in
     let%bind () = print_modifiability Current in
     [%expect {| ((modifiable false) (actually_modifiable false)) |}];
     let%bind () = print_modifiability (Id buffer) in
@@ -299,15 +278,15 @@ let%expect_test "API for buffer-local options" =
 
 let%expect_test "API for global-local buffer options" =
   with_client (fun client ->
-    let%bind buffer = Nvim.get_current_buf [%here] client >>| ok_exn in
+    let%bind buffer = Nvim.get_current_buf client >>| ok_exn in
     let print_default_dictionary () =
-      Buffer.Option.get_default [%here] client Dictionary
+      Buffer.Option.get_default client Dictionary
       >>| ok_exn
       >>| [%sexp_of: string list]
       >>| print_s
     in
     let print_dictionary buffer =
-      Buffer.Option.get [%here] client buffer Dictionary
+      Buffer.Option.get client buffer Dictionary
       >>| ok_exn
       >>| [%sexp_of: string list]
       >>| print_s
@@ -316,12 +295,10 @@ let%expect_test "API for global-local buffer options" =
     [%expect {| ("") |}];
     let%bind () = print_default_dictionary () in
     [%expect {| ("") |}];
-    let%bind () = Command.exec [%here] client "new" >>| ok_exn in
+    let%bind () = Command.exec client "new" >>| ok_exn in
+    let%bind () = Buffer.Option.set client Current Dictionary [ "dict" ] >>| ok_exn in
     let%bind () =
-      Buffer.Option.set [%here] client Current Dictionary [ "dict" ] >>| ok_exn
-    in
-    let%bind () =
-      Buffer.Option.set_default [%here] client Dictionary [ "default-dict" ] >>| ok_exn
+      Buffer.Option.set_default client Dictionary [ "default-dict" ] >>| ok_exn
     in
     let%bind () = print_default_dictionary () in
     [%expect {| (default-dict) |}];
@@ -337,18 +314,18 @@ let%expect_test "get_mark, set_mark, delete_mark" =
     with_client (fun client ->
       let open Deferred.Or_error.Let_syntax in
       let%bind escaped_keys =
-        Nvim.replace_termcodes_and_keycodes [%here] client "ihello<Esc>mma\nworld!<Esc>"
+        Nvim.replace_termcodes_and_keycodes client "ihello<Esc>mma\nworld!<Esc>"
       in
-      let%bind () = Nvim.feedkeys [%here] client (`Keycodes escaped_keys) ~mode:"n" in
-      let%bind mark = Buffer.get_mark [%here] client Current ~sym:'m' in
+      let%bind () = Nvim.feedkeys client (`Keycodes escaped_keys) ~mode:"n" in
+      let%bind mark = Buffer.get_mark client Current ~sym:'m' in
       print_s [%sexp (mark : Mark.t Buffer.With_changedtick.t)];
       let%bind () =
-        Buffer.set_mark [%here] client Current { sym = 'm'; pos = { row = 1; col = 0 } }
+        Buffer.set_mark client Current { sym = 'm'; pos = { row = 1; col = 0 } }
       in
-      let%bind mark = Buffer.get_mark [%here] client Current ~sym:'m' in
+      let%bind mark = Buffer.get_mark client Current ~sym:'m' in
       print_s [%sexp (mark : Mark.t Buffer.With_changedtick.t)];
-      let%bind () = Buffer.delete_mark [%here] client Current 'm' in
-      let%bind.Deferred mark = Buffer.get_mark [%here] client Current ~sym:'m' in
+      let%bind () = Buffer.delete_mark client Current 'm' in
+      let%bind.Deferred mark = Buffer.get_mark client Current ~sym:'m' in
       print_s [%sexp (mark : Mark.t Buffer.With_changedtick.t Or_error.t)];
       return ())
   in
@@ -365,19 +342,19 @@ let%expect_test "get_mark, set_mark, delete_mark" =
 ;;
 
 let%expect_test "get_var, set_var, delete_var" =
-  Backtrace.elide := true;
+  Dynamic.set_root Backtrace.elide true;
   let%bind () =
     with_client (fun client ->
       let open Deferred.Or_error.Let_syntax in
-      let%bind () = Buffer.set_var [%here] client Current "foo" ~type_:Bool ~value:true in
-      let%bind.Deferred value = Buffer.get_var [%here] client Current "foo" ~type_:Bool in
+      let%bind () = Buffer.set_var client Current "foo" ~type_:Bool ~value:true in
+      let%bind.Deferred value = Buffer.get_var client Current "foo" ~type_:Bool in
       print_s [%sexp (value : bool Or_error.t)];
-      let%bind () = Buffer.delete_var [%here] client Current "foo" in
-      let%bind.Deferred value = Buffer.get_var [%here] client Current "foo" ~type_:Bool in
+      let%bind () = Buffer.delete_var client Current "foo" in
+      let%bind.Deferred value = Buffer.get_var client Current "foo" ~type_:Bool in
       print_s [%sexp (value : bool Or_error.t)];
       return ())
   in
-  Backtrace.elide := false;
+  Dynamic.set_root Backtrace.elide false;
   [%expect
     {|
     (Ok true)
@@ -390,28 +367,26 @@ let%expect_test "get_var, set_var, delete_var" =
 
 let%expect_test "unload and wipeout semantics (also exists, loaded)" =
   with_client (fun client ->
-    Backtrace.elide := true;
-    let%bind buffer =
-      Buffer.create [%here] client ~listed:true ~scratch:false >>| ok_exn
-    in
+    Dynamic.set_root Backtrace.elide true;
+    let%bind buffer = Buffer.create client ~listed:true ~scratch:false >>| ok_exn in
     let get_status () =
       let open Deferred.Or_error.Let_syntax in
-      match%bind Buffer.exists [%here] client buffer with
+      match%bind Buffer.exists client buffer with
       | false -> return "Invalid"
       | true ->
-        (match%map Buffer.loaded [%here] client buffer with
+        (match%map Buffer.loaded client buffer with
          | true -> "Loaded"
          | false -> "Unloaded")
     in
-    let test f ~even_if_modified =
+    let test (f : here:[%call_pos] -> _) ~even_if_modified =
       let%map result =
         let open Deferred.Or_error.Let_syntax in
         let%bind () =
-          Command.exec [%here] client "sbuffer" ~range_or_count:(Count (buffer :> int))
+          Command.exec client "sbuffer" ~range_or_count:(Count (buffer :> int))
         in
-        let%bind () = Buffer.Option.set [%here] client (Id buffer) Modified true in
+        let%bind () = Buffer.Option.set client (Id buffer) Modified true in
         let%bind before = get_status () in
-        let%bind () = f [%here] client (Buffer.Or_current.Id buffer) ~even_if_modified in
+        let%bind () = f client (Buffer.Or_current.Id buffer) ~even_if_modified in
         let%bind after = get_status () in
         return [%message (before : string) (after : string)]
       in
@@ -435,7 +410,7 @@ let%expect_test "unload and wipeout semantics (also exists, loaded)" =
       |}];
     let%bind () = test Buffer.wipeout ~even_if_modified:true in
     [%expect {| (Ok ((before Loaded) (after Invalid))) |}];
-    Backtrace.elide := false;
+    Dynamic.set_root Backtrace.elide false;
     Deferred.Or_error.return ())
 ;;
 
@@ -444,7 +419,6 @@ let%expect_test "line_count, get_byte_offset_of_line" =
     let open Deferred.Or_error.Let_syntax in
     let%bind () =
       Buffer.set_lines
-        [%here]
         client
         Current
         ~start:0
@@ -452,10 +426,10 @@ let%expect_test "line_count, get_byte_offset_of_line" =
         ~strict_indexing:true
         [ "foo"; "bar" ]
     in
-    let%bind line_count = Buffer.line_count [%here] client Current in
+    let%bind line_count = Buffer.line_count client Current in
     let%bind line2_offset =
       (* There are 4 bytes before the second line begins: "foo\n". *)
-      Buffer.get_byte_offset_of_line [%here] client Current ~line:1
+      Buffer.get_byte_offset_of_line client Current ~line:1
     in
     print_s
       [%message
@@ -474,10 +448,10 @@ let%expect_test "open_term, Nvim.send_to_channel" =
   with_ui_client (fun client ui ->
     let test ~modified =
       let open Deferred.Or_error.Let_syntax in
-      let%bind () = Command.exec [%here] client "enew" in
-      let%bind () = Buffer.Option.set [%here] client Current Modified modified in
-      let%bind channel = Buffer.open_term [%here] client Current in
-      let%bind () = Nvim.send_to_channel [%here] client ~channel "foo\r\nbar\r\n" in
+      let%bind () = Command.exec client "enew" in
+      let%bind () = Buffer.Option.set client Current Modified modified in
+      let%bind channel = Buffer.open_term client Current in
+      let%bind () = Nvim.send_to_channel client ~channel "foo\r\nbar\r\n" in
       let%map screen = get_screen_contents ui in
       print_endline screen
     in
@@ -528,17 +502,16 @@ let%expect_test "open_term, Nvim.send_to_channel" =
 let%expect_test "Extmark indexing" =
   with_client (fun client ->
     let open Deferred.Or_error.Let_syntax in
-    let%bind () = Buffer.Option.set [%here] client Current Syntax "on" in
+    let%bind () = Buffer.Option.set client Current Syntax "on" in
     let%bind escaped_keys =
-      Nvim.replace_termcodes_and_keycodes [%here] client "ihello\nworld!<Esc>"
+      Nvim.replace_termcodes_and_keycodes client "ihello\nworld!<Esc>"
     in
-    let%bind () = Nvim.feedkeys [%here] client (`Keycodes escaped_keys) ~mode:"n" in
-    let%bind namespace = Namespace.create [%here] client () in
+    let%bind () = Nvim.feedkeys client (`Keycodes escaped_keys) ~mode:"n" in
+    let%bind namespace = Namespace.create client () in
     let%bind extmark =
       (* Start the extmark range on the 'o' of hello and end on the 'w' of world,
          inclusive. *)
       Buffer.Untested.create_extmark
-        [%here]
         client
         Current
         ~namespace
@@ -546,7 +519,7 @@ let%expect_test "Extmark indexing" =
         ~end_exclusive:{ row = 1; col = 1 }
         ()
     in
-    let%bind result = Buffer.Untested.get_extmark_with_details [%here] client extmark in
+    let%bind result = Buffer.Untested.get_extmark_with_details client extmark in
     print_s
       [%sexp
         (result : (Position.t * Msgpack.t String.Map.t) option Buffer.With_changedtick.t)];
@@ -562,7 +535,6 @@ let%expect_test "Extmark indexing" =
       |}];
     let%bind result =
       Buffer.Untested.all_extmarks
-        [%here]
         client
         Current
         ~namespace
@@ -573,7 +545,6 @@ let%expect_test "Extmark indexing" =
     [%expect {| ((value ()) (changedtick 5)) |}];
     let%bind result =
       Buffer.Untested.all_extmarks
-        [%here]
         client
         Current
         ~namespace
@@ -584,7 +555,6 @@ let%expect_test "Extmark indexing" =
     [%expect {| ((value ()) (changedtick 5)) |}];
     let%bind result =
       Buffer.Untested.all_extmarks
-        [%here]
         client
         Current
         ~namespace
@@ -601,8 +571,8 @@ let%expect_test "Subscribing twice to the same buffer fails" =
     Expect_test_helpers_async.require_does_raise_async (fun () ->
       with_client (fun client ->
         let open Deferred.Or_error.Let_syntax in
-        let%bind (_ : _ Pipe.Reader.t) = Buffer.subscribe [%here] client Current in
-        let%bind (_ : _ Pipe.Reader.t) = Buffer.subscribe [%here] client Current in
+        let%bind (_ : _ Pipe.Reader.t) = Buffer.subscribe client Current in
+        let%bind (_ : _ Pipe.Reader.t) = Buffer.subscribe client Current in
         return ()))
   in
   [%expect {| ("Already subscribed to buffer" (buffer 1)) |}];
@@ -614,8 +584,8 @@ let%expect_test "Racing subscriptions to the same buffer fail" =
     Expect_test_helpers_async.require_does_raise_async (fun () ->
       with_client (fun client ->
         let open Deferred.Or_error.Let_syntax in
-        let%bind (_ : _ Pipe.Reader.t) = Buffer.subscribe [%here] client Current
-        and (_ : _ Pipe.Reader.t) = Buffer.subscribe [%here] client Current in
+        let%bind (_ : _ Pipe.Reader.t) = Buffer.subscribe client Current
+        and (_ : _ Pipe.Reader.t) = Buffer.subscribe client Current in
         return ()))
   in
   [%expect {| ("Already subscribed to buffer" (buffer 1)) |}];
@@ -626,9 +596,9 @@ let%expect_test "Resubscribing to a buffer succeeds" =
   let%bind () =
     with_client (fun client ->
       let open Deferred.Or_error.Let_syntax in
-      let%bind events = Buffer.subscribe [%here] client Current in
+      let%bind events = Buffer.subscribe client Current in
       Pipe.close_read events;
-      let%bind (_ : _ Pipe.Reader.t) = Buffer.subscribe [%here] client Current in
+      let%bind (_ : _ Pipe.Reader.t) = Buffer.subscribe client Current in
       return ())
   in
   [%expect {| |}];
@@ -645,12 +615,12 @@ let%expect_test "Racing resubscriptions to the same buffer fail" =
              reference rather than [Current] so we don't need to wait for a VCaml
              roundtrip to resolve the buffer, since by that time the [Detach] event will
              have been sent. *)
-          Nvim.get_current_buf [%here] client
+          Nvim.get_current_buf client
         in
-        let%bind events = Buffer.subscribe [%here] client (Id buf) in
+        let%bind events = Buffer.subscribe client (Id buf) in
         Pipe.close_read events;
-        let%bind (_ : _ Pipe.Reader.t) = Buffer.subscribe [%here] client (Id buf)
-        and (_ : _ Pipe.Reader.t) = Buffer.subscribe [%here] client (Id buf) in
+        let%bind (_ : _ Pipe.Reader.t) = Buffer.subscribe client (Id buf)
+        and (_ : _ Pipe.Reader.t) = Buffer.subscribe client (Id buf) in
         return ()))
   in
   [%expect {| ("Already subscribing to buffer" (buffer 1)) |}];
@@ -661,13 +631,13 @@ let%expect_test "Still in good state after failing to attach (can retry)" =
   let%bind () =
     Expect_test_helpers_async.require_does_not_raise_async (fun () ->
       with_client (fun client ->
-        let%bind pipe = Buffer.subscribe [%here] client Current >>| ok_exn in
-        match%bind Buffer.subscribe [%here] client Current with
+        let%bind pipe = Buffer.subscribe client Current >>| ok_exn in
+        match%bind Buffer.subscribe client Current with
         | Ok (_ : _ Pipe.Reader.t) -> failwith "Made two subscriptions to the same buffer"
         | Error _ ->
           Pipe.close_read pipe;
           (* Now the subscription should succeed. *)
-          Buffer.subscribe [%here] client Current |> Deferred.Or_error.ignore_m))
+          Buffer.subscribe client Current |> Deferred.Or_error.ignore_m))
   in
   [%expect {| |}];
   return ()
