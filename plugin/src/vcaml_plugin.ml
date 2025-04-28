@@ -44,7 +44,9 @@ module Oneshot = struct
           }
           -> t
 
-    let create here ~name ~type_ ~f = Blocking_rpc { here; name; type_; f }
+    let create ?(here = Stdlib.Lexing.dummy_pos) name ~type_ ~f =
+      Blocking_rpc { here; name; type_; f }
+    ;;
   end
 
   let create ?on_crash ~name ~description rpcs =
@@ -62,12 +64,12 @@ module Oneshot = struct
                 ~invoking:(name : string)
                 (previously_invoked : string)]
         | None ->
-          Set_once.set_exn invoked_rpc [%here] name;
+          Set_once.set_exn invoked_rpc name;
           f ()
       in
       List.iter rpcs ~f:(fun (Rpc.Blocking_rpc { here; name; type_; f }) ->
         Ocaml_from_nvim.Private.register_request_blocking
-          here
+          ~here
           (Not_connected client)
           ~name
           ~type_
@@ -83,11 +85,11 @@ module Oneshot = struct
                that point Neovim could make another blocking request, that would be an
                improper use of a oneshot plugin, and guarding against that is difficult
                and not worthwhile. *)
-            run_in_background here ~f:(fun client ->
+            run_in_background ~here (fun client ->
               let%map.Deferred.Or_error (_ : Buffer.t) =
                 (* This will only succeed once the result of [f] has successfully
                    been sent to Neovim. *)
-                Nvim.get_current_buf [%here] client
+                Nvim.get_current_buf client
               in
               Ivar.fill_exn shutdown ());
             f)
@@ -117,8 +119,8 @@ module Persistent = struct
           ; f :
               'state
               -> run_in_background:
-                   (Source_code_position.t
-                    -> f:([ `asynchronous ] Client.t -> unit Deferred.Or_error.t)
+                   (?here:Stdlib.Lexing.position
+                    -> ([ `asynchronous ] Client.t -> unit Deferred.Or_error.t)
                     -> unit)
               -> client:[ `blocking ] Client.t
               -> 'fn
@@ -133,11 +135,19 @@ module Persistent = struct
           }
           -> 'state t
 
-    let create_blocking ?on_keyboard_interrupt here ~name ~type_ ~f =
+    let create_blocking
+      ?on_keyboard_interrupt
+      ?(here = Stdlib.Lexing.dummy_pos)
+      name
+      ~type_
+      ~f
+      =
       Blocking_rpc { here; name; type_; f; on_keyboard_interrupt }
     ;;
 
-    let create_async here ~name ~type_ ~f = Async_rpc { here; name; type_; f }
+    let create_async ?(here = Stdlib.Lexing.dummy_pos) name ~type_ ~f =
+      Async_rpc { here; name; type_; f }
+    ;;
 
     let contra_map t ~f =
       match t with
@@ -167,7 +177,7 @@ module Persistent = struct
       | Rpc.Blocking_rpc { here; name; type_; f; on_keyboard_interrupt } ->
         Ocaml_from_nvim.Private.register_request_blocking
           ?on_keyboard_interrupt
-          here
+          ~here
           client
           ~name
           ~type_
@@ -175,7 +185,7 @@ module Persistent = struct
           ~wrap_f:(fun f -> f (get_state state ~name))
       | Async_rpc { here; name; type_; f } ->
         Ocaml_from_nvim.Private.register_request_async
-          here
+          ~here
           client
           ~name
           ~type_
@@ -196,7 +206,11 @@ module Persistent = struct
     let f ~param =
       behave_nicely_when_called_from_nvim ~stdout_is_used_for_msgpack:false;
       let state = Set_once.create () in
-      let display_error_in_neovim' = ref (fun _ _ -> ()) in
+      let display_error_in_neovim' =
+        ref (fun ?(here = Stdlib.Lexing.dummy_pos) _ ->
+          let _ : Source_code_position.t = here in
+          ())
+      in
       let on_error =
         (* Track whether we already sent notifications due to parse failures of UI
            and buffer events. These events are streamed from Neovim, and as it's
@@ -208,12 +222,9 @@ module Persistent = struct
           match error with
           | Msgpack_rpc_error error -> error |> Msgpack_rpc.Error.to_error |> Error.raise
           | Nvim_error_event error_event ->
-            !display_error_in_neovim'
-              [%here]
-              (Vcaml_error.Nvim_error_event.to_error error_event)
+            !display_error_in_neovim' (Vcaml_error.Nvim_error_event.to_error error_event)
           | Nvim_error_event_parse_failure notification ->
             !display_error_in_neovim'
-              [%here]
               (Error.create_s
                  [%message
                    "Failed to parse error event"
@@ -224,7 +235,6 @@ module Persistent = struct
              | false ->
                failed_to_parse_buffer_event := true;
                !display_error_in_neovim'
-                 [%here]
                  (Error.create_s
                     [%message
                       "Failed to parse buffer event(s) - only reporting first failure."
@@ -236,7 +246,6 @@ module Persistent = struct
              | false ->
                failed_to_parse_ui_event := true;
                !display_error_in_neovim'
-                 [%here]
                  (Error.create_s
                     [%message
                       "Failed to parse UI event(s) - only reporting first failure."
@@ -251,43 +260,42 @@ module Persistent = struct
         Private.attach_client client (Socket `Infer_from_parent_nvim) >>| ok_exn
       in
       (display_error_in_neovim'
-       := fun here error ->
-            Private.notify_nvim_of_error client here error |> don't_wait_for);
+       := fun ?(here = Stdlib.Lexing.dummy_pos) error ->
+            Private.notify_nvim_of_error client ~here error |> don't_wait_for);
       let%bind () =
         match !rpc_registration_failure with
         | None -> return ()
         | Some exn ->
-          let%bind () = Private.notify_nvim_of_error client [%here] (Error.of_exn exn) in
+          let%bind () = Private.notify_nvim_of_error client (Error.of_exn exn) in
           raise exn
       in
       match%bind Monitor.try_with_join_or_error (fun () -> on_startup param ~client) with
       | Error error ->
-        let%bind () = Private.notify_nvim_of_error client [%here] error in
+        let%bind () = Private.notify_nvim_of_error client error in
         Error.raise error
       | Ok state' ->
         (* It's important that we set [state] before notifying Neovim that the plugin
            is ready, since at that point Neovim has the green light to call RPCs. *)
-        Set_once.set_exn state [%here] state';
+        Set_once.set_exn state state';
         (match%bind
            match after_startup with
            | None -> Deferred.Or_error.return ()
            | Some f -> Monitor.try_with_join_or_error (fun () -> f state' ~client)
          with
          | Error error ->
-           let%bind () = Private.notify_nvim_of_error client [%here] error in
+           let%bind () = Private.notify_nvim_of_error client error in
            Error.raise error
          | Ok () ->
            let%bind () =
              match%bind
                Nvim.call_function
-                 [%here]
                  client
                  ~name:notify_fn
                  ~type_:Nvim.Func.(Int @-> return Object)
                  (Client.channel client)
              with
              | Error error ->
-               let%bind () = Private.notify_nvim_of_error client [%here] error in
+               let%bind () = Private.notify_nvim_of_error client error in
                Error.raise error
              | Ok value ->
                (match value, notify_fn with
@@ -299,7 +307,7 @@ module Persistent = struct
                         (sprintf "%s returned a value" function_name)
                           ~_:(value : Msgpack.t)]
                   in
-                  let%bind () = Private.notify_nvim_of_error client [%here] error in
+                  let%bind () = Private.notify_nvim_of_error client error in
                   Error.raise error)
            in
            Deferred.never ())

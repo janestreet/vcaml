@@ -9,12 +9,11 @@ type state = { mutable most_recent_name : string option }
 
 let say_hello =
   Vcaml_plugin.Persistent.Rpc.create_blocking
-    [%here]
-    ~name:"hello"
+    "hello"
     ~type_:Ocaml_from_nvim.Blocking.(String @-> return Nil)
     ~f:(fun state ~run_in_background:_ ~client name ->
       state.most_recent_name <- Some name;
-      Nvim.out_writeln [%here] client [%string "Hello, %{name}!"])
+      Nvim.out_writeln client [%string "Hello, %{name}!"])
 ;;
 
 let on_startup client =
@@ -23,7 +22,6 @@ let on_startup client =
   let state = { most_recent_name = None } in
   let%bind () =
     Command.create
-      [%here]
       client
       ~bar:true
       ~nargs:One
@@ -38,14 +36,13 @@ let on_startup client =
   in
   let%bind () =
     Command.create
-      [%here]
       client
       ~bar:true
       ()
       ~name:"SayGoodbye"
       ~scope:`Global
       (Ocaml_from_nvim.Callback.anon_rpc (fun ~run_in_background ~client ->
-         run_in_background [%here] ~f:(fun (_ : [ `asynchronous ] Client.t) ->
+         run_in_background (fun (_ : [ `asynchronous ] Client.t) ->
            (* This will only run after the RPC returns. *)
            exit 0);
          let message =
@@ -53,7 +50,7 @@ let on_startup client =
            | None -> "Goodbye!"
            | Some name -> [%string "Goodbye, %{name}!"]
          in
-         Nvim.out_writeln [%here] client message))
+         Nvim.out_writeln client message))
   in
   Deferred.Or_error.return state
 ;;

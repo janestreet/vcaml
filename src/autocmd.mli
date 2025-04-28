@@ -143,13 +143,13 @@ module Group : sig
   include Comparable.S_plain with type t := t
 
   val create
-    :  Source_code_position.t
+    :  ?here:Stdlib.Lexing.position
     -> _ Client.t
     -> ?clear_if_exists:bool
     -> string
     -> t Deferred.Or_error.t
 
-  val delete : Source_code_position.t -> _ Client.t -> t -> unit Deferred.Or_error.t
+  val delete : ?here:Stdlib.Lexing.position -> _ Client.t -> t -> unit Deferred.Or_error.t
 end
 
 module Pattern_or_buffer : sig
@@ -182,7 +182,7 @@ type t =
 
 (** Get all auto-commands satisfying the given parameters. *)
 val get
-  :  Source_code_position.t
+  :  ?here:Stdlib.Lexing.position
   -> _ Client.t
   -> ?group:Group.t
   -> ?events:Event.t Nonempty_list.t
@@ -192,11 +192,11 @@ val get
 
 (** Create a new auto-command. *)
 val create
-  :  Source_code_position.t
+  :  ?here:Stdlib.Lexing.position
   -> _ Client.t
   -> ?description:string
-       (** Provide [description] if you implement this autocmd with an RPC so the user will
-      understand what the autocmd does when they inspect it with [:autocmd]. *)
+       (** Provide [description] if you implement this autocmd with an RPC so the user
+           will understand what the autocmd does when they inspect it with [:autocmd]. *)
   -> ?once:bool
   -> ?nested:bool
   -> group:Group.t
@@ -206,11 +206,15 @@ val create
   -> Id.t Deferred.Or_error.t
 
 (** Delete an auto-command. *)
-val delete : Source_code_position.t -> _ Client.t -> Id.t -> unit Deferred.Or_error.t
+val delete
+  :  ?here:Stdlib.Lexing.position
+  -> _ Client.t
+  -> Id.t
+  -> unit Deferred.Or_error.t
 
 (** Clear all auto-commands satisfying the given parameters. *)
 val clear
-  :  Source_code_position.t
+  :  ?here:Stdlib.Lexing.position
   -> _ Client.t
   -> ?patterns_or_buffer:Patterns_or_buffer.t
   -> unit
@@ -220,7 +224,7 @@ val clear
 
 (** Run the auto-commands that satisfy the given parameters. Not typically needed. *)
 val exec
-  :  Source_code_position.t
+  :  ?here:Stdlib.Lexing.position
   -> _ Client.t
   -> ?group:Group.t
   -> ?patterns_or_buffer:Patterns_or_buffer.t

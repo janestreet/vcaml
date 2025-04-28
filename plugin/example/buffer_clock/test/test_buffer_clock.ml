@@ -12,24 +12,21 @@ let%expect_test "Test buffer clock" =
         ]
       (fun client ui ->
         let open Deferred.Or_error.Let_syntax in
-        let%bind () = Command.exec [%here] client "source" ~args:[ "buffer_clock.lua" ] in
+        let%bind () = Command.exec client "source" ~args:[ "buffer_clock.lua" ] in
         let%bind buffer_clock_channel =
           Deferred.repeat_until_finished () (fun () ->
             let open Deferred.Let_syntax in
-            match%bind Nvim.get_var [%here] client "buffer_clock_channel" ~type_:Int with
+            match%bind Nvim.get_var client "buffer_clock_channel" ~type_:Int with
             | Error _ ->
               let%map () = Clock_ns.after Time_ns.Span.millisecond in
               `Repeat ()
             | Ok channel -> return (`Finished (Ok channel)))
         in
-        let%bind buffer_clock_job =
-          Nvim.get_var [%here] client "buffer_clock_job" ~type_:Int
-        in
+        let%bind buffer_clock_job = Nvim.get_var client "buffer_clock_job" ~type_:Int in
         let%bind screen = get_screen_contents ui in
         print_endline screen;
         let advance_time () =
           Nvim.call_function
-            [%here]
             client
             ~name:(`Viml "rpcnotify")
             ~type_:Nvim.Func.(Int @-> String @-> return Int)
@@ -39,10 +36,10 @@ let%expect_test "Test buffer clock" =
         in
         let%bind () = advance_time () in
         let%bind screen =
-          wait_until_text [%here] ui ~f:(String.is_substring ~substring:"00:00:01")
+          wait_until_text ui ~f:(String.is_substring ~substring:"00:00:01")
         in
         print_endline screen;
-        let%bind () = Command.exec [%here] client "only" in
+        let%bind () = Command.exec client "only" in
         let%bind () = advance_time () in
         let%bind () =
           (* Give the plugin a chance to try to update the clock and shut down when it
@@ -51,7 +48,6 @@ let%expect_test "Test buffer clock" =
           Clock_ns.after (Time_ns.Span.of_int_ms 10) |> Deferred.ok
         in
         Nvim.call_function
-          [%here]
           client
           ~name:(`Viml "jobwait")
           ~type_:Nvim.Func.(Array Int @-> Int @-> return (Array Int))

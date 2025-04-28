@@ -25,7 +25,7 @@ module Func = struct
 end
 
 (* Changes here should probably have analogous changes in [Nvim.call_function]. *)
-let notify here client ~name ~type_ =
+let notify ?(here = Stdlib.Lexing.dummy_pos) client ~name ~type_ =
   let client = Type_equal.conv Client.Private.eq client in
   Func.apply_fn type_ (fun args ->
     (match name with
@@ -37,12 +37,12 @@ let notify here client ~name ~type_ =
             if it raises an error. *)
          ~code:[%string {| local result = (%{name})(...); return result |}]
          ~args)
-    |> client.call_nvim_api_fn here Notification)
+    |> client.call_nvim_api_fn ~here Notification)
 ;;
 
 module Untested = struct
   let nvim_buf_add_highlight
-    here
+    ?(here = Stdlib.Lexing.dummy_pos)
     client
     buffer
     ~namespace
@@ -59,6 +59,6 @@ module Untested = struct
       ~line
       ~col_start
       ~col_end
-    |> client.call_nvim_api_fn here Notification
+    |> client.call_nvim_api_fn ~here Notification
   ;;
 end

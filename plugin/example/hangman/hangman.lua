@@ -1,7 +1,13 @@
 -- This plugin provides a :Hangman command to start a game of Hangman. In the game window,
 -- the lowercase letter keys are remapped to guesses.
 
-local path_to_exe = vim.fn.expand("<sfile>:h").."/bin/main.exe"
+local source_file = vim.fn.expand("<sfile>")
+if source_file == ":source (no file)" then
+  -- We need the file path to discover the binary's location.
+  error("This lua file must be sourced with a path")
+end
+local path_to_exe = vim.fs.dirname(source_file).."/bin/main.exe"
+
 
 local job
 local buffer

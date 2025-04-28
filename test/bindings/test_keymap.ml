@@ -3,19 +3,18 @@ open Async
 open Vcaml
 open Vcaml_test_helpers
 
-let clear_mappings here client =
-  let%bind.Deferred.Or_error () = Command.exec here client ~bang:true "mapclear" in
+let clear_mappings ?(here = Stdlib.Lexing.dummy_pos) client =
+  let%bind.Deferred.Or_error () = Command.exec ~here client ~bang:true "mapclear" in
   [ "mapclear"; "vmapclear"; "lmapclear"; "tmapclear" ]
-  |> Deferred.Or_error.List.iter ~how:`Parallel ~f:(Command.exec here client)
+  |> Deferred.Or_error.List.iter ~how:`Parallel ~f:(Command.exec ~here client)
 ;;
 
 let%expect_test "Test keymaps" =
   let test ~client mode =
     let open Deferred.Or_error.Let_syntax in
-    let%bind () = clear_mappings [%here] client in
+    let%bind () = clear_mappings client in
     let%bind () =
       Keymap.set
-        [%here]
         client
         ~lhs:"a"
         ~rhs:(Viml "a")
@@ -26,7 +25,6 @@ let%expect_test "Test keymaps" =
     in
     let%bind () =
       Keymap.set
-        [%here]
         client
         ~lhs:"b"
         ~rhs:(Viml "a")
@@ -38,7 +36,6 @@ let%expect_test "Test keymaps" =
     in
     let%bind () =
       Keymap.set
-        [%here]
         client
         ~lhs:"c"
         ~rhs:(Viml "c")
@@ -47,10 +44,8 @@ let%expect_test "Test keymaps" =
         ~nowait:true
         ()
     in
-    let%bind global_keymaps = Keymap.get [%here] client ~scope:`Global ~mode in
-    let%map local_keymaps =
-      Keymap.get [%here] client ~scope:(`Buffer_local Current) ~mode
-    in
+    let%bind global_keymaps = Keymap.get client ~scope:`Global ~mode in
+    let%map local_keymaps = Keymap.get client ~scope:(`Buffer_local Current) ~mode in
     let keymaps = global_keymaps @ local_keymaps in
     print_s [%message "Test" (mode : Keymap.Mode.t) (keymaps : Keymap.t list)]
   in
@@ -161,10 +156,9 @@ let%expect_test "Test unsetting keymap in specific mode" =
   let%bind () =
     with_client (fun client ->
       let open Deferred.Or_error.Let_syntax in
-      let%bind () = clear_mappings [%here] client in
+      let%bind () = clear_mappings client in
       let%bind () =
         Keymap.set
-          [%here]
           client
           ~lhs:"a"
           ~rhs:(Viml "a")
@@ -172,14 +166,10 @@ let%expect_test "Test unsetting keymap in specific mode" =
           ~scope:`Global
           ()
       in
-      let%bind () = Keymap.unset [%here] client ~lhs:"a" ~mode:Visual ~scope:`Global in
-      let%bind () = Keymap.unset [%here] client ~lhs:"a" ~mode:Normal ~scope:`Global in
+      let%bind () = Keymap.unset client ~lhs:"a" ~mode:Visual ~scope:`Global in
+      let%bind () = Keymap.unset client ~lhs:"a" ~mode:Normal ~scope:`Global in
       let%map keymaps =
-        Keymap.get
-          [%here]
-          client
-          ~scope:`Global
-          ~mode:Normal_and_visual_and_operator_pending
+        Keymap.get client ~scope:`Global ~mode:Normal_and_visual_and_operator_pending
       in
       print_s [%message "Remaining keymaps" (keymaps : Keymap.t list)])
   in
@@ -198,10 +188,9 @@ let%expect_test "Test unsetting keymap in specific mode" =
 let%expect_test "Test replacing keycodes in an expr mapping" =
   with_ui_client (fun client ui ->
     let open Deferred.Or_error.Let_syntax in
-    let%bind () = clear_mappings [%here] client in
+    let%bind () = clear_mappings client in
     let%bind () =
       Nvim.exec_viml
-        [%here]
         client
         {| function! SayHi()
              return ":echo 'Hi'<CR>"
@@ -210,7 +199,6 @@ let%expect_test "Test replacing keycodes in an expr mapping" =
     let test ~replace_keycodes =
       let%bind () =
         Keymap.set_expr
-          [%here]
           client
           ~lhs:"X"
           ~rhs:(Viml "SayHi()")
@@ -219,9 +207,9 @@ let%expect_test "Test replacing keycodes in an expr mapping" =
           ~scope:`Global
           ()
       in
-      let%bind keymaps = Keymap.get [%here] client ~scope:`Global ~mode:Normal in
+      let%bind keymaps = Keymap.get client ~scope:`Global ~mode:Normal in
       print_s [%sexp (keymaps : Keymap.t list)];
-      let%bind () = Nvim.feedkeys [%here] client (`Raw "X") ~mode:"t" in
+      let%bind () = Nvim.feedkeys client (`Raw "X") ~mode:"t" in
       get_screen_contents ui >>| print_endline
     in
     let%bind () = test ~replace_keycodes:true in

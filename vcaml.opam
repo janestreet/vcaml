@@ -32,7 +32,7 @@ depends: [
   "angstrom"                   {>= "0.15.0"}
   "angstrom-async"             {>= "0.15.0"}
   "bigstringaf"
-  "dune"                       {>= "3.11.0"}
+  "dune"                       {>= "3.17.0"}
   "faraday"                    {>= "0.8.1"}
   "re"                         {>= "1.8.0"}
 ]

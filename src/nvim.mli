@@ -6,43 +6,59 @@ module Buffer := Unshadow_buffer
 
 (** Neovim API functions that are not bound to a particular Neovim object. *)
 
-val get_current_buf : Source_code_position.t -> _ Client.t -> Buffer.t Deferred.Or_error.t
+val get_current_buf
+  :  ?here:Stdlib.Lexing.position
+  -> _ Client.t
+  -> Buffer.t Deferred.Or_error.t
 
 val set_current_buf
-  :  Source_code_position.t
+  :  ?here:Stdlib.Lexing.position
   -> _ Client.t
   -> Buffer.t
   -> unit Deferred.Or_error.t
 
-val get_current_win : Source_code_position.t -> _ Client.t -> Window.t Deferred.Or_error.t
+val get_current_win
+  :  ?here:Stdlib.Lexing.position
+  -> _ Client.t
+  -> Window.t Deferred.Or_error.t
 
 val set_current_win
-  :  Source_code_position.t
+  :  ?here:Stdlib.Lexing.position
   -> _ Client.t
   -> Window.t
   -> unit Deferred.Or_error.t
 
 val get_current_tab
-  :  Source_code_position.t
+  :  ?here:Stdlib.Lexing.position
   -> _ Client.t
   -> Tabpage.t Deferred.Or_error.t
 
 val set_current_tab
-  :  Source_code_position.t
+  :  ?here:Stdlib.Lexing.position
   -> _ Client.t
   -> Tabpage.t
   -> unit Deferred.Or_error.t
 
 (** List all valid buffers, irrespective of whether they are 'buflisted' (and irrespective
     of whether they are loaded). *)
-val list_bufs : Source_code_position.t -> _ Client.t -> Buffer.t list Deferred.Or_error.t
+val list_bufs
+  :  ?here:Stdlib.Lexing.position
+  -> _ Client.t
+  -> Buffer.t list Deferred.Or_error.t
 
-val list_wins : Source_code_position.t -> _ Client.t -> Window.t list Deferred.Or_error.t
-val list_tabs : Source_code_position.t -> _ Client.t -> Tabpage.t list Deferred.Or_error.t
+val list_wins
+  :  ?here:Stdlib.Lexing.position
+  -> _ Client.t
+  -> Window.t list Deferred.Or_error.t
+
+val list_tabs
+  :  ?here:Stdlib.Lexing.position
+  -> _ Client.t
+  -> Tabpage.t list Deferred.Or_error.t
 
 (** Get a global variable (see `:h g:`). *)
 val get_var
-  :  Source_code_position.t
+  :  ?here:Stdlib.Lexing.position
   -> _ Client.t
   -> string
   -> type_:'a Type.t
@@ -52,7 +68,7 @@ val get_var
     freedom to change the values of these variables. If that would be undesirable, keep
     your state management inside your plugin. *)
 val set_var
-  :  Source_code_position.t
+  :  ?here:Stdlib.Lexing.position
   -> _ Client.t
   -> string
   -> type_:'a Type.t
@@ -61,14 +77,14 @@ val set_var
 
 (** Delete a global variable (see `:h g:`). *)
 val delete_var
-  :  Source_code_position.t
+  :  ?here:Stdlib.Lexing.position
   -> _ Client.t
   -> string
   -> unit Deferred.Or_error.t
 
 (** vvar refers to a special vim variable (see `:h vim-variable`). *)
 val get_vvar
-  :  Source_code_position.t
+  :  ?here:Stdlib.Lexing.position
   -> _ Client.t
   -> string
   -> type_:'a Type.t
@@ -77,7 +93,7 @@ val get_vvar
 (** Set a special vim variable (see `:h vim-variable`). Not all variables can be set by
     the user - see documentation of each variable to see if [set_vvar] is appropriate. *)
 val set_vvar
-  :  Source_code_position.t
+  :  ?here:Stdlib.Lexing.position
   -> _ Client.t
   -> string
   -> type_:'a Type.t
@@ -87,7 +103,7 @@ val set_vvar
 (** Evaluate a single VimL (Vimscript) expression. To just call a function, use
     [call_function] instead. *)
 val eval_viml_expression
-  :  Source_code_position.t
+  :  ?here:Stdlib.Lexing.position
   -> _ Client.t
   -> string
   -> result_type:'a Type.t
@@ -98,14 +114,14 @@ module Func : sig
       [t] bear the following in mind:
 
       1. If you are modeling a function that takes no arguments, just use [return T]. Do
-      not use [Nil @-> return T].
+         not use [Nil @-> return T].
 
       2. If you are modeling a native (non-API) VimL function that does not have an
-      explicit return statement, its implicit return is [Integer 0], not [Nil].
+         explicit return statement, its implicit return is [Integer 0], not [Nil].
 
       3. VimL and Lua functions may return values of different types. When modeling a
-      function that does this you will need to use [return Object] and parse the
-      [Msgpack.t] yourself. *)
+         function that does this you will need to use [return Object] and parse the
+         [Msgpack.t] yourself. *)
   type 'fn t
 
   val return : 'a Type.t -> 'a Deferred.Or_error.t t
@@ -120,53 +136,66 @@ end
     Example:
     {[
       let sqrt =
-        call_function
-          ~name:(`Viml "sqrt")
-          ~type_:Nvim.Func.(Float @-> return Float)
+        call_function ~name:(`Viml "sqrt") ~type_:Nvim.Func.(Float @-> return Float)
       in
       sqrt [%here] client 0.5
-      ;;
     ]} *)
 val call_function
-  :  Source_code_position.t
+  :  ?here:Stdlib.Lexing.position
   -> _ Client.t
   -> name:[ `Viml of string | `Lua of string ]
   -> type_:'fn Func.t
   -> 'fn
 
 (** Run a series of Vim commands, like [:source]-ing an anonymous VimL file. *)
-val exec_viml : Source_code_position.t -> _ Client.t -> string -> unit Deferred.Or_error.t
+val exec_viml
+  :  ?here:Stdlib.Lexing.position
+  -> _ Client.t
+  -> string
+  -> unit Deferred.Or_error.t
 
 (** When capturing output, the `:silent` modifier is implicitly in effect. To force
     messages to appear on the screen during execution, use `:unsilent`. See `:h :silent`
     and `:h :unsilent` for more information. *)
 val exec_viml_and_capture_output
-  :  Source_code_position.t
+  :  ?here:Stdlib.Lexing.position
   -> _ Client.t
   -> string
   -> string Deferred.Or_error.t
 
 (** Run a series of Lua commands, like [:source]-ing an anonymous Lua file. *)
-val exec_lua : Source_code_position.t -> _ Client.t -> string -> unit Deferred.Or_error.t
-
-val out_write : Source_code_position.t -> _ Client.t -> string -> unit Deferred.Or_error.t
-
-val out_writeln
-  :  Source_code_position.t
+val exec_lua
+  :  ?here:Stdlib.Lexing.position
   -> _ Client.t
   -> string
   -> unit Deferred.Or_error.t
 
-val err_write : Source_code_position.t -> _ Client.t -> string -> unit Deferred.Or_error.t
+val out_write
+  :  ?here:Stdlib.Lexing.position
+  -> _ Client.t
+  -> string
+  -> unit Deferred.Or_error.t
+
+val out_writeln
+  :  ?here:Stdlib.Lexing.position
+  -> _ Client.t
+  -> string
+  -> unit Deferred.Or_error.t
+
+val err_write
+  :  ?here:Stdlib.Lexing.position
+  -> _ Client.t
+  -> string
+  -> unit Deferred.Or_error.t
 
 val err_writeln
-  :  Source_code_position.t
+  :  ?here:Stdlib.Lexing.position
   -> _ Client.t
   -> string
   -> unit Deferred.Or_error.t
 
 val echo
-  :  Source_code_position.t
+  :  ?here:Stdlib.Lexing.position
   -> _ Client.t
   -> Highlighted_text.t
   -> add_to_history:bool
@@ -176,7 +205,7 @@ val echo
     request completes. This function hacks around that limitation. For more details about
     this echoing limitation, see https://github.com/neovim/neovim/issues/14449. *)
 val echo_in_rpcrequest
-  :  Source_code_position.t
+  :  ?here:Stdlib.Lexing.position
   -> _ Client.t
   -> string
   -> unit Deferred.Or_error.t
@@ -197,10 +226,10 @@ end
     left to the user or to plugins that are specifically intending to globally affect how
     notifications are handled.
 
-    This function should not be confused with [Notifier.notify], which is used to send
-    RPC notifications to Neovim. *)
+    This function should not be confused with [Notifier.notify], which is used to send RPC
+    notifications to Neovim. *)
 val notify
-  :  Source_code_position.t
+  :  ?here:Stdlib.Lexing.position
   -> _ Client.t
   -> Log_level.t
   -> string
@@ -209,42 +238,42 @@ val notify
 type keys_with_replaced_keycodes = private string
 
 val replace_termcodes_only
-  :  Source_code_position.t
+  :  ?here:Stdlib.Lexing.position
   -> _ Client.t
   -> string
   -> string Deferred.Or_error.t
 
 val replace_termcodes_and_keycodes
-  :  Source_code_position.t
+  :  ?here:Stdlib.Lexing.position
   -> _ Client.t
   -> string
   -> keys_with_replaced_keycodes Deferred.Or_error.t
 
 (** Send keystrokes to Neovim (see `:h feedkeys`) *)
 val feedkeys
-  :  Source_code_position.t
+  :  ?here:Stdlib.Lexing.position
   -> _ Client.t
   -> [ `Raw of string
        (** This string is not escaped. To escape key codes, first call
-         [replace_termcodes_and_keycodes], then pass the result with [`Keycodes]. *)
+           [replace_termcodes_and_keycodes], then pass the result with [`Keycodes]. *)
      | `Keycodes of keys_with_replaced_keycodes
      ]
   -> mode:string
   -> unit Deferred.Or_error.t
 
 val get_color_map
-  :  Source_code_position.t
+  :  ?here:Stdlib.Lexing.position
   -> _ Client.t
   -> Color.True_color.t String.Map.t Deferred.Or_error.t
 
 val get_color_by_name
-  :  Source_code_position.t
+  :  ?here:Stdlib.Lexing.position
   -> _ Client.t
   -> string
   -> Color.True_color.t Deferred.Or_error.t
 
 val get_hl_by_name
-  :  Source_code_position.t
+  :  ?here:Stdlib.Lexing.position
   -> _ Client.t
   -> ?ns_id:Color.Namespace.t
   -> string
@@ -256,13 +285,13 @@ module Highlight_id : sig
 end
 
 val get_hl_id_by_name
-  :  Source_code_position.t
+  :  ?here:Stdlib.Lexing.position
   -> _ Client.t
   -> string
   -> Highlight_id.t Deferred.Or_error.t
 
 val get_hl_by_id
-  :  Source_code_position.t
+  :  ?here:Stdlib.Lexing.position
   -> _ Client.t
   -> ?ns_id:Color.Namespace.t
   -> Highlight_id.t
@@ -270,7 +299,7 @@ val get_hl_by_id
   -> 'a Color.Highlight.t Deferred.Or_error.t
 
 val list_runtime_paths
-  :  Source_code_position.t
+  :  ?here:Stdlib.Lexing.position
   -> _ Client.t
   -> string list Deferred.Or_error.t
 
@@ -319,19 +348,23 @@ end
 
 (** These API functions are served immediately without waiting in the input queue. *)
 module Fast : sig
-  (** There is a Neovim bug where calling [get_mode] during an [rpcrequest] will hang.
-      See https://github.com/neovim/neovim/issues/14451. *)
+  (** There is a Neovim bug where calling [get_mode] during an [rpcrequest] will hang. See
+      https://github.com/neovim/neovim/issues/14451. *)
   val get_mode
-    :  Source_code_position.t
+    :  ?here:Stdlib.Lexing.position
     -> _ Client.t
     -> Mode.With_blocking_info.t Deferred.Or_error.t
 
   (** Queue raw user input. *)
-  val input : Source_code_position.t -> _ Client.t -> string -> int Deferred.Or_error.t
+  val input
+    :  ?here:Stdlib.Lexing.position
+    -> _ Client.t
+    -> string
+    -> int Deferred.Or_error.t
 
   (** Send a mouse event from the GUI. *)
   val input_mouse
-    :  Source_code_position.t
+    :  ?here:Stdlib.Lexing.position
     -> _ Client.t
     -> ?modifiers:Key_modifier.Set.t
     -> ?grid:int
@@ -343,7 +376,7 @@ module Fast : sig
   (** Evaluates a tabline-formatted string (see `:h setting-tabline`). To evaluate a
       string for a window's statusline, see [Window.eval_statusline]. *)
   val eval_tabline
-    :  Source_code_position.t
+    :  ?here:Stdlib.Lexing.position
     -> _ Client.t
     -> ?max_width:int
     -> ?fill_char:char
@@ -352,13 +385,13 @@ module Fast : sig
     -> Tabline.t Deferred.Or_error.t
 
   val find_runtime_file_matching
-    :  Source_code_position.t
+    :  ?here:Stdlib.Lexing.position
     -> _ Client.t
     -> pattern:string
     -> string option Deferred.Or_error.t
 
   val all_runtime_files_matching
-    :  Source_code_position.t
+    :  ?here:Stdlib.Lexing.position
     -> _ Client.t
     -> pattern:string
     -> string list Deferred.Or_error.t
@@ -366,7 +399,7 @@ end
 
 (** Paste text at the cursor. This is the "paste" in "copy-paste." *)
 val paste
-  :  Source_code_position.t
+  :  ?here:Stdlib.Lexing.position
   -> _ Client.t
   -> string list
   -> unit Deferred.Or_error.t
@@ -375,7 +408,7 @@ val paste
     client at a time. The returned deferred is filled after the writer is closed and the
     paste stream has flushed to Neovim. *)
 val paste_stream
-  :  Source_code_position.t
+  :  ?here:Stdlib.Lexing.position
   -> _ Client.t
   -> string Pipe.Writer.t * unit Deferred.Or_error.t
 
@@ -390,7 +423,7 @@ end
     edit is not best expressed relative to the cursor, [Buffer.set_lines] or
     [Buffer.set_text] will likely be better fits. *)
 val put
-  :  Source_code_position.t
+  :  ?here:Stdlib.Lexing.position
   -> _ Client.t
   -> ?text_mode:Text_mode.t
   -> string list
@@ -400,21 +433,21 @@ val put
 
 (** Get information about a given channel (see `:h channel`). *)
 val get_channel_info
-  :  Source_code_position.t
+  :  ?here:Stdlib.Lexing.position
   -> _ Client.t
   -> int
   -> Channel_info.t Deferred.Or_error.t
 
 (** List all channels connected to Neovim (see `:h channel`). *)
 val channels
-  :  Source_code_position.t
+  :  ?here:Stdlib.Lexing.position
   -> _ Client.t
   -> Channel_info.t list Deferred.Or_error.t
 
 (** Set client information for your plugin. Some bits of information are already handled
     for you by VCaml, such as the client name and registered methods. *)
 val set_client_info
-  :  Source_code_position.t
+  :  ?here:Stdlib.Lexing.position
   -> _ Client.t
   -> ?version:Client_info.Version.t
   -> ?attributes:string String.Map.t
@@ -426,7 +459,7 @@ val set_client_info
     multiple lines you will need to follow your newlines with carriage returns. See also
     [Buffer.Untested.open_term]. *)
 val send_to_channel
-  :  Source_code_position.t
+  :  ?here:Stdlib.Lexing.position
   -> _ Client.t
   -> channel:int
   -> string
@@ -434,7 +467,7 @@ val send_to_channel
 
 (** If you want to access lines other than the current line, use [Buffer.get_lines]. *)
 val get_current_line
-  :  Source_code_position.t
+  :  ?here:Stdlib.Lexing.position
   -> _ Client.t
   -> String.Utf8.t Deferred.Or_error.t
 
@@ -443,13 +476,16 @@ val get_current_line
     [String.Utf8.t] for ergonomic reasons; validity can be tested with
     [String.Utf8.is_valid]). *)
 val set_current_line
-  :  Source_code_position.t
+  :  ?here:Stdlib.Lexing.position
   -> _ Client.t
   -> string
   -> unit Deferred.Or_error.t
 
 (** If you want to delete lines other than the current line, use [Buffer.set_lines]. *)
-val delete_current_line : Source_code_position.t -> _ Client.t -> unit Deferred.Or_error.t
+val delete_current_line
+  :  ?here:Stdlib.Lexing.position
+  -> _ Client.t
+  -> unit Deferred.Or_error.t
 
 module Context_type : sig
   type t =
@@ -464,18 +500,18 @@ module Context_type : sig
   include Comparable.S_plain with type t := t
 end
 
-(** Although the context for each key is made available as a [Msgpack.t] instead of
-    being represented as an abstract type, inspecting the context is unlikely to be
-    helpful. It should be treated as an opaque value for passing to [load_context]. *)
+(** Although the context for each key is made available as a [Msgpack.t] instead of being
+    represented as an abstract type, inspecting the context is unlikely to be helpful. It
+    should be treated as an opaque value for passing to [load_context]. *)
 val get_context
-  :  Source_code_position.t
+  :  ?here:Stdlib.Lexing.position
   -> _ Client.t
   -> Context_type.Set.t
   -> Msgpack.t Context_type.Map.t Deferred.Or_error.t
 
 (** Load context that was retrieved by [get_context] to restore editor state. *)
 val load_context
-  :  Source_code_position.t
+  :  ?here:Stdlib.Lexing.position
   -> _ Client.t
   -> Msgpack.t Context_type.Map.t
   -> unit Deferred.Or_error.t
@@ -483,20 +519,20 @@ val load_context
 (** Get a native uppercase mark (see `:h mark-motions`). Use [Buffer.get_mark] to get a
     lowercase mark. *)
 val get_mark
-  :  Source_code_position.t
+  :  ?here:Stdlib.Lexing.position
   -> _ Client.t
   -> char
   -> (Buffer.t * Mark.t) option Deferred.Or_error.t
 
 (** Delete a native uppercase mark (see `:h mark-motions`). *)
 val delete_mark
-  :  Source_code_position.t
+  :  ?here:Stdlib.Lexing.position
   -> _ Client.t
   -> char
   -> unit Or_error.t Deferred.t
 
 val get_display_width_of_text
-  :  Source_code_position.t
+  :  ?here:Stdlib.Lexing.position
   -> _ Client.t
   -> string
   -> int Deferred.Or_error.t
@@ -506,7 +542,7 @@ val get_display_width_of_text
     may not be what you want. See `:h current-directory`, `:h chdir()`, `:h getcwd()`, and
     `:h haslocaldir()`. *)
 val set_current_dir
-  :  Source_code_position.t
+  :  ?here:Stdlib.Lexing.position
   -> _ Client.t
   -> string
   -> unit Deferred.Or_error.t
@@ -721,11 +757,17 @@ module Option : sig
   [@@deriving sexp_of]
   (*$*)
 
-  val get : Source_code_position.t -> _ Client.t -> 'a t -> 'a Deferred.Or_error.t
-  val set : Source_code_position.t -> _ Client.t -> 'a t -> 'a -> unit Deferred.Or_error.t
+  val get : ?here:Stdlib.Lexing.position -> _ Client.t -> 'a t -> 'a Deferred.Or_error.t
+
+  val set
+    :  ?here:Stdlib.Lexing.position
+    -> _ Client.t
+    -> 'a t
+    -> 'a
+    -> unit Deferred.Or_error.t
 
   val get_dynamic_info
-    :  Source_code_position.t
+    :  ?here:Stdlib.Lexing.position
     -> _ Client.t
     -> 'a t
     -> 'a Dynamic_option_info.t Deferred.Or_error.t

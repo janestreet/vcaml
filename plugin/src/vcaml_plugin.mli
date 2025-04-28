@@ -22,8 +22,8 @@ module Oneshot : sig
     type t
 
     val create
-      :  Source_code_position.t
-      -> name:string
+      :  ?here:Stdlib.Lexing.position
+      -> string
       -> type_:'fn Ocaml_from_nvim.Blocking.t
       -> f:(client:[ `blocking ] Client.t -> 'fn)
       -> t
@@ -45,18 +45,18 @@ module Persistent : sig
   module Rpc : sig
     type 'state t
 
-    (** This is a wrapper around [Ocaml_from_nvim.register_request_blocking]. See
-        its documentation to understand the arguments here. *)
+    (** This is a wrapper around [Ocaml_from_nvim.register_request_blocking]. See its
+        documentation to understand the arguments here. *)
     val create_blocking
       :  ?on_keyboard_interrupt:(unit -> unit)
-      -> Source_code_position.t
-      -> name:string
+      -> ?here:Stdlib.Lexing.position
+      -> string
       -> type_:'fn Ocaml_from_nvim.Blocking.t
       -> f:
            ('state
             -> run_in_background:
-                 (Source_code_position.t
-                  -> f:([ `asynchronous ] Client.t -> unit Deferred.Or_error.t)
+                 (?here:Stdlib.Lexing.position
+                  -> ([ `asynchronous ] Client.t -> unit Deferred.Or_error.t)
                   -> unit)
             -> client:[ `blocking ] Client.t
             -> 'fn)
@@ -65,8 +65,8 @@ module Persistent : sig
     (** This is a wrapper around [Ocaml_from_nvim.register_request_async]. See its
         documentation to understand the arguments here. *)
     val create_async
-      :  Source_code_position.t
-      -> name:string
+      :  ?here:Stdlib.Lexing.position
+      -> string
       -> type_:'fn Ocaml_from_nvim.Async.t
       -> f:('state -> client:[ `asynchronous ] Client.t -> 'fn)
       -> 'state t

@@ -55,14 +55,14 @@ let spin_until_nvim_creates_socket_file pid ~socket =
    about to enter a state after which it will not be able to communicate (e.g., because
    it is exiting or because it will be uninterruptible for some reason). This function
    lets our tests wait for Neovim to reach this point before proceeding. *)
-let writefile here client file ~contents ~then_do =
+let writefile ?(here = Stdlib.Lexing.dummy_pos) client file ~contents ~then_do =
   let open Expert in
   let writefile =
     Atomic.T
       (Nvim_internal.nvim_eval
          ~expr:(sprintf "writefile(['%s'], '%s', 's')" contents file))
   in
-  match%map Atomic.run here client (writefile :: then_do) with
+  match%map Atomic.run ~here client (writefile :: then_do) with
   | Error error -> Error (Atomic.Error.to_error error)
   | Ok (Int result :: _) ->
     (match result with
@@ -90,7 +90,6 @@ let attempt_to_quit ~tmp_dir ~client =
   let%bind () = Unix.mkfifo fifo in
   don't_wait_for
     (writefile
-       [%here]
        client
        fifo
        ~contents:":q"

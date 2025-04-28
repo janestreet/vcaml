@@ -51,13 +51,13 @@ module Nvim_version : sig
       1. Neovim users generally keep their versions of Neovim up-to-date.
 
       2. Neovim plugin managers support pinning to particular commits, so when the version
-      of VCaml used by a plugin is upgraded, the plugin can communicate the updated Neovim
-      version requirements in the README and users can handle the version change by
-      pinning to a compatible commit or by upgrading their editor.
+         of VCaml used by a plugin is upgraded, the plugin can communicate the updated
+         Neovim version requirements in the README and users can handle the version change
+         by pinning to a compatible commit or by upgrading their editor.
 
       3. Servicing older versions of Neovim is not a priority for the Neovim core team.
-      They do not backport patches more than one minor release and do not address bug
-      reports for versions of Neovim that are older than the last minor release. *)
+         They do not backport patches more than one minor release and do not address bug
+         reports for versions of Neovim that are older than the last minor release. *)
   val api_compatible : int
 end
 
@@ -67,14 +67,14 @@ end
     further uses of the client passed to [f] after [f] returns will result in an error
     (e.g., do not store the client in a ref). *)
 val block_nvim
-  :  Source_code_position.t
+  :  ?here:Stdlib.Lexing.position
   -> [ `asynchronous ] Client.t
   -> f:([ `blocking ] Client.t -> 'a Deferred.Or_error.t)
   -> 'a Deferred.Or_error.t
 
 (** Same as [block_nvim] but with more explicit modeling of keyboard interrupt errors. *)
 val block_nvim'
-  :  Source_code_position.t
+  :  ?here:Stdlib.Lexing.position
   -> [ `asynchronous ] Client.t
   -> f:([ `blocking ] Client.t -> 'a Deferred.Or_error.t)
   -> [ `Ok of 'a | `Keyboard_interrupted | `Error of Error.t ] Deferred.t
@@ -134,12 +134,12 @@ module Client : sig
       invoke a callback in Neovim to continue.
 
       The [Embed] connection is the inverse of the [Stdio] connection - instead of the
-      OCaml app being launched by Neovim, Neovim is launched by the OCaml app. Just as
-      in a [Stdio] connection the app's stdin and stdout are used for RPC communication,
-      here Neovim's stdin and stdout are used to communicate with the embedding process.
-      [Embed] is most useful for testing and for graphical applications that want to
-      embed Neovim for editing text. When [Embed] is used the [--embed] flag must be
-      passed in [args]. *)
+      OCaml app being launched by Neovim, Neovim is launched by the OCaml app. Just as in
+      a [Stdio] connection the app's stdin and stdout are used for RPC communication, here
+      Neovim's stdin and stdout are used to communicate with the embedding process.
+      [Embed] is most useful for testing and for graphical applications that want to embed
+      Neovim for editing text. When [Embed] is used the [--embed] flag must be passed in
+      [args]. *)
   module Connection_type : sig
     type _ t =
       | Socket :
@@ -186,10 +186,7 @@ end
 module Private : sig
   module Nvim_internal = Nvim_internal
   module Nvim_lock = Nvim_lock
-
-  module Source_code_position : sig
-    type t = Core.Source_code_position.t [@@deriving equal, sexp_of]
-  end
+  module Source_code_position = Source_code_position
 
   val attach_client
     :  ?wrap_connection:(Reader.t -> Writer.t -> (Reader.t * Writer.t) Deferred.t)
@@ -201,7 +198,7 @@ module Private : sig
 
   val notify_nvim_of_error
     :  _ Client.t
-    -> Source_code_position.t
+    -> ?here:Stdlib.Lexing.position
     -> Error.t
     -> unit Deferred.t
 

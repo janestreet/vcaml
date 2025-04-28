@@ -19,10 +19,9 @@ let%expect_test "Varargs" =
       Expect_test_helpers_async.with_temp_dir (fun tmp_dir ->
         let open Deferred.Or_error.Let_syntax in
         let test_dispatcher_file = tmp_dir ^/ "test_dispatcher.vim" in
-        let%bind () = Command.exec [%here] client "edit" ~args:[ test_dispatcher_file ] in
+        let%bind () = Command.exec client "edit" ~args:[ test_dispatcher_file ] in
         let%bind () =
           Buffer.set_lines
-            [%here]
             client
             Current
             ~start:0
@@ -30,11 +29,10 @@ let%expect_test "Varargs" =
             ~strict_indexing:true
             vimscript
         in
-        let%bind () = Command.exec [%here] client "write" in
-        let%bind () = Command.exec [%here] client "source" ~args:[ "%" ] in
+        let%bind () = Command.exec client "write" in
+        let%bind () = Command.exec client "source" ~args:[ "%" ] in
         let nvim_call_function ~run_in_background:_ ~client func args =
           Nvim.call_function
-            [%here]
             client
             ~name:(`Viml "nvim_call_function")
             ~type_:Nvim.Func.(String @-> Array Object @-> return Object)
@@ -42,7 +40,6 @@ let%expect_test "Varargs" =
             args
         in
         Ocaml_from_nvim.register_request_blocking
-          [%here]
           (Connected client)
           ~name:"call"
           ~type_:
@@ -54,7 +51,7 @@ let%expect_test "Varargs" =
             !"TestDispatcher(function(\"rpcrequest\", [ %d, \"call\" ]))"
             (Client.channel client)
         in
-        Nvim.eval_viml_expression [%here] client expr ~result_type:(Array Int)))
+        Nvim.eval_viml_expression client expr ~result_type:(Array Int)))
   in
   let%bind result = with_timeout (Time_float.Span.of_int_sec 3) result in
   print_s [%sexp (result : [ `Result of int list | `Timeout ])];
@@ -78,10 +75,9 @@ let%expect_test "Varargs (async)" =
       Expect_test_helpers_async.with_temp_dir (fun tmp_dir ->
         let open Deferred.Or_error.Let_syntax in
         let test_printer_file = tmp_dir ^/ "test_printer.vim" in
-        let%bind () = Command.exec [%here] client "edit" ~args:[ test_printer_file ] in
+        let%bind () = Command.exec client "edit" ~args:[ test_printer_file ] in
         let%bind () =
           Buffer.set_lines
-            [%here]
             client
             Current
             ~start:0
@@ -89,10 +85,9 @@ let%expect_test "Varargs (async)" =
             ~strict_indexing:true
             vimscript
         in
-        let%bind () = Command.exec [%here] client "write" in
-        let%bind () = Command.exec [%here] client "source" ~args:[ "%" ] in
+        let%bind () = Command.exec client "write" in
+        let%bind () = Command.exec client "source" ~args:[ "%" ] in
         Ocaml_from_nvim.register_request_async
-          [%here]
           (Connected client)
           ~name:"print"
           ~type_:Ocaml_from_nvim.Async.(String @-> Expert.varargs Object)
@@ -104,7 +99,7 @@ let%expect_test "Varargs (async)" =
             !"TestPrinter(function(\"rpcnotify\", [ %d, \"print\" ]))"
             (Client.channel client)
         in
-        Nvim.eval_viml_expression [%here] client expr ~result_type:String))
+        Nvim.eval_viml_expression client expr ~result_type:String))
   in
   let%bind result =
     with_timeout

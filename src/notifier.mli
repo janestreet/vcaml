@@ -24,7 +24,7 @@ end
 (** This function is analogous to [Nvim.call_function] but is used for calling functions
     as notifications. *)
 val notify
-  :  Source_code_position.t
+  :  ?here:Stdlib.Lexing.position
   -> _ Client.t
   -> name:[ `Viml of string | `Lua of string ]
   -> type_:'fn Func.t
@@ -36,7 +36,7 @@ module Untested : sig
       [nvim_buf_add_highlight] as an asynchronous notification, after first
       (synchronously) requesting a source id. *)
   val nvim_buf_add_highlight
-    :  Source_code_position.t
+    :  ?here:Stdlib.Lexing.position
     -> _ Client.t
     -> Nvim_internal.Buffer.Or_current.t
     -> namespace:Namespace.t

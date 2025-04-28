@@ -9,8 +9,8 @@ type t
     [v:servername] or $NVIM. *)
 val open_ : string -> t
 
-(** Get the channel for this connection. Once you have this you can issue [rpcrequest]
-    and [rpcnotify] calls from your running Neovim instance to OCaml. *)
+(** Get the channel for this connection. Once you have this you can issue [rpcrequest] and
+    [rpcnotify] calls from your running Neovim instance to OCaml. *)
 val channel : t -> int
 
 (** Send a synchronous request. *)

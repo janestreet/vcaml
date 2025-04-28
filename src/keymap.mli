@@ -42,12 +42,11 @@ type t =
   }
 [@@deriving sexp_of]
 
-(** Queries keymappings for a given scope and mode. For simple modes, returns all
-    mappings that apply in that mode. For complex modes, returns all mappings that apply
-    in any of the constituent modes. Queries for [Language] mode return only language
-    mappings. *)
+(** Queries keymappings for a given scope and mode. For simple modes, returns all mappings
+    that apply in that mode. For complex modes, returns all mappings that apply in any of
+    the constituent modes. Queries for [Language] mode return only language mappings. *)
 val get
-  :  Source_code_position.t
+  :  ?here:Stdlib.Lexing.position
   -> _ Client.t
   -> scope:[ `Global | `Buffer_local of Nvim_internal.Buffer.Or_current.t ]
   -> mode:Mode.t
@@ -57,21 +56,21 @@ val get
     note that [nowait] is only meaningful for buffer-local mappings; on global mappings it
     has no effect (see :h map-nowait). *)
 val set
-  :  Source_code_position.t
+  :  ?here:Stdlib.Lexing.position
   -> _ Client.t
   -> ?recursive:bool (** default: [false] *)
   -> ?unique:bool (** default: [false] *)
   -> ?nowait:bool (** default: [false] *)
   -> ?silent:bool (** default: [false] *)
   -> ?description:string
-       (** Provide [description] if you use an RPC for [rhs] so the user will understand what
-      the mapping does when they inspect it with [:map lhs]. *)
+       (** Provide [description] if you use an RPC for [rhs] so the user will understand
+           what the mapping does when they inspect it with [:map lhs]. *)
   -> mode:Mode.t
   -> scope:[ `Global | `Buffer_local of Nvim_internal.Buffer.Or_current.t ]
   -> lhs:string (** The "left-hand side" of the mapping (the key sequence to map). *)
   -> rhs:unit Ocaml_from_nvim.Callback.t
-       (** The "right-hand side" of the mapping (what key sequence to run). If you provide an
-      RPC, a key sequence will be run that will invoke it. *)
+       (** The "right-hand side" of the mapping (what key sequence to run). If you provide
+           an RPC, a key sequence will be run that will invoke it. *)
   -> unit
   -> unit Deferred.Or_error.t
 
@@ -81,7 +80,7 @@ val set
     [replace_keycodes] determines whether keycodes in the resulting string will be
     interpreted before being run. *)
 val set_expr
-  :  Source_code_position.t
+  :  ?here:Stdlib.Lexing.position
   -> _ Client.t
   -> ?replace_keycodes:bool (** default: [true] *)
   -> ?recursive:bool (** default: [false] *)
@@ -98,7 +97,7 @@ val set_expr
 
 (** Unset a keymapping. *)
 val unset
-  :  Source_code_position.t
+  :  ?here:Stdlib.Lexing.position
   -> _ Client.t
   -> scope:[ `Global | `Buffer_local of Nvim_internal.Buffer.Or_current.t ]
   -> lhs:string

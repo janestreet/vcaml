@@ -16,11 +16,14 @@ include Hashable.S_plain with type t := t
     returned. Otherwise a new namespace is created. If [name] is omitted, the namespace
     will be anonymous. *)
 val create
-  :  Source_code_position.t
+  :  ?here:Stdlib.Lexing.position
   -> _ Client.t
   -> ?name:string
   -> unit
   -> t Deferred.Or_error.t
 
 (** Retrieve a mapping of all named namespaces. *)
-val all_named : Source_code_position.t -> _ Client.t -> t String.Map.t Deferred.Or_error.t
+val all_named
+  :  ?here:Stdlib.Lexing.position
+  -> _ Client.t
+  -> t String.Map.t Deferred.Or_error.t

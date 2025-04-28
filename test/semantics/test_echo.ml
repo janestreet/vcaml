@@ -6,17 +6,21 @@ open Vcaml_test_helpers
 let run_echo_tests ~f ~message =
   let tests =
     [ ( "native_echo"
-      , fun here client ->
-          Command.exec here client "echo" ~args:[ [%string "'%{message}'"] ] )
-    ; ("api_out_write", fun here client -> Nvim.out_write here client (message ^ "\n"))
+      , fun ?(here = Stdlib.Lexing.dummy_pos) client ->
+          Command.exec ~here client "echo" ~args:[ [%string "'%{message}'"] ] )
+    ; ( "api_out_write"
+      , fun ?(here = Stdlib.Lexing.dummy_pos) client ->
+          Nvim.out_write ~here client (message ^ "\n") )
     ; ( "api_echo"
-      , fun here client ->
+      , fun ?(here = Stdlib.Lexing.dummy_pos) client ->
           Nvim.echo
-            here
+            ~here
             client
             [ { text = message; hl_group = None } ]
             ~add_to_history:false )
-    ; ("api_notify", fun here client -> Nvim.notify here client Info message)
+    ; ( "api_notify"
+      , fun ?(here = Stdlib.Lexing.dummy_pos) client ->
+          Nvim.notify ~here client Info message )
     ]
   in
   Deferred.List.map tests ~how:`Sequential ~f:(fun (name, echo) ->
@@ -33,7 +37,7 @@ let%expect_test "Show echoed content in command line" =
     run_echo_tests ~message:"Hello, world!" ~f:(fun ~echo ->
       with_ui_client (fun client ui ->
         let open Deferred.Or_error.Let_syntax in
-        let%bind () = echo [%here] client in
+        let%bind () = echo client in
         get_screen_contents ui))
   in
   [%expect
@@ -79,13 +83,13 @@ let%expect_test "Test sending errors" =
   let%bind () =
     with_ui_client (fun client ui ->
       let open Deferred.Or_error.Let_syntax in
-      let%bind () = Nvim.err_write [%here] client "This should not display yet..." in
+      let%bind () = Nvim.err_write client "This should not display yet..." in
       let%bind screen = get_screen_contents ui in
       print_endline screen;
-      let%bind () = Nvim.err_write [%here] client "but now it should!\n" in
+      let%bind () = Nvim.err_write client "but now it should!\n" in
       let%bind screen = get_screen_contents ui in
       print_endline screen;
-      let%bind () = Nvim.err_writeln [%here] client "This should display now." in
+      let%bind () = Nvim.err_writeln client "This should display now." in
       let%bind screen = get_screen_contents ui in
       print_endline screen;
       return ())
@@ -199,13 +203,12 @@ let%expect_test "Naively calling [echo] from inside [rpcrequest] fails" =
       ~f:(fun ~echo ->
         let open Deferred.Or_error.Let_syntax in
         let rpc ~run_in_background:_ ~client ui =
-          let%bind () = echo [%here] client in
+          let%bind () = echo client in
           get_screen_contents ui
         in
         with_ui_client (fun client ui ->
           let () =
             Ocaml_from_nvim.register_request_blocking
-              [%here]
               (Connected client)
               ~name:"rpc"
               ~type_:Ocaml_from_nvim.Blocking.(return String)
@@ -213,7 +216,6 @@ let%expect_test "Naively calling [echo] from inside [rpcrequest] fails" =
           in
           let channel = Client.channel client in
           Nvim.eval_viml_expression
-            [%here]
             client
             (sprintf "rpcrequest(%d, 'rpc')" channel)
             ~result_type:String))
@@ -262,7 +264,7 @@ let%expect_test "[echo_in_rpcrequest] hack" =
     let open Deferred.Or_error.Let_syntax in
     let rpc ~run_in_background:_ ~client ui =
       let%bind () =
-        Nvim.echo_in_rpcrequest [%here] client "Hello, world! 'Quotes' \"work\" too."
+        Nvim.echo_in_rpcrequest client "Hello, world! 'Quotes' \"work\" too."
       in
       let%bind screen = get_screen_contents ui in
       print_endline screen;
@@ -271,14 +273,13 @@ let%expect_test "[echo_in_rpcrequest] hack" =
     with_ui_client (fun client ui ->
       let () =
         Ocaml_from_nvim.register_request_blocking
-          [%here]
           (Connected client)
           ~name:"rpc"
           ~type_:Ocaml_from_nvim.Blocking.(return Nil)
           ~f:(rpc ui)
       in
       let channel = Client.channel client in
-      Nvim.exec_viml [%here] client [%string "call rpcrequest(%{channel#Int}, 'rpc')"])
+      Nvim.exec_viml client [%string "call rpcrequest(%{channel#Int}, 'rpc')"])
   in
   [%expect
     {|
@@ -322,7 +323,7 @@ let%expect_test "notify" =
   let test client ui =
     let open Deferred.Or_error.Let_syntax in
     Deferred.Or_error.List.map ~how:`Sequential Nvim.Log_level.all ~f:(fun log_level ->
-      let%bind () = Nvim.notify [%here] client log_level "Test message" in
+      let%bind () = Nvim.notify client log_level "Test message" in
       let%map output = get_screen_contents ui in
       output, log_level)
     >>| String.Map.of_alist_multi
@@ -371,7 +372,6 @@ let%expect_test "notify" =
     with_ui_client (fun client ui ->
       let%bind.Deferred.Or_error () =
         Nvim.exec_lua
-          [%here]
           client
           {|
           function vim.notify(msg, level)

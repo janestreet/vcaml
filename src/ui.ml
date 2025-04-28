@@ -20,7 +20,7 @@ module Description = struct
 end
 
 let attach
-  here
+  ?(here = Stdlib.Lexing.dummy_pos)
   client
   ~width
   ~height
@@ -54,14 +54,16 @@ let attach
          ~key:"override"
          ~data:(Bool (not only_enable_options_supported_by_other_attached_uis))
   in
-  let%bind () = Nvim_internal.nvim_ui_attach ~width ~height ~options |> run here client in
+  let%bind () =
+    Nvim_internal.nvim_ui_attach ~width ~height ~options |> run ~here client
+  in
   upon (Pipe.closed reader) (fun () ->
     don't_wait_for
-      (Nvim_internal.nvim_ui_detach |> run [%here] client |> Deferred.ignore_m));
+      (Nvim_internal.nvim_ui_detach |> run ~here:[%here] client |> Deferred.ignore_m));
   return reader
 ;;
 
-let describe_attached_uis here client =
+let describe_attached_uis ?(here = Stdlib.Lexing.dummy_pos) client =
   Nvim_internal.nvim_list_uis
   |> map_witness ~f:(fun uis ->
     uis
@@ -106,29 +108,36 @@ let describe_attached_uis here client =
             }
         })
     |> Or_error.combine_errors)
-  |> run here client
+  |> run ~here client
 ;;
 
 module Untested = struct
-  let set_focus here client focus =
+  let set_focus ?(here = Stdlib.Lexing.dummy_pos) client focus =
     let gained =
       match focus with
       | `Gained -> true
       | `Lost -> false
     in
-    Nvim_internal.nvim_ui_set_focus ~gained |> run here client
+    Nvim_internal.nvim_ui_set_focus ~gained |> run ~here client
   ;;
 
-  let try_resizing_grid here client ~grid ~width ~height =
-    Nvim_internal.nvim_ui_try_resize_grid ~grid ~width ~height |> run here client
+  let try_resizing_grid ?(here = Stdlib.Lexing.dummy_pos) client ~grid ~width ~height =
+    Nvim_internal.nvim_ui_try_resize_grid ~grid ~width ~height |> run ~here client
   ;;
 
-  let popup_menu_set_height here client ~height =
-    Nvim_internal.nvim_ui_pum_set_height ~height |> run here client
+  let popup_menu_set_height ?(here = Stdlib.Lexing.dummy_pos) client ~height =
+    Nvim_internal.nvim_ui_pum_set_height ~height |> run ~here client
   ;;
 
-  let popup_menu_set_bounds here client ~width ~height ~row ~col =
-    Nvim_internal.nvim_ui_pum_set_bounds ~width ~height ~row ~col |> run here client
+  let popup_menu_set_bounds
+    ?(here = Stdlib.Lexing.dummy_pos)
+    client
+    ~width
+    ~height
+    ~row
+    ~col
+    =
+    Nvim_internal.nvim_ui_pum_set_bounds ~width ~height ~row ~col |> run ~here client
   ;;
 end
 

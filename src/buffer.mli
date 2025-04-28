@@ -26,19 +26,19 @@ module With_changedtick : sig
 end
 
 val get_changedtick
-  :  Source_code_position.t
+  :  ?here:Stdlib.Lexing.position
   -> _ Client.t
   -> Or_current.t
   -> changedtick Deferred.Or_error.t
 
 val get_name
-  :  Source_code_position.t
+  :  ?here:Stdlib.Lexing.position
   -> _ Client.t
   -> Or_current.t
   -> string Deferred.Or_error.t
 
 val set_name
-  :  Source_code_position.t
+  :  ?here:Stdlib.Lexing.position
   -> _ Client.t
   -> Or_current.t
   -> string
@@ -46,7 +46,7 @@ val set_name
 
 (** Read a range of lines from a buffer. Indexing is zero-based, end-exclusive. *)
 val get_lines
-  :  Source_code_position.t
+  :  ?here:Stdlib.Lexing.position
   -> _ Client.t
   -> Or_current.t
   -> start:int
@@ -57,10 +57,11 @@ val get_lines
 (** This function should only be used for linewise replacement when you don't care about
     preserving marks. If you want to preserve marks and/or want characterwise replacement,
     prefer [set_text]. Indexing is zero-based, end-exclusive. The character encoding
-    should be UTF-8 (this function takes a [string list] rather than a [String.Utf8.t
-    list] for ergonomic reasons; validity can be tested with [String.Utf8.is_valid]). *)
+    should be UTF-8 (this function takes a [string list] rather than a
+    [String.Utf8.t list] for ergonomic reasons; validity can be tested with
+    [String.Utf8.is_valid]). *)
 val set_lines
-  :  Source_code_position.t
+  :  ?here:Stdlib.Lexing.position
   -> _ Client.t
   -> ?changedtick:changedtick
   -> Or_current.t
@@ -73,7 +74,7 @@ val set_lines
 (** Similar to [get_lines], but supports retrieving only portions of a line. If you only
     need full lines, prefer [get_lines]. Indexing is zero-based, end-exclusive. *)
 val get_text
-  :  Source_code_position.t
+  :  ?here:Stdlib.Lexing.position
   -> _ Client.t
   -> Or_current.t
   -> start_row:int
@@ -89,7 +90,7 @@ val get_text
     [String.Utf8.t list] for ergonomic reasons; validity can be tested with
     [String.Utf8.is_valid]). *)
 val set_text
-  :  Source_code_position.t
+  :  ?here:Stdlib.Lexing.position
   -> _ Client.t
   -> ?changedtick:changedtick
   -> Or_current.t
@@ -100,10 +101,10 @@ val set_text
   -> string list
   -> unit Or_error.t Deferred.t
 
-(** Create a new buffer. See `:h 'buflisted'` and `:h scratch-buffer` for explanations
-    of [listed] and [scratch] respectively. *)
+(** Create a new buffer. See `:h 'buflisted'` and `:h scratch-buffer` for explanations of
+    [listed] and [scratch] respectively. *)
 val create
-  :  Source_code_position.t
+  :  ?here:Stdlib.Lexing.position
   -> _ Client.t
   -> listed:bool
   -> scratch:bool
@@ -112,7 +113,7 @@ val create
 (** Create a new buffer with the given name or if one already exists, return it. A buffer
     created by this function will be unlisted. *)
 val find_by_name_or_create
-  :  Source_code_position.t
+  :  ?here:Stdlib.Lexing.position
   -> _ Client.t
   -> string
   -> t Deferred.Or_error.t
@@ -136,7 +137,7 @@ val find_by_name_or_create
     [^1]: However, the [BufDelete] event triggers solely in response to unlisting,
     irrespective of whether the buffer is loaded (indeed, it may even be visible). *)
 val unload
-  :  Source_code_position.t
+  :  ?here:Stdlib.Lexing.position
   -> _ Client.t
   -> Or_current.t
   -> even_if_modified:bool
@@ -147,22 +148,22 @@ val unload
     cautionary note about doing this, but that note applies more to regular users than to
     plugin authors wiping out buffers created by their plugin. *)
 val wipeout
-  :  Source_code_position.t
+  :  ?here:Stdlib.Lexing.position
   -> _ Client.t
   -> Or_current.t
   -> even_if_modified:bool
   -> unit Deferred.Or_error.t
 
 (** Will be [false] after calling [unload] on [t]. *)
-val loaded : Source_code_position.t -> _ Client.t -> t -> bool Deferred.Or_error.t
+val loaded : ?here:Stdlib.Lexing.position -> _ Client.t -> t -> bool Deferred.Or_error.t
 
 (** Will be [false] after calling [wipeout] on [t]. *)
-val exists : Source_code_position.t -> _ Client.t -> t -> bool Deferred.Or_error.t
+val exists : ?here:Stdlib.Lexing.position -> _ Client.t -> t -> bool Deferred.Or_error.t
 
 (** Subscribe to updates from a buffer. Only one subscription per buffer is allowed at a
     time. To unsubscribe, close the returned pipe. *)
 val subscribe
-  :  Source_code_position.t
+  :  ?here:Stdlib.Lexing.position
   -> _ Client.t
   -> ?send_buffer:bool (** default: [true] *)
   -> Or_current.t
@@ -170,7 +171,7 @@ val subscribe
 
 (** Get a buffer variable (see `:h b:`). *)
 val get_var
-  :  Source_code_position.t
+  :  ?here:Stdlib.Lexing.position
   -> _ Client.t
   -> Or_current.t
   -> string
@@ -181,7 +182,7 @@ val get_var
     freedom to change the values of these variables. If that would be undesirable, keep
     your state management inside your plugin. *)
 val set_var
-  :  Source_code_position.t
+  :  ?here:Stdlib.Lexing.position
   -> _ Client.t
   -> Or_current.t
   -> string
@@ -191,7 +192,7 @@ val set_var
 
 (** Delete a buffer variable (see `:h b:`). *)
 val delete_var
-  :  Source_code_position.t
+  :  ?here:Stdlib.Lexing.position
   -> _ Client.t
   -> Or_current.t
   -> string
@@ -200,7 +201,7 @@ val delete_var
 (** Get a native lowercase mark (see `:h mark-motions`). Use [Nvim.get_mark] to get an
     uppercase mark. *)
 val get_mark
-  :  Source_code_position.t
+  :  ?here:Stdlib.Lexing.position
   -> _ Client.t
   -> Or_current.t
   -> sym:char
@@ -209,7 +210,7 @@ val get_mark
 (** Set a native lowercase mark (see `:h mark-motions`). To create a mark that will only
     be controlled by your plugin, use an [Extmark.t]. *)
 val set_mark
-  :  Source_code_position.t
+  :  ?here:Stdlib.Lexing.position
   -> _ Client.t
   -> ?changedtick:changedtick
   -> Or_current.t
@@ -218,7 +219,7 @@ val set_mark
 
 (** Delete a native lowercase mark (see `:h mark-motions`). *)
 val delete_mark
-  :  Source_code_position.t
+  :  ?here:Stdlib.Lexing.position
   -> _ Client.t
   -> Or_current.t
   -> char
@@ -226,7 +227,7 @@ val delete_mark
 
 (** Returns the number of lines in the buffer. *)
 val line_count
-  :  Source_code_position.t
+  :  ?here:Stdlib.Lexing.position
   -> _ Client.t
   -> Or_current.t
   -> int With_changedtick.t Deferred.Or_error.t
@@ -237,7 +238,7 @@ val line_count
     in the buffer the offset (which is w.r.t. the UTF-8 encoding) may be different from
     the line's byte offset on disk. *)
 val get_byte_offset_of_line
-  :  Source_code_position.t
+  :  ?here:Stdlib.Lexing.position
   -> _ Client.t
   -> Or_current.t
   -> line:int
@@ -246,7 +247,7 @@ val get_byte_offset_of_line
 (** Open a terminal not connected to a process in this buffer. Useful for displaying
     ANSI-coded text. Returns the channel for use with [Nvim.send_to_channel]. *)
 val open_term
-  :  Source_code_position.t
+  :  ?here:Stdlib.Lexing.position
   -> _ Client.t
   -> Or_current.t
   -> int Deferred.Or_error.t
@@ -256,8 +257,8 @@ module Option : sig
   (** Buffer-specific Neovim options. The ['global] phantom type represents the notion of
       a "global" value for the option. [`none] means setting the global value has no
       effect. [`global] means there is a global value that can be locally overridden.
-      [`copied] means the global value is copied to the local value on buffer creation,
-      so setting it will only affect new buffers. *)
+      [`copied] means the global value is copied to the local value on buffer creation, so
+      setting it will only affect new buffers. *)
   type ('a, 'global) t =
     | Autoindent : (bool, [ `copied ]) t
     | Autoread : (bool, [ `global ]) t
@@ -348,14 +349,14 @@ module Option : sig
 
   (** Get the effective value of the option for the given buffer. *)
   val get
-    :  Source_code_position.t
+    :  ?here:Stdlib.Lexing.position
     -> _ Client.t
     -> Or_current.t
     -> ('a, _) t
     -> 'a Deferred.Or_error.t
 
   val set
-    :  Source_code_position.t
+    :  ?here:Stdlib.Lexing.position
     -> _ Client.t
     -> Or_current.t
     -> ('a, _) t
@@ -364,14 +365,14 @@ module Option : sig
 
   (** Get the global value of the option used by all buffers without local overrides. *)
   val get_default
-    :  Source_code_position.t
+    :  ?here:Stdlib.Lexing.position
     -> _ Client.t
     -> ('a, [ `global ]) t
     -> 'a Deferred.Or_error.t
 
   (** Set the option for all buffers without local overrides. *)
   val set_default
-    :  Source_code_position.t
+    :  ?here:Stdlib.Lexing.position
     -> _ Client.t
     -> ('a, [ `global ]) t
     -> 'a
@@ -379,21 +380,21 @@ module Option : sig
 
   (** Get the value that new buffers will inherit for this option. *)
   val get_for_new_buffers
-    :  Source_code_position.t
+    :  ?here:Stdlib.Lexing.position
     -> _ Client.t
     -> ('a, [ `copied ]) t
     -> 'a Deferred.Or_error.t
 
   (** Set the option for buffers created in the future. *)
   val set_for_new_buffers
-    :  Source_code_position.t
+    :  ?here:Stdlib.Lexing.position
     -> _ Client.t
     -> ('a, [ `copied ]) t
     -> 'a
     -> unit Deferred.Or_error.t
 
   val get_dynamic_info
-    :  Source_code_position.t
+    :  ?here:Stdlib.Lexing.position
     -> _ Client.t
     -> ('a, _) t
     -> 'a Dynamic_option_info.t Deferred.Or_error.t
@@ -401,7 +402,7 @@ end
 
 module Untested : sig
   val add_highlight
-    :  Source_code_position.t
+    :  ?here:Stdlib.Lexing.position
     -> _ Client.t
     -> ?changedtick:changedtick
     -> Or_current.t
@@ -413,7 +414,7 @@ module Untested : sig
     -> unit Deferred.Or_error.t
 
   val clear_namespace
-    :  Source_code_position.t
+    :  ?here:Stdlib.Lexing.position
     -> _ Client.t
     -> Or_current.t
     -> namespace:Namespace.t
@@ -440,20 +441,20 @@ module Untested : sig
   end
 
   val get_extmark
-    :  Source_code_position.t
+    :  ?here:Stdlib.Lexing.position
     -> _ Client.t
     -> Extmark.t
     -> Position.t option With_changedtick.t Deferred.Or_error.t
 
   val get_extmark_with_details
-    :  Source_code_position.t
+    :  ?here:Stdlib.Lexing.position
     -> _ Client.t
     -> ?hl_groups:[ `Ids | `Names ]
     -> Extmark.t
     -> (Position.t * Msgpack.t String.Map.t) option With_changedtick.t Deferred.Or_error.t
 
   val all_extmarks
-    :  Source_code_position.t
+    :  ?here:Stdlib.Lexing.position
     -> _ Client.t
     -> ?start_inclusive:Position.t
     -> ?end_inclusive:Position.t
@@ -464,7 +465,7 @@ module Untested : sig
     -> (Extmark.t * Position.t) list With_changedtick.t Deferred.Or_error.t
 
   val all_extmarks_with_details
-    :  Source_code_position.t
+    :  ?here:Stdlib.Lexing.position
     -> _ Client.t
     -> ?start_inclusive:Position.t
     -> ?end_inclusive:Position.t
@@ -506,7 +507,7 @@ module Untested : sig
     -> 'a
 
   val create_extmark
-    :  Source_code_position.t
+    :  ?here:Stdlib.Lexing.position
     -> _ Client.t
     -> ?changedtick:changedtick
     -> Or_current.t
@@ -515,7 +516,7 @@ module Untested : sig
     -> Extmark.t Deferred.Or_error.t with_extmark_options
 
   val update_extmark
-    :  Source_code_position.t
+    :  ?here:Stdlib.Lexing.position
     -> _ Client.t
     -> ?changedtick:changedtick
     -> Extmark.t
@@ -523,7 +524,7 @@ module Untested : sig
     -> unit Deferred.Or_error.t with_extmark_options
 
   val delete_extmark
-    :  Source_code_position.t
+    :  ?here:Stdlib.Lexing.position
     -> _ Client.t
     -> Extmark.t
     -> unit Deferred.Or_error.t

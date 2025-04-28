@@ -13,8 +13,8 @@ let%expect_test "Error inside [block_nvim] is displayed with callsite" =
   let%bind () =
     with_client (fun client ->
       let%map result =
-        block_nvim line2 client ~f:(fun client ->
-          Command.exec line3 client "DoesNotExist")
+        block_nvim ~here:line2 client ~f:(fun client ->
+          Command.exec ~here:line3 client "DoesNotExist")
       in
       print_s [%sexp (result : unit Or_error.t)];
       Ok ())
@@ -31,7 +31,7 @@ let%expect_test "Error inside [block_nvim] is displayed with callsite" =
 ;;
 
 let%expect_test "Error in the middle of an atomic call is returned correctly" =
-  Backtrace.elide := true;
+  Dynamic.set_root Backtrace.elide true;
   let%bind () =
     Expect_test_helpers_async.require_does_raise_async (fun () ->
       with_client (fun client ->
@@ -46,7 +46,7 @@ let%expect_test "Error in the middle of an atomic call is returned correctly" =
           ; T (get "bar")
           ; T (get "baz")
           ]
-          |> Atomic.run [%here] client
+          |> Atomic.run client
           |> Deferred.map ~f:(Result.map_error ~f:Atomic.Error.to_error)
         with
         | [ Nil; Nil; Bool foo; Bool bar; Bool baz ] ->
@@ -62,12 +62,12 @@ let%expect_test "Error in the middle of an atomic call is returned correctly" =
       "Key not found: bar")
      (("Called from" lib/vcaml/test/semantics/test_error_reporting.ml:LINE:COL)))
     |}];
-  Backtrace.elide := false;
+  Dynamic.set_root Backtrace.elide false;
   return ()
 ;;
 
 let%expect_test "Failures parsing async requests" =
-  Backtrace.elide := true;
+  Dynamic.set_root Backtrace.elide true;
   let module Notifier = Expert.Notifier in
   let module Args = struct
     type 'a t =
@@ -78,9 +78,9 @@ let%expect_test "Failures parsing async requests" =
   let test (type t) ~(type_ : t Notifier.Func.t) (args : t Args.t) =
     with_ui_client (fun client ui ->
       let open Deferred.Or_error.Let_syntax in
-      let call_async_func here client =
+      let call_async_func ?(here = Stdlib.Lexing.dummy_pos) client =
         Notifier.notify
-          here
+          ~here
           client
           ~name:(`Viml "rpcnotify")
           ~type_:Notifier.Func.(Int @-> String @-> type_)
@@ -88,7 +88,6 @@ let%expect_test "Failures parsing async requests" =
           "async_func"
       in
       Ocaml_from_nvim.register_request_async
-        [%here]
         (Connected client)
         ~name:"async_func"
         ~type_:Ocaml_from_nvim.Async.(Nil @-> unit)
@@ -101,9 +100,9 @@ let%expect_test "Failures parsing async requests" =
         | [] -> f
         | hd :: tl -> call (f hd) tl
       in
-      let%bind () = call (call_async_func [%here] client) args in
+      let%bind () = call (call_async_func client) args in
       let%map screen =
-        wait_until_text [%here] ui ~f:(String.is_substring ~substring:"argument")
+        wait_until_text ui ~f:(String.is_substring ~substring:"argument")
       in
       print_endline screen)
   in
@@ -224,31 +223,29 @@ let%expect_test "Failures parsing async requests" =
     │Press ENTER or type command to continue                                         │
     ╰────────────────────────────────────────────────────────────────────────────────╯
     |}];
-  Backtrace.elide := false;
+  Dynamic.set_root Backtrace.elide false;
   return ()
 ;;
 
 let%expect_test "Error is displayed when Neovim sends a notification for an unknown \
                  method"
   =
-  Backtrace.elide := true;
+  Dynamic.set_root Backtrace.elide true;
   let module Notifier = Expert.Notifier in
   let%bind () =
     with_ui_client (fun client ui ->
       let open Deferred.Or_error.Let_syntax in
-      let call_async_func here client =
+      let call_async_func ?(here = Stdlib.Lexing.dummy_pos) client =
         Notifier.notify
-          here
+          ~here
           client
           ~name:(`Viml "rpcnotify")
           ~type_:Notifier.Func.(Int @-> String @-> unit)
           (Client.channel client)
           "async_func"
       in
-      let%bind () = call_async_func [%here] client in
-      let%map screen =
-        wait_until_text [%here] ui ~f:(String.is_substring ~substring:"method")
-      in
+      let%bind () = call_async_func client in
+      let%map screen = wait_until_text ui ~f:(String.is_substring ~substring:"method") in
       print_endline screen)
   in
   [%expect
@@ -286,6 +283,6 @@ let%expect_test "Error is displayed when Neovim sends a notification for an unkn
     │Press ENTER or type command to continue                                         │
     ╰────────────────────────────────────────────────────────────────────────────────╯
     |}];
-  Backtrace.elide := false;
+  Dynamic.set_root Backtrace.elide false;
   return ()
 ;;

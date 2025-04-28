@@ -8,14 +8,14 @@ open Vcaml_test_helpers
 let enable_slow_tests = false
 
 let%expect_test "Client given to synchronous callback cannot be used outside callback" =
-  Backtrace.elide := true;
+  Dynamic.set_root Backtrace.elide true;
   let%bind () =
     with_client (fun async_client ->
       let blocking_client = ref None in
       let function_name = "rpc" in
-      let call_rpc here client =
+      let call_rpc ?(here = Stdlib.Lexing.dummy_pos) client =
         (Nvim.call_function
-           here
+           ~here
            client
            ~name:(`Viml "rpcrequest")
            ~type_:Nvim.Func.(Int @-> String @-> return Nil))
@@ -23,18 +23,17 @@ let%expect_test "Client given to synchronous callback cannot be used outside cal
           function_name
       in
       Ocaml_from_nvim.register_request_blocking
-        [%here]
         (Connected async_client)
         ~name:function_name
         ~type_:Ocaml_from_nvim.Blocking.(return Nil)
         ~f:(fun ~run_in_background:_ ~client ->
           blocking_client := Some client;
           return (Ok ()));
-      let%bind.Deferred.Or_error () = call_rpc [%here] async_client in
+      let%bind.Deferred.Or_error () = call_rpc async_client in
       let blocking_client = Option.value_exn !blocking_client in
-      let%bind result = Nvim.exec_viml [%here] blocking_client "" in
+      let%bind result = Nvim.exec_viml blocking_client "" in
       print_s [%message "Blocking client fails" (result : unit Or_error.t)];
-      let%bind result = Nvim.exec_viml [%here] async_client "" in
+      let%bind result = Nvim.exec_viml async_client "" in
       print_s [%message "Asynchronous client succeeds" (result : unit Or_error.t)];
       return (Ok ()))
   in
@@ -47,24 +46,24 @@ let%expect_test "Client given to synchronous callback cannot be used outside cal
         (("Called from" lib/vcaml/test/semantics/test_blocking_nvim.ml:LINE:COL))))))
     ("Asynchronous client succeeds" (result (Ok ())))
     |}];
-  Backtrace.elide := false;
+  Dynamic.set_root Backtrace.elide false;
   return ()
 ;;
 
 let%expect_test "Client given to [block_nvim] cannot be used outside callback" =
-  Backtrace.elide := true;
+  Dynamic.set_root Backtrace.elide true;
   let%bind () =
     with_client (fun async_client ->
       let blocking_client = ref None in
       let%bind.Deferred.Or_error () =
-        block_nvim [%here] async_client ~f:(fun client ->
+        block_nvim async_client ~f:(fun client ->
           blocking_client := Some client;
           return (Ok ()))
       in
       let blocking_client = Option.value_exn !blocking_client in
-      let%bind result = Nvim.exec_viml [%here] blocking_client "" in
+      let%bind result = Nvim.exec_viml blocking_client "" in
       print_s [%message "Blocking client fails" (result : unit Or_error.t)];
-      let%bind result = Nvim.exec_viml [%here] async_client "" in
+      let%bind result = Nvim.exec_viml async_client "" in
       print_s [%message "Asynchronous client succeeds" (result : unit Or_error.t)];
       return (Ok ()))
   in
@@ -77,7 +76,7 @@ let%expect_test "Client given to [block_nvim] cannot be used outside callback" =
         (("Called from" lib/vcaml/test/semantics/test_blocking_nvim.ml:LINE:COL))))))
     ("Asynchronous client succeeds" (result (Ok ())))
     |}];
-  Backtrace.elide := false;
+  Dynamic.set_root Backtrace.elide false;
   return ()
 ;;
 
@@ -98,9 +97,9 @@ let%expect_test "Jobs started with async client or with [run_in_background] wait
               (async_client_job : unit Or_error.t option)
               (background_client_job : unit Or_error.t option)]
       in
-      let call_rpc here client =
+      let call_rpc ?(here = Stdlib.Lexing.dummy_pos) client =
         (Nvim.call_function
-           here
+           ~here
            client
            ~name:(`Viml "rpcrequest")
            ~type_:Nvim.Func.(Int @-> String @-> return Nil))
@@ -108,24 +107,23 @@ let%expect_test "Jobs started with async client or with [run_in_background] wait
           function_name
       in
       Ocaml_from_nvim.register_request_blocking
-        [%here]
         (Connected async_client)
         ~name:function_name
         ~type_:Ocaml_from_nvim.Blocking.(return Nil)
         ~f:(fun ~run_in_background ~client:blocking_client ->
           let open Deferred.Or_error.Let_syntax in
-          async_client_job := Nvim.exec_viml [%here] async_client "";
-          run_in_background [%here] ~f:(fun client ->
+          async_client_job := Nvim.exec_viml async_client "";
+          run_in_background (fun client ->
             print_endline "Running in background.";
-            background_client_job := Nvim.exec_viml [%here] client "";
+            background_client_job := Nvim.exec_viml client "";
             return ());
-          let%bind () = Nvim.exec_viml [%here] blocking_client "" in
+          let%bind () = Nvim.exec_viml blocking_client "" in
           (* At this point, since we are still in the blocking context, neither
              [async_client_job] nor [background_client_job] should be resolved. *)
           print_job_status ();
           print_endline "Done handling blocking request.";
           return ());
-      let%bind.Deferred.Or_error () = call_rpc [%here] async_client in
+      let%bind.Deferred.Or_error () = call_rpc async_client in
       let%map.Deferred.Or_error () = !async_client_job
       and () = !background_client_job in
       print_job_status ())
@@ -160,19 +158,16 @@ let%expect_test "Plugin shutdown during [run_in_background] does not interfere w
                   Private.attach_client client (Socket (`Address "socket")) >>| ok_exn
                 in
                 Ocaml_from_nvim.register_request_blocking
-                  [%here]
                   (Connected client)
                   ~name:function_name
                   ~type_:Ocaml_from_nvim.Blocking.(return Nil)
                   ~f:(fun ~run_in_background ~client:_ ->
                     let open Deferred.Or_error.Let_syntax in
-                    run_in_background [%here] ~f:(fun client ->
-                      Client.close client |> Deferred.ok);
+                    run_in_background (fun client -> Client.close client |> Deferred.ok);
                     return ());
                 Client.channel client
               in
               Nvim.call_function
-                [%here]
                 client
                 ~name:(`Viml "rpcrequest")
                 ~type_:Nvim.Func.(Int @-> String @-> return Nil)
@@ -201,10 +196,10 @@ let%expect_test "Jobs started with async client wait until after [block_nvim] to
         print_s [%message "Job status" (async_client_job : unit Or_error.t option)]
       in
       let%bind.Deferred.Or_error () =
-        block_nvim [%here] async_client ~f:(fun blocking_client ->
+        block_nvim async_client ~f:(fun blocking_client ->
           let open Deferred.Or_error.Let_syntax in
-          async_client_job := Nvim.exec_viml [%here] async_client "";
-          let%bind () = Nvim.exec_viml [%here] blocking_client "" in
+          async_client_job := Nvim.exec_viml async_client "";
+          let%bind () = Nvim.exec_viml blocking_client "" in
           (* At this point, since we are still in the blocking context,
              [async_client_job] should not be resolved. *)
           print_job_status ();
@@ -225,9 +220,9 @@ let%expect_test "The most recent blocking context has exclusive permission to ru
   let result =
     with_client (fun client ->
       let open Deferred.Or_error.Let_syntax in
-      let factorial here client =
+      let factorial ?(here = Stdlib.Lexing.dummy_pos) client =
         (Nvim.call_function
-           here
+           ~here
            client
            ~name:(`Viml "rpcrequest")
            ~type_:Nvim.Func.(Int @-> String @-> Int @-> return Int))
@@ -236,7 +231,6 @@ let%expect_test "The most recent blocking context has exclusive permission to ru
       in
       let ivars = Array.init 6 ~f:(fun _ -> Ivar.create ()) in
       Ocaml_from_nvim.register_request_blocking
-        [%here]
         (Connected client)
         ~name:"factorial"
         ~type_:Ocaml_from_nvim.Blocking.(Int @-> return Int)
@@ -245,16 +239,16 @@ let%expect_test "The most recent blocking context has exclusive permission to ru
           match n with
           | 0 -> return 1
           | _ ->
-            let result = factorial [%here] client (n - 1) in
+            let result = factorial client (n - 1) in
             let%bind () = Ivar.read ivars.(n - 1) |> Deferred.ok in
-            let%bind () = Nvim.exec_viml [%here] client "" in
+            let%bind () = Nvim.exec_viml client "" in
             (match Deferred.peek result with
              | Some (Ok result) -> return (n * result)
              | Some (Error _ as error) -> Deferred.return error
              | None ->
                Deferred.Or_error.error_s
                  [%message "Expected the result to be filled" ~called_from:(n : int)]));
-      factorial [%here] client 5)
+      factorial client 5)
   in
   let%bind result = with_timeout Time_float.Span.second result in
   print_s [%sexp (result : [ `Result of int | `Timeout ])];
@@ -267,12 +261,12 @@ let%expect_test "[block_nvim] does not run until it has permission" =
     with_client (fun client ->
       let locked = ref false in
       let block () =
-        block_nvim [%here] client ~f:(fun client ->
+        block_nvim client ~f:(fun client ->
           (* Only one [block_nvim] call runs at a time. *)
           assert (not !locked);
           locked := true;
           (* When [block_nvim] runs its client has permission to run. *)
-          let%map.Deferred.Or_error () = Nvim.exec_viml [%here] client "" in
+          let%map.Deferred.Or_error () = Nvim.exec_viml client "" in
           locked := false)
       in
       List.init 10 ~f:(fun _ -> block ()) |> Deferred.Or_error.all_unit)
@@ -293,7 +287,6 @@ let%expect_test "Simultaneous requests are sequenced." =
       let function_name = "rpc" in
       let call_rpc =
         (Nvim.call_function
-           [%here]
            client
            ~name:(`Viml "rpcrequest")
            ~type_:Nvim.Func.(Int @-> String @-> Int @-> return Nil))
@@ -301,7 +294,6 @@ let%expect_test "Simultaneous requests are sequenced." =
           function_name
       in
       Ocaml_from_nvim.register_request_blocking
-        [%here]
         (Connected client)
         ~name:function_name
         ~type_:Ocaml_from_nvim.Blocking.(Int @-> return Nil)
@@ -351,9 +343,9 @@ let%expect_test "Nested calls that all return at the same time does not cause co
     with_client ~verbose:true (fun client ->
       let bvar = Bvar.create () in
       let function_name = "rpc" in
-      let call_rpc here client idx =
+      let call_rpc ?(here = Stdlib.Lexing.dummy_pos) client idx =
         (Nvim.call_function
-           here
+           ~here
            client
            ~name:(`Viml "rpcrequest")
            ~type_:Nvim.Func.(Int @-> String @-> Int @-> return Nil))
@@ -363,7 +355,6 @@ let%expect_test "Nested calls that all return at the same time does not cause co
       in
       let nested_results = Queue.create () in
       Ocaml_from_nvim.register_request_blocking
-        [%here]
         (Connected client)
         ~name:function_name
         ~type_:Ocaml_from_nvim.Blocking.(Int @-> return Nil)
@@ -371,7 +362,7 @@ let%expect_test "Nested calls that all return at the same time does not cause co
           let result = Bvar.wait bvar in
           (match n with
            | 0 -> Bvar.broadcast bvar (Ok ())
-           | n -> Queue.enqueue nested_results (call_rpc [%here] client (n - 1)));
+           | n -> Queue.enqueue nested_results (call_rpc client (n - 1)));
           result);
       let%bind result =
         Deferred.Or_error.repeat_until_finished num_trials (fun trial ->
@@ -380,14 +371,14 @@ let%expect_test "Nested calls that all return at the same time does not cause co
           | 0 -> return (`Finished ())
           | _ ->
             let result =
-              let%bind () = call_rpc [%here] client num_rpcs_to_return_simultaneously in
+              let%bind () = call_rpc client num_rpcs_to_return_simultaneously in
               let%bind () =
                 nested_results |> Queue.to_list |> Deferred.Or_error.all_unit
               in
               Queue.clear nested_results;
               let%bind (_ : Buffer.t) =
                 (* Verify that the connection is still alive. *)
-                Nvim.get_current_buf [%here] client
+                Nvim.get_current_buf client
               in
               let (_ : string) = [%expect.output] in
               return ()
@@ -662,7 +653,7 @@ module Action = struct
     | Call_neovim of
         { f :
             'kind.
-            Source_code_position.t
+            ?here:Stdlib.Lexing.position
             -> 'kind Client.t
             -> Event_tag.t
             -> unit Deferred.Or_error.t
@@ -681,9 +672,9 @@ let run_spec ?warn_if_neovim_exits_early ?verbose spec =
       := Trie.update_trie !event_tags prefix ~f:(fun trie ->
            let children = Trie.num_children trie in
            let keychain = [ children + 1 ] in
-           Set_once.set_exn fresh_tag [%here] (prefix @ keychain);
+           Set_once.set_exn fresh_tag (prefix @ keychain);
            Trie.add_exn trie ~keychain ~data:());
-      Set_once.get_exn fresh_tag [%here]
+      Set_once.get_exn fresh_tag
   in
   let rec run_action client event_tag action =
     match (action : Action.t) with
@@ -700,9 +691,9 @@ let run_spec ?warn_if_neovim_exits_early ?verbose spec =
         |> String.concat ~sep:", "
         |> sprintf "[ %s ]"
       in
-      Nvim.exec_viml [%here] client [%string "let g:event_log += [%{event_tag}]"]
+      Nvim.exec_viml client [%string "let g:event_log += [%{event_tag}]"]
     | Sleep span -> Clock_ns.after span |> Deferred.ok
-    | Call_neovim { f } -> f [%here] client event_tag
+    | Call_neovim { f } -> f client event_tag
     | Parallel actions ->
       Deferred.Or_error.List.iter actions ~how:`Parallel ~f:(fun action ->
         run_action client event_tag action)
@@ -732,7 +723,6 @@ let run_spec ?warn_if_neovim_exits_early ?verbose spec =
           (match how with
            | Request ->
              Ocaml_from_nvim.register_request_blocking
-               [%here]
                (Connected client)
                ~name
                ~type_:Ocaml_from_nvim.Blocking.(Event_tag.nvim_type @-> return Nil)
@@ -747,7 +737,6 @@ let run_spec ?warn_if_neovim_exits_early ?verbose spec =
              [%string {| call rpcrequest(%{channel#Int}, "%{name}", a:event_tag) |}]
            | Notification ->
              Ocaml_from_nvim.register_request_async
-               [%here]
                (Connected client)
                ~name
                ~type_:Ocaml_from_nvim.Async.unit
@@ -786,16 +775,16 @@ let run_spec ?warn_if_neovim_exits_early ?verbose spec =
             ]
             |> List.concat
             |> String.concat ~sep:"\n"
-            |> Nvim.exec_viml [%here] client
+            |> Nvim.exec_viml client
             >>| ok_exn
           in
           (match how with
            | Request ->
              Action.Call_neovim
                { f =
-                   (fun here client event_tag ->
+                   (fun ?(here = Stdlib.Lexing.dummy_pos) client event_tag ->
                      Nvim.call_function
-                       here
+                       ~here
                        client
                        ~name:(`Viml name)
                        ~type_:Nvim.Func.(Event_tag.nvim_type @-> return Nil)
@@ -804,10 +793,10 @@ let run_spec ?warn_if_neovim_exits_early ?verbose spec =
            | Notification ->
              Call_neovim
                { f =
-                   (fun here client event_tag ->
+                   (fun ?(here = Stdlib.Lexing.dummy_pos) client event_tag ->
                      let open Expert.Notifier in
                      notify
-                       here
+                       ~here
                        client
                        ~name:(`Viml name)
                        ~type_:Func.(Event_tag.nvim_type @-> unit)
@@ -819,12 +808,10 @@ let run_spec ?warn_if_neovim_exits_early ?verbose spec =
     let result =
       let open Deferred.Or_error.Let_syntax in
       let event_log_type = Type.Array Event_tag.nvim_type in
-      let%bind () =
-        Nvim.set_var [%here] client "event_log" ~type_:event_log_type ~value:[]
-      in
+      let%bind () = Nvim.set_var client "event_log" ~type_:event_log_type ~value:[] in
       let%bind () = run_action client [] action in
       let%bind () = Deferred.List.all_unit !rpcs_finished |> Deferred.ok in
-      Nvim.get_var [%here] client "event_log" ~type_:event_log_type
+      Nvim.get_var client "event_log" ~type_:event_log_type
     in
     match%map with_timeout (Time_float.Span.of_int_sec 3) result with
     | `Result result -> result
@@ -939,7 +926,7 @@ let%expect_test "Regression test: need to re-flush before invoking RPC" =
    the result to rpc-1, which is an out-of-order response, so Neovim closes the
    connection. *)
 let%expect_test "Demonstrate disconnect induced by sleep" =
-  Backtrace.elide := true;
+  Dynamic.set_root Backtrace.elide true;
   (* This low-level hook in the VCaml client is needed to demonstrate this scenario
      because the timing needs to be coordinated delicately. The specific sequence of
      events that needs to happen is:
@@ -1012,7 +999,7 @@ let%expect_test "Demonstrate disconnect induced by sleep" =
     ERR TIMESTAMP socket     chan_close_with_error:LINE: RPC: ch 1 returned a response with an unknown request id. Ensure the client is properly synchronized
     ---------------------------
     |}];
-  Backtrace.elide := false;
+  Dynamic.set_root Backtrace.elide false;
   Private.before_sending_response_hook_for_tests := None;
   return ()
 ;;

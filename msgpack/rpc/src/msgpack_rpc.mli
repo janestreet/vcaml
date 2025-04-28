@@ -1,8 +1,8 @@
 open Core
 open Async_kernel
 
-(** Implements the Msgpack RPC protocol.
-    See https://github.com/msgpack-rpc/msgpack-rpc/blob/master/spec.md *)
+(** Implements the Msgpack RPC protocol. See
+    https://github.com/msgpack-rpc/msgpack-rpc/blob/master/spec.md *)
 
 module Error : sig
   (** [Fatal_parse_failure] happens when we receive data that does not conform to the

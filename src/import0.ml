@@ -55,7 +55,7 @@ module Source_code_position = struct
       | None -> t
       | Some path -> { t with pos_fname = "lib/vcaml" ^/ path }
     in
-    match !Backtrace.elide with
+    match Dynamic.get Backtrace.elide with
     | false -> [%sexp (t : Source_code_position.t)]
     | true -> Atom (sprintf !"%{Source_code_position.pos_fname}:LINE:COL" t)
   ;;

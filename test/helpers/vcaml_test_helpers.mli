@@ -55,7 +55,7 @@ val get_screen_contents : Test_ui.t -> string Deferred.Or_error.t
     contents. *)
 val wait_until_text
   :  ?timeout:Time_ns.Span.t
-  -> Source_code_position.t
+  -> ?here:Stdlib.Lexing.position
   -> Test_ui.t
   -> f:(string -> bool)
   -> string Deferred.Or_error.t

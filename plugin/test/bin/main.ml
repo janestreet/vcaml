@@ -6,10 +6,9 @@ module Oneshot = struct
   let command =
     let bufnr =
       Vcaml_plugin.Oneshot.Rpc.create
-        [%here]
-        ~name:"bufnr"
+        "bufnr"
         ~type_:Vcaml.Ocaml_from_nvim.Blocking.(return Buffer)
-        ~f:(fun ~client -> Vcaml.Nvim.get_current_buf [%here] client)
+        ~f:(fun ~client -> Vcaml.Nvim.get_current_buf client)
     in
     Vcaml_plugin.Oneshot.create
       ~name:"vcaml-test-oneshot-plugin"
@@ -22,8 +21,7 @@ module Persistent = struct
   let make_plugin ?on_startup ?(notify_fn = `Lua "OnStartup") ?async_rpc ?blocking_rpc () =
     let async_rpc =
       Vcaml_plugin.Persistent.Rpc.create_async
-        [%here]
-        ~name:"async-rpc"
+        "async-rpc"
         ~type_:Ocaml_from_nvim.Async.unit
         ~f:(fun () ~client:_ ->
           match async_rpc with
@@ -32,8 +30,7 @@ module Persistent = struct
     in
     let blocking_rpc =
       Vcaml_plugin.Persistent.Rpc.create_blocking
-        [%here]
-        ~name:"blocking-rpc"
+        "blocking-rpc"
         ~type_:Ocaml_from_nvim.Blocking.(return Nil)
         ~f:(fun () ~run_in_background:_ ~client:_ ->
           match blocking_rpc with
@@ -41,7 +38,7 @@ module Persistent = struct
           | None -> Deferred.Or_error.return ())
     in
     let on_startup (_ : [ `asynchronous ] Client.t) =
-      Backtrace.elide := true;
+      Dynamic.set_root Backtrace.elide true;
       match on_startup with
       | Some f -> f ()
       | None -> Deferred.Or_error.return ()

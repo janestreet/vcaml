@@ -11,11 +11,10 @@ let%expect_test "Simple test of attach, detach, describe_attached_uis" =
   let%bind () =
     with_client (fun client ->
       let open Deferred.Or_error.Let_syntax in
-      let%bind descriptions = Ui.describe_attached_uis [%here] client in
+      let%bind descriptions = Ui.describe_attached_uis client in
       print_s [%sexp (descriptions : Ui.Description.t list)];
       let%bind reader =
         Ui.attach
-          [%here]
           client
           ~width:100
           ~height:200
@@ -33,12 +32,12 @@ let%expect_test "Simple test of attach, detach, describe_attached_uis" =
             }
           ~only_enable_options_supported_by_other_attached_uis:true
       in
-      let%bind descriptions = Ui.describe_attached_uis [%here] client in
+      let%bind descriptions = Ui.describe_attached_uis client in
       print_s [%sexp (descriptions : Ui.Description.t list)];
       Pipe.close_read reader;
       (* Yield to allow the detach message to be sent to Neovim. *)
       let%bind () = Scheduler.yield_until_no_jobs_remain () |> Deferred.ok in
-      let%bind descriptions = Ui.describe_attached_uis [%here] client in
+      let%bind descriptions = Ui.describe_attached_uis client in
       print_s [%sexp (descriptions : Ui.Description.t list)];
       return ())
   in
@@ -107,7 +106,7 @@ let%expect_test "get screen contents multiple times" =
     with_ui_client (fun client ui ->
       let%bind screen = get_screen_contents ui in
       print_endline screen;
-      let%bind () = Nvim.feedkeys [%here] client (`Raw "ihello world") ~mode:"n" in
+      let%bind () = Nvim.feedkeys client (`Raw "ihello world") ~mode:"n" in
       let%bind screen = get_screen_contents ui in
       print_endline screen;
       return ())
@@ -186,9 +185,9 @@ let%expect_test "screen contents after typing hello world" =
   let%bind () =
     let open Deferred.Or_error.Let_syntax in
     with_ui_client (fun client ui ->
-      let%bind () = Nvim.feedkeys [%here] client (`Raw "ihello world") ~mode:"n" in
-      let%bind () = Command.exec [%here] client "vsplit" in
-      let%bind () = Command.exec [%here] client "split" in
+      let%bind () = Nvim.feedkeys client (`Raw "ihello world") ~mode:"n" in
+      let%bind () = Command.exec client "vsplit" in
+      let%bind () = Command.exec client "split" in
       let%bind screen = get_screen_contents ui in
       print_endline screen;
       return ())
@@ -238,7 +237,7 @@ let%expect_test "timeout occurs" =
       with_ui_client (fun _client ui ->
         let%bind (_ : string) =
           wait_until_text
-            Do_not_move.line2
+            ~here:Do_not_move.line2
             ui
             ~timeout:(Time_ns.Span.of_sec 0.01)
             ~f:(Fn.const false)

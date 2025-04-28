@@ -92,12 +92,12 @@ type permission = [ `Ok | `Expired ] option [@@deriving equal, sexp_of]
 
 let%expect_test "Well-behaved semantics" =
   Quickcheck.test ~sexp_of:[%sexp_of: Action.t list] generator ~f:(fun actions ->
-    let permission_pool = Vec.create () in
+    let permission_pool = Queue.create () in
     let unexpired = Doubly_linked.create () in
     let nvim_lock = Nvim_lock.create () in
     List.iter actions ~f:(function
       | Take { id } ->
-        assert (id = Vec.length permission_pool);
+        assert (id = Queue.length permission_pool);
         let permission_to_run = Nvim_lock.take nvim_lock in
         let value = Permission_to_run.peek permission_to_run in
         (match value with
@@ -108,14 +108,14 @@ let%expect_test "Well-behaved semantics" =
                "[take] returned a [Permission_to_run.t] without permission"
                  (value : permission)]);
         let elt = Doubly_linked.insert_first unexpired permission_to_run in
-        Vec.push_back permission_pool elt
+        Queue.enqueue permission_pool elt
       | Expire { id } ->
-        let elt = Vec.get permission_pool id in
+        let elt = Queue.get permission_pool id in
         if Doubly_linked.mem_elt unexpired elt then Doubly_linked.remove unexpired elt;
         let permission_to_run = Doubly_linked.Elt.value elt in
         Nvim_lock.expire nvim_lock permission_to_run
       | Expire_other_users { id_to_expire; new_id } ->
-        let old_elt = Vec.get permission_pool id_to_expire in
+        let old_elt = Queue.get permission_pool id_to_expire in
         let old_permission_to_run = Doubly_linked.Elt.value old_elt in
         let old_value = Permission_to_run.peek old_permission_to_run in
         let new_permission_to_run =
@@ -129,7 +129,7 @@ let%expect_test "Well-behaved semantics" =
               "[expire_other_users] returned a permission with a different value"
                 (old_value : permission)
                 (new_value : permission)];
-        assert (new_id = Vec.length permission_pool);
+        assert (new_id = Queue.length permission_pool);
         let new_elt =
           match Doubly_linked.mem_elt unexpired old_elt with
           | true ->
@@ -141,7 +141,7 @@ let%expect_test "Well-behaved semantics" =
           | false ->
             Doubly_linked.insert_first (Doubly_linked.create ()) new_permission_to_run
         in
-        Vec.push_back permission_pool new_elt);
+        Queue.enqueue permission_pool new_elt);
     (* Now that we've run the actions, check the invariants. *)
     let latest_permission = Doubly_linked.remove_first unexpired in
     Option.iter latest_permission ~f:(fun permission_to_run ->
@@ -153,7 +153,7 @@ let%expect_test "Well-behaved semantics" =
           [%message
             "The most recently taken unexpired permission does not have permission to run"
               (value : permission)]);
-    Vec.iteri permission_pool ~f:(fun id elt ->
+    Queue.iteri permission_pool ~f:(fun id elt ->
       let permission_to_run = Doubly_linked.Elt.value elt in
       match Permission_to_run.peek permission_to_run with
       | Some `Expired ->

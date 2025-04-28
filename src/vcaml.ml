@@ -159,9 +159,9 @@ module Private = struct
 
   let attach_client = Client.attach'
 
-  let notify_nvim_of_error client here error =
+  let notify_nvim_of_error client ?(here = Stdlib.Lexing.dummy_pos) error =
     let client = Type_equal.conv Client.Private.eq client in
-    client.notify_nvim_of_error here error
+    client.notify_nvim_of_error ~here error
   ;;
 
   let before_sending_response_hook_for_tests =

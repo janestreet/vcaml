@@ -43,8 +43,8 @@ val pp : Formatter.t -> Msgpack.t -> unit
 
 module Phantom : sig
   (** For use in pattern matching. For example, if you have a ['a Phantom.t * 'a], if a
-pattern match on the phantom succeeds on [Int], then ['a] unifies with [int]. Use 
-[Custom] for serialization & deserialization of custom types. *)
+      pattern match on the phantom succeeds on [Int], then ['a] unifies with [int]. Use
+      [Custom] for serialization & deserialization of custom types. *)
   type _ t =
     | Nil : unit t
     | Int : int t

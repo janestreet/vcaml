@@ -7,7 +7,7 @@ end
 
 (** Get the buffer currently in the window. *)
 val get_buf
-  :  Source_code_position.t
+  :  ?here:Stdlib.Lexing.position
   -> _ Client.t
   -> Or_current.t
   -> Nvim_internal.Buffer.t Deferred.Or_error.t
@@ -17,7 +17,7 @@ val get_buf
     where autocommands that should still be triggered are not being triggered. For
     details, see https://github.com/neovim/neovim/issues/10070. *)
 val set_buf
-  :  Source_code_position.t
+  :  ?here:Stdlib.Lexing.position
   -> _ Client.t
   -> Or_current.t
   -> buffer:Nvim_internal.Buffer.t
@@ -31,7 +31,7 @@ module When_this_is_the_buffer's_last_window : sig
       2. 'hidden' is off (it is on by default in Neovim).
       3. 'bufhidden' is empty for the buffer.
       4. 'confirm' is off (otherwise a dialog will appear asking the user to confirm
-      whether to save before closing with yes/no/cancel options). *)
+         whether to save before closing with yes/no/cancel options). *)
   type t =
     | Hide
     | Unload of { if_modified : [ `Hide | `Abort_if_hiding_is_disabled ] }
@@ -40,45 +40,45 @@ end
 (** Close the given window. If this is not the current window, no WinLeave event will be
     triggered because closing it does not require changing windows. *)
 val close
-  :  Source_code_position.t
+  :  ?here:Stdlib.Lexing.position
   -> _ Client.t
   -> Or_current.t
   -> when_this_is_the_buffer's_last_window:When_this_is_the_buffer's_last_window.t
   -> unit Deferred.Or_error.t
 
-val exists : Source_code_position.t -> _ Client.t -> t -> bool Deferred.Or_error.t
+val exists : ?here:Stdlib.Lexing.position -> _ Client.t -> t -> bool Deferred.Or_error.t
 
 val get_height
-  :  Source_code_position.t
+  :  ?here:Stdlib.Lexing.position
   -> _ Client.t
   -> Or_current.t
   -> int Deferred.Or_error.t
 
 val set_height
-  :  Source_code_position.t
+  :  ?here:Stdlib.Lexing.position
   -> _ Client.t
   -> Or_current.t
   -> height:int
   -> unit Deferred.Or_error.t
 
 val get_width
-  :  Source_code_position.t
+  :  ?here:Stdlib.Lexing.position
   -> _ Client.t
   -> Or_current.t
   -> int Deferred.Or_error.t
 
 val set_width
-  :  Source_code_position.t
+  :  ?here:Stdlib.Lexing.position
   -> _ Client.t
   -> Or_current.t
   -> width:int
   -> unit Deferred.Or_error.t
 
 (** Get the cursor position for the given window. Every window in Neovim has a cursor
-    position - for inactive windows, this is the position the cursor will assume when
-    the window becomes active. *)
+    position - for inactive windows, this is the position the cursor will assume when the
+    window becomes active. *)
 val get_cursor
-  :  Source_code_position.t
+  :  ?here:Stdlib.Lexing.position
   -> _ Client.t
   -> Or_current.t
   -> Position.One_indexed_row.t Deferred.Or_error.t
@@ -86,7 +86,7 @@ val get_cursor
 (** Set the cursor position for the given window. This will not move the cursor to the
     window, but the window will still scroll to ensure the cursor position is visible. *)
 val set_cursor
-  :  Source_code_position.t
+  :  ?here:Stdlib.Lexing.position
   -> _ Client.t
   -> Or_current.t
   -> Position.One_indexed_row.t
@@ -94,7 +94,7 @@ val set_cursor
 
 (** Get a window variable (see `:h w:`). *)
 val get_var
-  :  Source_code_position.t
+  :  ?here:Stdlib.Lexing.position
   -> _ Client.t
   -> Or_current.t
   -> string
@@ -105,7 +105,7 @@ val get_var
     freedom to change the values of these variables. If that would be undesirable, keep
     your state management inside your plugin. *)
 val set_var
-  :  Source_code_position.t
+  :  ?here:Stdlib.Lexing.position
   -> _ Client.t
   -> Or_current.t
   -> string
@@ -115,14 +115,14 @@ val set_var
 
 (** Delete a window variable (see `:h w:`). *)
 val delete_var
-  :  Source_code_position.t
+  :  ?here:Stdlib.Lexing.position
   -> _ Client.t
   -> Or_current.t
   -> string
   -> unit Deferred.Or_error.t
 
 val get_tab
-  :  Source_code_position.t
+  :  ?here:Stdlib.Lexing.position
   -> _ Client.t
   -> Or_current.t
   -> Nvim_internal.Tabpage.t Deferred.Or_error.t
@@ -131,14 +131,14 @@ val get_tab
     the tabpage. This is different from the window ID (represented by [t]), which is
     unique per window and is never reused. *)
 val get_number
-  :  Source_code_position.t
+  :  ?here:Stdlib.Lexing.position
   -> _ Client.t
   -> Or_current.t
   -> int Deferred.Or_error.t
 
 (** Get the display position of the window. *)
 val get_position
-  :  Source_code_position.t
+  :  ?here:Stdlib.Lexing.position
   -> _ Client.t
   -> Or_current.t
   -> Position.t Deferred.Or_error.t
@@ -234,7 +234,7 @@ end
     autocommands. For details, see
     https://github.com/neovim/neovim/issues/10070#issuecomment-537854497. *)
 val open_floating
-  :  Source_code_position.t
+  :  ?here:Stdlib.Lexing.position
   -> _ Client.t
   -> ?noautocmd:bool
   -> unit
@@ -246,7 +246,7 @@ val open_floating
 
 (** Open an external window (must be supported by the attached UIs). *)
 val open_external
-  :  Source_code_position.t
+  :  ?here:Stdlib.Lexing.position
   -> _ Client.t
   -> ?noautocmd:bool
   -> unit
@@ -259,18 +259,18 @@ val open_external
 (** Returns [Some config] for floating and external windows and returns [None] for normal
     windows. *)
 val get_config
-  :  Source_code_position.t
+  :  ?here:Stdlib.Lexing.position
   -> _ Client.t
   -> Or_current.t
   -> Config.t option Deferred.Or_error.t
 
-(** This API obscures a limitation inherent in [nvim_win_set_config]'s interface:
-    because absent config keys will not be changed and there is no support for removing
-    keys, if [Config.Floating.corner_pos = Relative_to_text_in_window { ... }], the type
-    of corner positioning cannot be changed because it sets the "bufpos" key, which no
-    other positioning schemes override. *)
+(** This API obscures a limitation inherent in [nvim_win_set_config]'s interface: because
+    absent config keys will not be changed and there is no support for removing keys, if
+    [Config.Floating.corner_pos = Relative_to_text_in_window { ... }], the type of corner
+    positioning cannot be changed because it sets the "bufpos" key, which no other
+    positioning schemes override. *)
 val set_config
-  :  Source_code_position.t
+  :  ?here:Stdlib.Lexing.position
   -> _ Client.t
   -> Or_current.t
   -> Config.t
@@ -308,7 +308,7 @@ module Fast : sig
   (** Evaluates a stutusline-formatted string (see `:h statusline`). To evaluate a string
       for the tabline, see [Nvim.eval_tabline]. *)
   val eval_statusline
-    :  Source_code_position.t
+    :  ?here:Stdlib.Lexing.position
     -> _ Client.t
     -> Or_current.t
     -> ?max_width:int
@@ -319,7 +319,7 @@ module Fast : sig
 
   (** Evaluates a statuscolumn-formatted string (see `:h statuscolumn). *)
   val eval_statuscolumn
-    :  Source_code_position.t
+    :  ?here:Stdlib.Lexing.position
     -> _ Client.t
     -> Or_current.t
     -> ?max_width:int
@@ -329,10 +329,10 @@ module Fast : sig
     -> string
     -> Statuscolumn.t Deferred.Or_error.t
 
-  (** Evaluates a winbar-formatted string (see `:h winbar). To evaluate a string
-      for the tabline, see [Nvim.eval_tabline]. *)
+  (** Evaluates a winbar-formatted string (see `:h winbar). To evaluate a string for the
+      tabline, see [Nvim.eval_tabline]. *)
   val eval_winbar
-    :  Source_code_position.t
+    :  ?here:Stdlib.Lexing.position
     -> _ Client.t
     -> Or_current.t
     -> ?max_width:int
@@ -354,14 +354,14 @@ module Option : sig
 
   (** Get the effective value of the window option for the current window. *)
   val get
-    :  Source_code_position.t
+    :  ?here:Stdlib.Lexing.position
     -> _ Client.t
     -> Or_current.t
     -> 'a t
     -> 'a Deferred.Or_error.t
 
   val set
-    :  Source_code_position.t
+    :  ?here:Stdlib.Lexing.position
     -> _ Client.t
     -> Or_current.t
     -> 'a t
@@ -369,7 +369,7 @@ module Option : sig
     -> unit Deferred.Or_error.t
 
   val get_dynamic_info
-    :  Source_code_position.t
+    :  ?here:Stdlib.Lexing.position
     -> _ Client.t
     -> 'a t
     -> 'a Dynamic_option_info.t Deferred.Or_error.t
@@ -377,13 +377,13 @@ module Option : sig
   module Per_buffer : sig
     (*$ Vcaml_cinaps.generate_options_intf ~scope:Window_per_buffer *)
     (** Buffer-specific Neovim window options. These operate like buffer options, but the
-      "global scope" is per-window. The ['global] phantom type represents the notion of
-      a "global" value for the option. [`global] means there is a global value for each
-      window that can be locally overridden for any given buffer in the window.
-      [`copied] means the (per-window) global value is copied to the (per-buffer,window)
-      local value when a new buffer is opened in the window. The details of when and how
-      these settings are copied are somewhat arcane, so it's best not to rely on this
-      behavior. *)
+        "global scope" is per-window. The ['global] phantom type represents the notion of
+        a "global" value for the option. [`global] means there is a global value for each
+        window that can be locally overridden for any given buffer in the window.
+        [`copied] means the (per-window) global value is copied to the (per-buffer,window)
+        local value when a new buffer is opened in the window. The details of when and how
+        these settings are copied are somewhat arcane, so it's best not to rely on this
+        behavior. *)
     type ('a, 'global) t =
       | Arabic : (bool, [ `copied ]) t
       | Breakindent : (bool, [ `copied ]) t
@@ -432,7 +432,7 @@ module Option : sig
     (*$*)
 
     val get_dynamic_info
-      :  Source_code_position.t
+      :  ?here:Stdlib.Lexing.position
       -> _ Client.t
       -> ('a, _) t
       -> 'a Dynamic_option_info.t Deferred.Or_error.t
@@ -440,7 +440,7 @@ module Option : sig
 
   (** Get the effective value of the window option for the current buffer in the window. *)
   val get_for_current_buffer_in_window
-    :  Source_code_position.t
+    :  ?here:Stdlib.Lexing.position
     -> _ Client.t
     -> Or_current.t
     -> ('a, _) Per_buffer.t
@@ -448,7 +448,7 @@ module Option : sig
 
   (** Set the option for the current buffer in the window. *)
   val set_for_current_buffer_in_window
-    :  Source_code_position.t
+    :  ?here:Stdlib.Lexing.position
     -> _ Client.t
     -> Or_current.t
     -> ('a, _) Per_buffer.t
@@ -458,14 +458,14 @@ module Option : sig
   (** Get the global value of the option used by all buffers/windows without local
       overrides. *)
   val get_default
-    :  Source_code_position.t
+    :  ?here:Stdlib.Lexing.position
     -> _ Client.t
     -> ('a, [ `global ]) Per_buffer.t
     -> 'a Deferred.Or_error.t
 
   (** Set the option for all buffers/windows without local overrides. *)
   val set_default
-    :  Source_code_position.t
+    :  ?here:Stdlib.Lexing.position
     -> _ Client.t
     -> ('a, [ `global ]) Per_buffer.t
     -> 'a
@@ -474,7 +474,7 @@ module Option : sig
   (** Get the value that buffers opened in the window will inherit for this option. The
       details of this mechanic are arcane and relying on this is likely a mistake. *)
   val get_for_new_buffers_opened_in_window
-    :  Source_code_position.t
+    :  ?here:Stdlib.Lexing.position
     -> _ Client.t
     -> Or_current.t
     -> ('a, [ `copied ]) Per_buffer.t
@@ -483,7 +483,7 @@ module Option : sig
   (** Set the option for buffers opened in the window in the future. The details of this
       mechanic are arcane and relying on this is likely a mistake. *)
   val set_for_new_buffers_opened_in_window
-    :  Source_code_position.t
+    :  ?here:Stdlib.Lexing.position
     -> _ Client.t
     -> Or_current.t
     -> ('a, [ `copied ]) Per_buffer.t
