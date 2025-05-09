@@ -460,16 +460,16 @@ let%expect_test "Compare native command invocations with range/count against str
                 List
                   [ Atom "Range"
                   ; List
-                      [ Atom [%string "%{start_inclusive#Int}"]
-                      ; Atom [%string "%{end_inclusive#Int}"]
+                      [ Atom [%string.global "%{start_inclusive#Int}"]
+                      ; Atom [%string.global "%{end_inclusive#Int}"]
                       ]
                   ]
               | Count { count; source = _; of_ = _ } ->
-                List [ Atom "Count"; Atom [%string "%{count#Int}"] ]
+                List [ Atom "Count"; Atom [%string.global "%{count#Int}"] ]
               | Ambiguous_count_or_singleton_range { value; of_ = _ } ->
                 List
                   [ Atom "Ambiguous_count_or_singleton_range"
-                  ; Atom [%string "%{value#Int}"]
+                  ; Atom [%string.global "%{value#Int}"]
                   ]
             ;;
           end

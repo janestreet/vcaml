@@ -148,7 +148,8 @@ let with_client
                   - XDG_CONFIG_DIRS, which is used for stdpath("config_dirs")
                   - XDG_DATA_DIRS,   which is used for stdpath("data_dirs") *)
               ; "NVIM_RPLUGIN_MANIFEST", "rplugin.vim"
-              ; elide_backtraces_env_var, [%string "%{Dynamic.get Backtrace.elide#Bool}"]
+              ; ( elide_backtraces_env_var
+                , [%string.global "%{Dynamic.get Backtrace.elide#Bool}"] )
               ])
         in
         match env with
