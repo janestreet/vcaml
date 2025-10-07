@@ -133,7 +133,11 @@ let with_client
     (* We set this variable in the current environment instead of just extending Neovim's
        environment so that clients that are attached with [attach_client] will also use
        verbose logging. *)
-    if verbose then Unix.putenv ~key:verbose_env_var ~data:verbose_log_file;
+    if verbose
+    then
+      (Unix.putenv [@ocaml.alert "-unsafe_multidomain"])
+        ~key:verbose_env_var
+        ~data:verbose_log_file;
     let env =
       let env =
         let base =
@@ -256,7 +260,7 @@ let with_client
       | [] -> ()
       | error_lines -> print_endline (String.concat error_lines ~sep:"\n")
     in
-    if verbose then Unix.unsetenv verbose_env_var;
+    if verbose then (Unix.unsetenv [@ocaml.alert "-unsafe_multidomain"]) verbose_env_var;
     return (ok_exn result))
 ;;
 
