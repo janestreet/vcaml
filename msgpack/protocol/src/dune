@@ -1,6 +1,6 @@
 (library
  (name msgpack)
  (public_name vcaml.msgpack)
- (libraries core angstrom faraday)
+ (libraries angstrom core faraday)
  (preprocess
   (pps ppx_jane)))

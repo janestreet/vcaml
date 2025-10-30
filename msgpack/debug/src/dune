@@ -1,8 +1,8 @@
 (library
  (name msgpack_debug)
  (public_name vcaml.msgpack.debug)
- (libraries angstrom-async async.async_quickcheck textutils.console core
-   core_unix.filename_unix man_in_the_middle_debugger msgpack angstrom async
-   core_unix jsonaf jsonaf.kernel)
+ (libraries angstrom angstrom-async async async.async_quickcheck
+   textutils.console core core_unix core_unix.filename_unix jsonaf
+   jsonaf.kernel man_in_the_middle_debugger msgpack)
  (preprocess
   (pps ppx_jane)))
