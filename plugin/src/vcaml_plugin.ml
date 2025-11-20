@@ -75,20 +75,19 @@ module Oneshot = struct
           ~type_
           ~f:(fun () ~run_in_background ->
             (* If we simply invoked [f] here, filled [shutdown] on its completion, and
-               then returned, the invocation of [shutdown] would race with returning
-               the result of this callback to Neovim. We avoid this race by only
-               filling [shutdown] inside [run_in_background] after sending a dummy
-               request, since we know that that dummy request can only succeed once the
-               client passed to [run_in_background] receives permission to run, which
-               will only happen after we've sent the callback's response to Neovim and
-               expired the blocking client's permission to run. While technically after
-               that point Neovim could make another blocking request, that would be an
-               improper use of a oneshot plugin, and guarding against that is difficult
-               and not worthwhile. *)
+               then returned, the invocation of [shutdown] would race with returning the
+               result of this callback to Neovim. We avoid this race by only filling
+               [shutdown] inside [run_in_background] after sending a dummy request, since
+               we know that that dummy request can only succeed once the client passed to
+               [run_in_background] receives permission to run, which will only happen
+               after we've sent the callback's response to Neovim and expired the blocking
+               client's permission to run. While technically after that point Neovim could
+               make another blocking request, that would be an improper use of a oneshot
+               plugin, and guarding against that is difficult and not worthwhile. *)
             run_in_background ~here (fun client ->
               let%map.Deferred.Or_error (_ : Buffer.t) =
-                (* This will only succeed once the result of [f] has successfully
-                   been sent to Neovim. *)
+                (* This will only succeed once the result of [f] has successfully been
+                   sent to Neovim. *)
                 Nvim.get_current_buf client
               in
               Ivar.fill_exn shutdown ());
@@ -206,10 +205,10 @@ module Persistent = struct
           ())
       in
       let on_error =
-        (* Track whether we already sent notifications due to parse failures of UI
-           and buffer events. These events are streamed from Neovim, and as it's
-           likely that if we failed to parse one we will fail to parse many, we don't
-           want to spam the user with failure messages. *)
+        (* Track whether we already sent notifications due to parse failures of UI and
+           buffer events. These events are streamed from Neovim, and as it's likely that
+           if we failed to parse one we will fail to parse many, we don't want to spam the
+           user with failure messages. *)
         let failed_to_parse_ui_event = ref false in
         let failed_to_parse_buffer_event = ref false in
         fun (error : Vcaml_error.t) ->
@@ -268,8 +267,8 @@ module Persistent = struct
         let%bind () = Private.notify_nvim_of_error client error in
         Error.raise error
       | Ok state' ->
-        (* It's important that we set [state] before notifying Neovim that the plugin
-           is ready, since at that point Neovim has the green light to call RPCs. *)
+        (* It's important that we set [state] before notifying Neovim that the plugin is
+           ready, since at that point Neovim has the green light to call RPCs. *)
         Set_once.set_exn state state';
         (match%bind
            match after_startup with

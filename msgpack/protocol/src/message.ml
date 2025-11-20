@@ -39,11 +39,11 @@ let quickcheck_generator ~only_string_keys ~only_finite_floats =
   let open Generator.Let_syntax in
   let int_gen =
     let open Int.O in
-    (* We should properly test all integers from -2**N to 2**N-1, where N is [system
-       bitsize] minus 2, but it's difficult to do so without conditional compilation. It
-       also isn't immediately obvious why this is the number of bits to choose, and so we
-       instead choose 16 bits, which falls well within the allowable range for both 32-
-       and 64-bit systems. *)
+    (* We should properly test all integers from -2**N to 2**N-1, where N is
+       [system bitsize] minus 2, but it's difficult to do so without conditional
+       compilation. It also isn't immediately obvious why this is the number of bits to
+       choose, and so we instead choose 16 bits, which falls well within the allowable
+       range for both 32- and 64-bit systems. *)
     let min_tested_int = 0 - (2 ** 16) in
     let max_tested_int = (2 ** 16) - 1 in
     Int.gen_uniform_incl min_tested_int max_tested_int

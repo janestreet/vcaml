@@ -200,8 +200,8 @@ let%expect_test "Jobs started with async client wait until after [block_nvim] to
           let open Deferred.Or_error.Let_syntax in
           async_client_job := Nvim.exec_viml async_client "";
           let%bind () = Nvim.exec_viml blocking_client "" in
-          (* At this point, since we are still in the blocking context,
-             [async_client_job] should not be resolved. *)
+          (* At this point, since we are still in the blocking context, [async_client_job]
+             should not be resolved. *)
           print_job_status ();
           return ())
       in
@@ -439,9 +439,9 @@ module Event_tag = struct
   ;;
 end
 
-(* Check where two tags diverge. E.g., tags (1 2 1 2) and (1 2 2 1) diverge at
-   (1 2 1), (1 2 2). If one is a prefix of the other, e.g., (1 2) and (1 2 2 1), the
-   point of divergence includes the element after the prefix (1 2 2). *)
+(* Check where two tags diverge. E.g., tags (1 2 1 2) and (1 2 2 1) diverge at (1 2 1), (1
+   2 2). If one is a prefix of the other, e.g., (1 2) and (1 2 2 1), the point of
+   divergence includes the element after the prefix (1 2 2). *)
 let get_point_of_divergence t1 t2 =
   let rec f t1 t2 ~prefix =
     match t1, t2 with
@@ -458,8 +458,8 @@ let get_point_of_divergence t1 t2 =
 ;;
 
 (* Given a sequence of event tags representing calls to Neovim, return [true] iff no
-   blocking RPCs were interleaved. We know an RPC was interleaved if two tags that share
-   a prefix (meaning they represent commands from the same context) are interleaved by one
+   blocking RPCs were interleaved. We know an RPC was interleaved if two tags that share a
+   prefix (meaning they represent commands from the same context) are interleaved by one
    or more tags that do not share that prefix. We maintain a trie that records all the
    prefixes we have expired so far (every time the prefix changes) so that if we encounter
    an expired prefix again we know there was an interleaving. *)
@@ -547,8 +547,8 @@ module Action = struct
        Neovim to perform an action, and is used to record the [Event_tag.t] of the current
        context. [Call {await; spec}] represents a synchronous call to an RPC that will
        perform [spec], which is executed sequentially. If [await = true], the call will be
-       sent as a request; if [await = false] it will be sent as a notification. [Parallel
-       ts] runs [t]s in parallel. *)
+       sent as a request; if [await = false] it will be sent as a notification.
+       [Parallel ts] runs [t]s in parallel. *)
     type t =
       | Log
       | Call of
@@ -741,8 +741,8 @@ let run_spec ?warn_if_neovim_exits_early ?verbose spec =
                  let%bind result =
                    Deferred.Or_error.List.iter ~how:`Sequential actions ~f:(function
                      | Log ->
-                       (* Print rather than raise because VCaml will catch the
-                          exception and display it in Neovim. *)
+                       (* Print rather than raise because VCaml will catch the exception
+                          and display it in Neovim. *)
                        print_s
                          [%message
                            "Encountered [Log] in an async RPC. This scenario is invalid, \
@@ -929,7 +929,7 @@ let%expect_test "Demonstrate disconnect induced by sleep" =
      events that needs to happen is:
 
      1. The dummy request sent to determine whether it's safe to return rpc-1 returns
-     without any RPCs being invoked in the interim, indicating that it's safe.
+        without any RPCs being invoked in the interim, indicating that it's safe.
      2. Neovim wakes and requests rpc-2.
      3. The plugin sends the response to rpc-1.
 
@@ -1080,9 +1080,9 @@ let%expect_test "Quickcheck tests of running specifications" =
             with
             | Ok () -> ignore ([%expect.output] : string)
             | Error exn ->
-              (* When an exception happens in [async_test], Quickcheck tries to shrink
-                  the failing case, then ultimately fails on the most shrunken example.
-                  We only want to output the verbose logs for that failure. *)
+              (* When an exception happens in [async_test], Quickcheck tries to shrink the
+                 failing case, then ultimately fails on the most shrunken example. We only
+                 want to output the verbose logs for that failure. *)
               latest_failure := Some [%expect.output];
               raise exn))
       ~finally:(fun () ->

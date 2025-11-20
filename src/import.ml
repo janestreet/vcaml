@@ -3,8 +3,8 @@ open Async
 include Import0
 
 let run
-  (* this function shouldn't be called by users, so it's not [call_pos] in order to 
-      make sure that we thread the correct positions through *)
+  (* this function shouldn't be called by users, so it's not [call_pos] in order to make
+     sure that we thread the correct positions through *)
   ~(here : Source_code_position.t)
   client
   api_result

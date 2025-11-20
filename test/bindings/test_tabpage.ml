@@ -76,8 +76,8 @@ let%expect_test "set_var, get_var, delete_var" =
   return ()
 ;;
 
-(* This test demonstrates that setting the value of [Cmdheight] for a tab affects new
-   tabs but does not affect previous tabs. *)
+(* This test demonstrates that setting the value of [Cmdheight] for a tab affects new tabs
+   but does not affect previous tabs. *)
 let%expect_test "Option.get, Option.set" =
   with_client (fun client ->
     let%bind () = Tabpage.Option.set client Cmdheight 2 >>| ok_exn in

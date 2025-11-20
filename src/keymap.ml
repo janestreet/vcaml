@@ -117,19 +117,19 @@ let of_msgpack_map map =
   return keymaps
 ;;
 
-(* The semantics of [nvim_get_keymap] and [nvim_buf_get_keymap] are a bit undocumented
-   and unintuitive in the following ways:
+(* The semantics of [nvim_get_keymap] and [nvim_buf_get_keymap] are a bit undocumented and
+   unintuitive in the following ways:
 
    1. Simple-mode queries return all mappings that apply in that mode. However, language
-   mappings are not returned in queries for insert and command modes. To fix this, we
-   need to explicitly query for language mappings and join the results.
+      mappings are not returned in queries for insert and command modes. To fix this, we
+      need to explicitly query for language mappings and join the results.
 
-   2. There is no way to query for mappings defined with '!' (see `:h mapmode-ic`).
-   These queries (appear to) work by taking the first character in the query, returning
-   the appropriate mappings if the character is a recognized mode, and returning
-   mappings for mapmode-nvo by default. '!' is not a recognized mode, so it silently
-   returns mappings for 'nvo' instead of 'ic'. To fix this, we need to individually
-   query for 'i' and 'c' (and 'l') and join the results together. *)
+   2. There is no way to query for mappings defined with '!' (see `:h mapmode-ic`). These
+      queries (appear to) work by taking the first character in the query, returning the
+      appropriate mappings if the character is a recognized mode, and returning mappings
+      for mapmode-nvo by default. '!' is not a recognized mode, so it silently returns
+      mappings for 'nvo' instead of 'ic'. To fix this, we need to individually query for
+      'i' and 'c' (and 'l') and join the results together. *)
 let get ~(here : [%call_pos]) client ~scope ~mode =
   let query =
     match scope with
@@ -159,8 +159,8 @@ let get ~(here : [%call_pos]) client ~scope ~mode =
       |> Or_error.combine_errors
       |> Or_error.map ~f:List.concat)
     |> run ~here client)
-  (* Because 'i' and 'c' will produce duplicate entries for '!' mappings, we need to
-     dedup the results after querying each. *)
+  (* Because 'i' and 'c' will produce duplicate entries for '!' mappings, we need to dedup
+     the results after querying each. *)
   >>|? List.dedup_and_sort ~compare
 ;;
 

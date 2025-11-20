@@ -11,8 +11,8 @@ let%expect_test "Simple test of [Stdio] client" =
     let socket = tmp_dir ^/ "socket" in
     let%bind nvim =
       (* There is some undocumented internal limit for the socket length (it doesn't
-         appear in `:h limits`) so to ensure we create a socket we set the working dir
-         to [tmp_dir] and create the socket with a relative path. *)
+         appear in `:h limits`) so to ensure we create a socket we set the working dir to
+         [tmp_dir] and create the socket with a relative path. *)
       Process.create_exn
         ()
         ~working_dir:tmp_dir

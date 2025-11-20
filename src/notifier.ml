@@ -32,9 +32,9 @@ let notify ~(here : [%call_pos]) client ~name ~type_ =
      | `Viml name -> Nvim_internal.nvim_call_function ~fn:name ~args
      | `Lua name ->
        Nvim_internal.nvim_exec_lua
-       (* We surround [name] with parentheses to support anonymous functions. We assign
-            it to [result] before returning it to ensure [name] appears in the stack trace
-            if it raises an error. *)
+       (* We surround [name] with parentheses to support anonymous functions. We assign it
+          to [result] before returning it to ensure [name] appears in the stack trace if
+          it raises an error. *)
          ~code:[%string {| local result = (%{name})(...); return result |}]
          ~args)
     |> client.call_nvim_api_fn ~here Notification)

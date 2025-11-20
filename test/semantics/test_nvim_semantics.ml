@@ -15,8 +15,8 @@ let%expect_test "[rpcrequest] blocks other channels" =
     let socket = tmp_dir ^/ "socket" in
     let%bind nvim =
       (* There is some undocumented internal limit for the socket length (it doesn't
-         appear in `:h limits`) so to ensure we create a socket we set the working dir
-         to [tmp_dir] and create the socket with a relative path. *)
+         appear in `:h limits`) so to ensure we create a socket we set the working dir to
+         [tmp_dir] and create the socket with a relative path. *)
       Process.create_exn
         ()
         ~working_dir:tmp_dir
@@ -90,8 +90,8 @@ let%expect_test "A -[rpcrequest]-> Neovim -[rpcrequest]-> B lets B communicate w
     let socket = tmp_dir ^/ "socket" in
     let%bind nvim =
       (* There is some undocumented internal limit for the socket length (it doesn't
-         appear in `:h limits`) so to ensure we create a socket we set the working dir
-         to [tmp_dir] and create the socket with a relative path. *)
+         appear in `:h limits`) so to ensure we create a socket we set the working dir to
+         [tmp_dir] and create the socket with a relative path. *)
       Process.create_exn
         ()
         ~working_dir:tmp_dir
@@ -154,8 +154,8 @@ let%expect_test "Plugin dying during [rpcrequest] does not bring down Neovim" =
     let socket = tmp_dir ^/ "socket" in
     let%bind nvim =
       (* There is some undocumented internal limit for the socket length (it doesn't
-         appear in `:h limits`) so to ensure we create a socket we set the working dir
-         to [tmp_dir] and create the socket with a relative path. *)
+         appear in `:h limits`) so to ensure we create a socket we set the working dir to
+         [tmp_dir] and create the socket with a relative path. *)
       Process.create_exn
         ()
         ~working_dir:tmp_dir

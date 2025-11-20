@@ -171,13 +171,13 @@ let get_buffer ~(here : [%call_pos]) client or_current =
 ;;
 
 (* When an entry for a buffer is absent from the [buffer_subscriptions] table, a
-   subscription can begin. The state transitions to [Subscribing] to fail any new calls
-   to [subscribe]. If the subscription fails, the entry is removed from the table. If it
+   subscription can begin. The state transitions to [Subscribing] to fail any new calls to
+   [subscribe]. If the subscription fails, the entry is removed from the table. If it
    succeeds, the entry is advanced to the [Subscribed] state. When [subscribe] is called
-   and the subscription is in the [Subscribed] state, the pipe may or may not be open.
-   If it is open, the call fails. If it's closed, we transition the state to
-   [Subscribing] to again fail any new calls to [subscribe], and fill the ivar that
-   enables the resubscription once we have finished detaching. *)
+   and the subscription is in the [Subscribed] state, the pipe may or may not be open. If
+   it is open, the call fails. If it's closed, we transition the state to [Subscribing] to
+   again fail any new calls to [subscribe], and fill the ivar that enables the
+   resubscription once we have finished detaching. *)
 let subscribe ~(here : [%call_pos]) client ?(send_buffer = true) t =
   let%bind.Deferred.Or_error t = get_buffer ~here client t in
   let subscription_manager =

@@ -147,7 +147,7 @@ let with_client
               ; "XDG_CONFIG_HOME", xdg_config_home
               ; "XDG_DATA_HOME", xdg_data_home
               ; "XDG_STATE_HOME", xdg_state_home
-                (* Not set:
+                (*=Not set:
                   - XDG_RUNTIME_DIR, which is used for stdpath("run")
                   - XDG_CONFIG_DIRS, which is used for stdpath("config_dirs")
                   - XDG_DATA_DIRS,   which is used for stdpath("data_dirs") *)
@@ -208,9 +208,9 @@ let with_client
         in
         let%bind () = Ivar.read vim_did_enter |> Deferred.ok in
         let%bind () =
-          (* This check has a sharp corner: if a plugin's startup includes a command
-             that would raise an error but is silenced with [:silent!], that will still
-             get flagged here because [:silent!] sets [v:errmsg]. As a work-around, save
+          (* This check has a sharp corner: if a plugin's startup includes a command that
+             would raise an error but is silenced with [:silent!], that will still get
+             flagged here because [:silent!] sets [v:errmsg]. As a work-around, save
              [v:errmsg] before invoking [:silent!] and restore it afterward. *)
           match%bind Nvim.get_vvar client "errmsg" ~type_:String with
           | "" -> return ()
@@ -470,8 +470,8 @@ let wait_until_text ?(timeout = Time_ns.Span.of_int_sec 2) ~(here : [%call_pos])
     match result with
     | Ok () -> return ()
     | Error screen_contents ->
-      (* print here instead of returning the string in the error in order to
-         keep the sexp-printing from ruining all the unicode chars *)
+      (* print here instead of returning the string in the error in order to keep the
+         sexp-printing from ruining all the unicode chars *)
       let error =
         Error.create_s
           (List
@@ -659,8 +659,8 @@ let%expect_test "We cannot have two async RPCs with the same name" =
   [%expect {| (Failure "Already defined asynchronous RPC: test") |}]
 ;;
 
-(* We allow this in case a plugin wants to implement slightly different semantics based
-   on whether it is called with [rpcrequest] or [rpcnotify]. *)
+(* We allow this in case a plugin wants to implement slightly different semantics based on
+   whether it is called with [rpcrequest] or [rpcnotify]. *)
 let%expect_test "We can have an async RPC and a blocking RPC with the same name" =
   let%map () =
     with_client (fun client ->

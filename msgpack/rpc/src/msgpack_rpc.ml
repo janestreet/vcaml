@@ -61,8 +61,8 @@ let close_connection t reason =
     Bus.close t.connection_closed;
     let reader = Set_once.get_exn t.reader in
     let writer = Set_once.get_exn t.writer in
-    (* We can close the [Reader.t] because even though there still may be unconsumed
-       data, we have already responded to all the pending requests. *)
+    (* We can close the [Reader.t] because even though there still may be unconsumed data,
+       we have already responded to all the pending requests. *)
     don't_wait_for
       (let%map () = Writer.close writer
        and () = Reader.close reader in
@@ -114,9 +114,9 @@ let event_loop t =
       Msgpack.Internal.Parser.msg
       (fun msg ->
         (* Force synchronous message handling. Note that if a request or notification
-            handler raises, we don't do anything special to handle it. Clients that want
-            to prevent raising can use [Monitor.try_with] inside their handlers. If
-            [handle_message] raises due to its own logic, that's a bug. *)
+           handler raises, we don't do anything special to handle it. Clients that want to
+           prevent raising can use [Monitor.try_with] inside their handlers. If
+           [handle_message] raises due to its own logic, that's a bug. *)
         handle_message msg;
         return ())
       (reader t)

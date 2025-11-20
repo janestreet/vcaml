@@ -52,9 +52,9 @@ let spin_until_nvim_creates_socket_file pid ~socket =
 ;;
 
 (* We use [writefile] to enable Neovim to communicate from an atomic context that it is
-   about to enter a state after which it will not be able to communicate (e.g., because
-   it is exiting or because it will be uninterruptible for some reason). This function
-   lets our tests wait for Neovim to reach this point before proceeding. *)
+   about to enter a state after which it will not be able to communicate (e.g., because it
+   is exiting or because it will be uninterruptible for some reason). This function lets
+   our tests wait for Neovim to reach this point before proceeding. *)
 let writefile ~(here : [%call_pos]) client file ~contents ~then_do =
   let open Expert in
   let writefile =

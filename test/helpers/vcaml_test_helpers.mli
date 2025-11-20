@@ -3,7 +3,7 @@ open Async
 open Vcaml
 
 (*_ General note about testing Neovim: if you have a test that gets stuck on the hit-enter
-  prompt (see `:h hit-enter`), send "<CR>" to Neovim via [Nvim.Fast.input]. *)
+    prompt (see `:h hit-enter`), send "<CR>" to Neovim via [Nvim.Fast.input]. *)
 
 (** Launch an embedded Neovim instance and persist the connection for the duration of the
     callback. If [verbose] is set, a dump of the traffic between VCaml and Neovim will be

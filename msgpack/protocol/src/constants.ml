@@ -5,10 +5,10 @@ let nil = '\xc0'
 let false_ = '\xc2'
 let true_ = '\xc3'
 
-(* The ``fix'' variants of each family encode some information about the item (typically the
-   size) in the header byte itself. For example, a header byte of [1110 1111] matches the mask
-   [111X XXXX], which means ``negative fixint'', and represents a value of -15, as the remaining
-   bits are [0 1111] = 15.
+(* The ``fix'' variants of each family encode some information about the item (typically
+   the size) in the header byte itself. For example, a header byte of [1110 1111] matches
+   the mask [111X XXXX], which means ``negative fixint'', and represents a value of -15,
+   as the remaining bits are [0 1111] = 15.
 
    See [https://github.com/msgpack/msgpack/blob/master/spec.md#formats] for the technical
    details.

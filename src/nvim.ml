@@ -138,9 +138,9 @@ let call_function ~(here : [%call_pos]) client ~name ~type_ =
      | `Viml name -> Nvim_internal.nvim_call_function ~fn:name ~args
      | `Lua name ->
        Nvim_internal.nvim_exec_lua
-       (* We surround [name] with parentheses to support anonymous functions. We assign
-            it to [result] before returning it to ensure [name] appears in the stack trace
-            if it raises an error. *)
+       (* We surround [name] with parentheses to support anonymous functions. We assign it
+          to [result] before returning it to ensure [name] appears in the stack trace if
+          it raises an error. *)
          ~code:[%string {| local result = (%{name})(...); return result |}]
          ~args)
     |> run ~here client)
@@ -453,8 +453,8 @@ end
 
 let paste ~(here : [%call_pos]) client data =
   (* We set [crlf:false] here because VCaml already is UNIX-specific. If we change it in
-     the future to support Windows we can expose this option, but for now it just
-     clutters the API unnecessarily. *)
+     the future to support Windows we can expose this option, but for now it just clutters
+     the API unnecessarily. *)
   let data = String.concat data ~sep:"\n" in
   Nvim_internal.nvim_paste ~data ~crlf:false ~phase:(-1)
   |> run ~here client

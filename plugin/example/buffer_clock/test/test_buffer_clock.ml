@@ -43,8 +43,8 @@ let%expect_test "Test buffer clock" =
         let%bind () = advance_time () in
         let%bind () =
           (* Give the plugin a chance to try to update the clock and shut down when it
-              fails to do so. If we immediately call [jobwait] here, the plugin's buffer
-              update will queue behind it. *)
+             fails to do so. If we immediately call [jobwait] here, the plugin's buffer
+             update will queue behind it. *)
           Clock_ns.after (Time_ns.Span.of_int_ms 10) |> Deferred.ok
         in
         Nvim.call_function
