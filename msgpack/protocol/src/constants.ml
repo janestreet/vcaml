@@ -15,8 +15,8 @@ let true_ = '\xc3'
 *)
 
 (* int format family *)
-(* The format for positive fixints is [0XXX YYYY], so the correct way to test a byte against
-   this mask is to check that [ value & unmask == value ].
+(* The format for positive fixints is [0XXX YYYY], so the correct way to test a byte
+   against this mask is to check that [ value & unmask == value ].
 *)
 let positive_fixint_unmask = 0x7F
 let negative_fixint_mask = 0xE0

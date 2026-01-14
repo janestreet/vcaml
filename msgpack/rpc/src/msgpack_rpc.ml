@@ -150,9 +150,9 @@ let create ~on_error =
        implement it as a bus rather than as an ivar to allow listeners to unsubscribe,
        thereby avoiding a memory leak. *)
     Bus.create_exn
-      Arity1
       ~on_subscription_after_first_write:Raise
       ~on_callback_raise:Core.Error.raise
+      ()
   in
   let module Id_factory = Unique_id.Int63 () in
   { reader = Set_once.create ()

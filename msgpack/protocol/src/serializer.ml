@@ -2,8 +2,8 @@ open Base
 open Faraday
 
 (* This is currently written with little to no concern about the efficiency of the
-   serializer. If performance is necessary, we would want to keep a closer eye on
-   the internal buffer and flush occasionally.
+   serializer. If performance is necessary, we would want to keep a closer eye on the
+   internal buffer and flush occasionally.
 *)
 
 let rec dispatch t : Message.t -> unit = function
