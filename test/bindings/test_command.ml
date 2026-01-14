@@ -843,9 +843,9 @@ let%expect_test "Compare native command invocations with range/count against str
     (* The [(range (2 5))], [(range 2) (arg 5)], and [(range (2 5)) (arg 11)] inputs
        aren't valid, but again, there's no logic in Neovim or in VCaml that checks this.
 
-       Now we start to see inconsistencies in the invocations. The VCaml inconsistency
-       is the known case discussed earlier - [(range (2))] passed to a [-count] command is
-       a count passed in the line number position, so this is the count specified on the
+       Now we start to see inconsistencies in the invocations. The VCaml inconsistency is
+       the known case discussed earlier - [(range (2))] passed to a [-count] command is a
+       count passed in the line number position, so this is the count specified on the
        command line case. Because VCaml does not fill in the [range] value in [exec],
        <line1> assumes the default [-range] value, which is the same as what happens when
        the count is passed in the first argument position (see the next case in the test).

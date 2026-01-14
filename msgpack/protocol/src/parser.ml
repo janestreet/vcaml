@@ -25,8 +25,7 @@ let bool = true_ <|> false_
 
 (* See [Constants] for why these are separate functions.
 
-   Also, see
-   https://github.com/msgpack/msgpack/blob/master/spec.md#formats
+   Also, see https://github.com/msgpack/msgpack/blob/master/spec.md#formats
 *)
 let apply_unmask ~unmask ~value = value land unmask
 let unmask ~mask ~value = value land lnot mask
@@ -55,11 +54,11 @@ let negative_fixint =
   (* A negative fixint is stored as a 5-bit two's complement integer. To bit-extend this
      to be the correct real integer, we set all bits besides the bottom 5.
 
-     The reason that we use the literal -32 is so that the mask works on
-     32-bit and 64-bit architectures.
+     The reason that we use the literal -32 is so that the mask works on 32-bit and 64-bit
+     architectures.
 
-     32-bit computer -32: 11111111_11111111_11111111_11100000
-     64-bit computer -32: 11111111_11111111_11111111_11111111_11111111_11111111_11111111_11100000
+     32-bit computer -32: 11111111_11111111_11111111_11100000 64-bit computer -32:
+     11111111_11111111_11111111_11111111_11111111_11111111_11111111_11100000
   *)
   let top_bits_mask = -32 in
   n lor top_bits_mask
@@ -73,8 +72,8 @@ let uint16 = with_header_byte Constants.uint16_header BE.any_uint16
 let uint32 =
   let%bind (_ : char) = char Constants.uint32_header in
   let%map bs = count 2 BE.any_uint16 in
-  (* Because we can't tell angstrom to automatically parse an unsigned 32-bit integer,
-     we instead need to roll our own. A number 0xYYZZ is equal to the sum 0xYY << 16 + 0xZZ
+  (* Because we can't tell angstrom to automatically parse an unsigned 32-bit integer, we
+     instead need to roll our own. A number 0xYYZZ is equal to the sum 0xYY << 16 + 0xZZ
      and is stored in big endian as YY ZZ.
   *)
   List.fold ~f:(fun acc v -> (acc lsl 16) + v) ~init:0 bs
@@ -92,8 +91,8 @@ let int32 =
   let%bind result = with_header_byte Constants.int32_header BE.any_int32 in
   match Int32.to_int result with
   | Some i -> return i
-  (* This will technically fail back to the outlying choice combinators, but that's
-     fine, because the spec is designed such that each of those will fail as well.
+  (* This will technically fail back to the outlying choice combinators, but that's fine,
+     because the spec is designed such that each of those will fail as well.
   *)
   | None -> fail "int32 value too big for native integers!"
 ;;

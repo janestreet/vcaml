@@ -487,8 +487,7 @@ let connect
     ; unregister_request_blocking
     ; name_anonymous_blocking_request =
         (* [Unique_id.Int63] does not give uniqueness between clients, but this isn't
-           necessary as RPCs need only be unique per-client (i.e. per-channel in
-           Neovim). *)
+           necessary as RPCs need only be unique per-client (i.e. per-channel in Neovim). *)
         (let module Id = Unique_id.Int63 () in
         fun () ->
           let id = Id.create () in
@@ -776,7 +775,7 @@ module Maybe_connected = struct
     | Not_connected of Not_connected.t
 end
 
-(* --------------------------- Tests of internal functions --------------------------- *)
+(*=--------------------------- Tests of internal functions --------------------------- *)
 open struct
   let%expect_test "[tag_callsite]" =
     let test () =

@@ -19,8 +19,9 @@ let buffer_local_options_with_ignored_global_setting =
   |> String.Set.of_list
 ;;
 
-(* Although this is a "global or local to tabpage" option, it is marked [global_local =
-   false] in the data. This is likely an oversight due to it being a singleton category. *)
+(* Although this is a "global or local to tabpage" option, it is marked
+   [global_local = false] in the data. This is likely an oversight due to it being a
+   singleton category. *)
 let global_or_local_to_tabpage = [ "cmdheight" ] |> String.Set.of_list
 
 let options_for_scope =

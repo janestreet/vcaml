@@ -27,8 +27,8 @@ let run_neovim_with_pty ~time_source ~f =
       Core_unix.dup2 ~src:pty_slave ~dst:Core_unix.stderr ();
       Core_unix.close pty_slave;
       (* There is some undocumented internal limit for the socket length (it doesn't
-         appear in `:h limits`) so to ensure we create a socket we set the working dir
-         to [tmp_dir] and create the socket with a relative path. *)
+         appear in `:h limits`) so to ensure we create a socket we set the working dir to
+         [tmp_dir] and create the socket with a relative path. *)
       Core_unix.chdir tmp_dir;
       let prog = Private.neovim_path in
       (* We do *not* want to run with --headless here. *)

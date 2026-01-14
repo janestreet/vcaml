@@ -29,9 +29,9 @@ let on_startup client =
       ()
       ~name:"SayHello"
       ~scope:`Global
-      (* We cannot implement [:SayHello] with an anonymous RPC because we need to pass
-         an argument. Instead, we define an RPC named "hello" and invoke it from VimL
-         with the argument passed to the command. *)
+      (* We cannot implement [:SayHello] with an anonymous RPC because we need to pass an
+         argument. Instead, we define an RPC named "hello" and invoke it from VimL with
+         the argument passed to the command. *)
       (Viml [%string {| call rpcrequest(%{channel#Int}, "hello", <q-args>) |}])
   in
   let%bind () =

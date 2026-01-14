@@ -324,7 +324,7 @@ let rec create
         ~patterns_or_buffer
         ~group
           (* Unlike buffer-local keymaps and buffer-local commands, buffer-local autocmds
-           are only removed on wipeout, not on buffer deletion. *)
+             are only removed on wipeout, not on buffer deletion. *)
         ~events:[ BufWipeout ]
         (Viml
            [%string

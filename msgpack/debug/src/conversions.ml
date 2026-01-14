@@ -347,8 +347,8 @@ let quickcheck_conv_roundtrip quickcheck_generator ~format =
               "Expected bytes but got EOF" (expected_bytes : string) (msgpack : Msgpack.t)]
         | `Ok n_bytes ->
           let actual_bytes =
-            (* We use [String.prefix] here in case [n_bytes < String.length expected_bytes]
-               so we exclude trailing garbage. *)
+            (* We use [String.prefix] here in case
+               [n_bytes < String.length expected_bytes] so we exclude trailing garbage. *)
             String.prefix (Bytes.to_string actual_bytes) n_bytes
           in
           (match
