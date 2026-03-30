@@ -6,6 +6,7 @@ bug-reports: "https://github.com/janestreet/vcaml/issues"
 dev-repo: "git+https://github.com/janestreet/vcaml.git"
 doc: "https://ocaml.janestreet.com/ocaml-core/latest/doc/vcaml/index.html"
 license: "MIT"
+x-maintenance-intent: ["(latest)"]
 build: [
   ["dune" "build" "-p" name "-j" jobs]
 ]
