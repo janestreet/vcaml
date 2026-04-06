@@ -5,7 +5,7 @@ module Custom : sig
     { type_id : int
     ; data : Bytes.t
     }
-  [@@deriving compare, sexp]
+  [@@deriving compare ~localize, sexp]
 end
 
 type t =
@@ -20,9 +20,9 @@ type t =
   | String of string
   | Binary of Bytes.t
   | Ext of Custom.t
-[@@deriving compare, sexp]
+[@@deriving compare ~localize, sexp]
 
-include Comparable.S with type t := t
+include Comparable.S [@mode local] with type t := t
 
 val quickcheck_generator
   :  only_string_keys:bool

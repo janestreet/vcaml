@@ -5,7 +5,7 @@ module Custom = struct
     { type_id : int
     ; data : Bytes.t
     }
-  [@@deriving compare, sexp]
+  [@@deriving compare ~localize, sexp]
 end
 
 module T = struct
@@ -23,11 +23,11 @@ module T = struct
     | String of string
     | Binary of Bytes.t
     | Ext of Custom.t
-  [@@deriving compare, sexp]
+  [@@deriving compare ~localize, sexp]
 end
 
 include T
-include Comparable.Make (T)
+include Comparable.Make [@mode local] (T)
 
 (* This generator is intended to generate ``well-behaved'' objects, ie those satisfying
    [parse . serialize == id]. Because we need to be able to handle 64-bit integers, any

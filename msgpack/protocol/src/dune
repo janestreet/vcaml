@@ -3,4 +3,4 @@
  (public_name vcaml.msgpack)
  (libraries angstrom core faraday)
  (preprocess
-  (pps ppx_jane)))
+  (pps ppx_jane -compare-require-explicit-locality)))

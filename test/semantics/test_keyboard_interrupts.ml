@@ -18,42 +18,46 @@ let run_neovim_with_pty ~time_source ~f =
   unlockpt pty_master;
   Expect_test_helpers_async.with_temp_dir (fun tmp_dir ->
     let socket = tmp_dir ^/ "socket" in
-    match Core_unix.fork () with
-    | `In_the_child ->
-      let (_ : int) = Core_unix.Terminal_io.setsid () in
-      let pty_slave = Core_unix.openfile ~mode:[ O_RDWR ] (ptsname pty_master) in
-      Core_unix.dup2 ~src:pty_slave ~dst:Core_unix.stdin ();
-      Core_unix.dup2 ~src:pty_slave ~dst:Core_unix.stdout ();
-      Core_unix.dup2 ~src:pty_slave ~dst:Core_unix.stderr ();
-      Core_unix.close pty_slave;
-      (* There is some undocumented internal limit for the socket length (it doesn't
-         appear in `:h limits`) so to ensure we create a socket we set the working dir to
-         [tmp_dir] and create the socket with a relative path. *)
-      Core_unix.chdir tmp_dir;
-      let prog = Private.neovim_path in
-      (* We do *not* want to run with --headless here. *)
-      Core_unix.exec
-        ()
+    let pty_slave_path = ptsname pty_master in
+    let prog = Private.neovim_path in
+    (* There is some undocumented internal limit for the socket length (it doesn't appear
+       in `:h limits`) so to ensure we create a socket we set the working dir to [tmp_dir]
+       and create the socket with a relative path. *)
+    (* We do *not* want to run with --headless here. *)
+    let nvim =
+      Core_unix.fork_exec
         ~prog
         ~argv:[ prog; "-n"; "--clean"; "--listen"; "./socket" ]
         ~env:(`Extend [ "NVIM_RPLUGIN_MANIFEST", "rplugin.vim" ])
-      |> never_returns
-    | `In_the_parent nvim ->
-      with_process_cleanup ~name:"nvim" nvim ~f:(fun () ->
-        match%bind spin_until_nvim_creates_socket_file nvim ~socket with
-        | `Nvim_crashed exit_or_signal -> return (`Already_reaped exit_or_signal)
-        | `Socket_created ->
-          let%bind client = socket_client socket ?time_source >>| ok_exn in
-          let send_keys bytes =
-            let buf = Bytes.of_string bytes in
-            let bytes_written = Core_unix.single_write pty_master ~buf in
-            assert (String.length bytes = bytes_written)
-          in
-          let%bind result = f ~tmp_dir ~client ~send_keys in
-          let%map () = Client.close client in
-          (match result with
-           | `Closed -> `Need_to_reap `Patient
-           | `Still_running -> `Need_to_reap `Impatient)))
+        ~preexec:
+          [ Setsid ()
+          ; Fd_open
+              { fd = Core_unix.stdin
+              ; filename = pty_slave_path
+              ; flags = [ O_RDWR ]
+              ; perm = 0
+              }
+          ; Fd_dup2 { src = Core_unix.stdin; dst = Core_unix.stdout }
+          ; Fd_dup2 { src = Core_unix.stdout; dst = Core_unix.stderr }
+          ; Chdir tmp_dir
+          ]
+        ()
+    in
+    with_process_cleanup ~name:"nvim" nvim ~f:(fun () ->
+      match%bind spin_until_nvim_creates_socket_file nvim ~socket with
+      | `Nvim_crashed exit_or_signal -> return (`Already_reaped exit_or_signal)
+      | `Socket_created ->
+        let%bind client = socket_client socket ?time_source >>| ok_exn in
+        let send_keys bytes =
+          let buf = Bytes.of_string bytes in
+          let bytes_written = Core_unix.single_write pty_master ~buf in
+          assert (String.length bytes = bytes_written)
+        in
+        let%bind result = f ~tmp_dir ~client ~send_keys in
+        let%map () = Client.close client in
+        (match result with
+         | `Closed -> `Need_to_reap `Patient
+         | `Still_running -> `Need_to_reap `Impatient)))
 ;;
 
 let%expect_test "Keyboard interrupt aborts simple RPC request" =
