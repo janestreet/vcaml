@@ -160,9 +160,9 @@ let%expect_test "changedtick, get_text, set_text" =
     (changedtick 2)
     (changedtick 3)
     (error
-     (("One of the calls in the nvim_call_atomic batch failed"
-       (index_of_failure 0) (error_type Exception)
-       "nvim_exec2(): Vim(echoerr):Buffer updated since changedtick (wanted 2 but is now 3)")
+     (("One of the calls in the Atomic.run batch failed" (index_of_failure 0)
+       (error_type Exception)
+       "nvim_exec2(), line 1: Vim(echoerr):Buffer updated since changedtick (wanted 2 but is now 3)")
       (("Called from" lib/vcaml/test/bindings/test_buffer.ml:LINE:COL))))
     ((value (test)) (changedtick 3))
     |}];
@@ -530,7 +530,7 @@ let%expect_test "Extmark indexing" =
       ((value
         ((((row 0) (col 4))
           ((end_col (Int 1)) (end_right_gravity (Bool false)) (end_row (Int 1))
-           (ns_id (Int 1)) (right_gravity (Bool true))))))
+           (ns_id (Int 2)) (right_gravity (Bool true))))))
        (changedtick 5))
       |}];
     let%bind result =

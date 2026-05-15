@@ -15,7 +15,7 @@ module Api_version = struct
 end
 
 let api_version =
-  { Api_version.api_compatible = 0; api_level = 11; major = 0; minor = 9; patch = 1 }
+  { Api_version.api_compatible = 0; api_level = 13; major = 0; minor = 11; patch = 2 }
 ;;
 
 module Ui_options = struct
@@ -297,6 +297,10 @@ module Ui_event = struct
         ; value : Msgpack.t
         ; unparsed_fields : Msgpack.t list
         }
+    | Chdir of
+        { path : string
+        ; unparsed_fields : Msgpack.t list
+        }
     | Update_fg of
         { fg : int
         ; unparsed_fields : Msgpack.t list
@@ -381,6 +385,7 @@ module Ui_event = struct
         ; row : int
         ; col_start : int
         ; data : Msgpack.t list
+        ; wrap : bool
         ; unparsed_fields : Msgpack.t list
         }
     | Grid_scroll of
@@ -413,7 +418,7 @@ module Ui_event = struct
         ; anchor_grid : int
         ; anchor_row : float
         ; anchor_col : float
-        ; focusable : bool
+        ; mouse_enabled : bool
         ; zindex : int
         ; unparsed_fields : Msgpack.t list
         }
@@ -446,6 +451,15 @@ module Ui_event = struct
         ; curcol : int
         ; line_count : int
         ; scroll_delta : int
+        ; unparsed_fields : Msgpack.t list
+        }
+    | Win_viewport_margins of
+        { grid : int
+        ; win : Window.t
+        ; top : int
+        ; bottom : int
+        ; left : int
+        ; right : int
         ; unparsed_fields : Msgpack.t list
         }
     | Win_extmark of
@@ -484,6 +498,7 @@ module Ui_event = struct
         ; prompt : string
         ; indent : int
         ; level : int
+        ; hl_id : int
         ; unparsed_fields : Msgpack.t list
         }
     | Cmdline_pos of
@@ -499,6 +514,7 @@ module Ui_event = struct
         }
     | Cmdline_hide of
         { level : int
+        ; abort : bool
         ; unparsed_fields : Msgpack.t list
         }
     | Cmdline_block_show of
@@ -523,6 +539,7 @@ module Ui_event = struct
         { kind : string
         ; content : Msgpack.t list
         ; replace_last : bool
+        ; history : bool
         ; unparsed_fields : Msgpack.t list
         }
     | Msg_clear of { unparsed_fields : Msgpack.t list }
@@ -543,6 +560,10 @@ module Ui_event = struct
         ; unparsed_fields : Msgpack.t list
         }
     | Msg_history_clear of { unparsed_fields : Msgpack.t list }
+    | Error_exit of
+        { status : int
+        ; unparsed_fields : Msgpack.t list
+        }
     | Unknown_event of
         { name : string
         ; unparsed_fields : Msgpack.t list
@@ -674,6 +695,19 @@ module Ui_event = struct
               (match params with
                | String name :: value :: unparsed_fields ->
                  Ok (Option_set { name; value; unparsed_fields })
+               | _ -> Or_error.error_string "Arguments have wrong type or arity")
+              |> Or_error.tag_s_lazy
+                   ~tag:
+                     [%lazy_message
+                       "Failed to parse UI event"
+                         (name : string)
+                         (params : Msgpack.t list)])
+            |> Or_error.combine_errors
+          | "chdir" ->
+            calls
+            |> List.map ~f:(fun params ->
+              (match params with
+               | String path :: unparsed_fields -> Ok (Chdir { path; unparsed_fields })
                | _ -> Or_error.error_string "Arguments have wrong type or arity")
               |> Or_error.tag_s_lazy
                    ~tag:
@@ -910,9 +944,14 @@ module Ui_event = struct
             calls
             |> List.map ~f:(fun params ->
               (match params with
-               | Int grid :: Int row :: Int col_start :: data :: unparsed_fields ->
+               | Int grid
+                 :: Int row
+                 :: Int col_start
+                 :: data
+                 :: Bool wrap
+                 :: unparsed_fields ->
                  let%bind data = Phantom.of_msgpack (Array Object) data in
-                 return (Grid_line { grid; row; col_start; data; unparsed_fields })
+                 return (Grid_line { grid; row; col_start; data; wrap; unparsed_fields })
                | _ -> Or_error.error_string "Arguments have wrong type or arity")
               |> Or_error.tag_s_lazy
                    ~tag:
@@ -991,7 +1030,7 @@ module Ui_event = struct
                  :: Int anchor_grid
                  :: Float anchor_row
                  :: Float anchor_col
-                 :: Bool focusable
+                 :: Bool mouse_enabled
                  :: Int zindex
                  :: unparsed_fields ->
                  let%bind win = Phantom.of_msgpack Window win in
@@ -1003,7 +1042,7 @@ module Ui_event = struct
                       ; anchor_grid
                       ; anchor_row
                       ; anchor_col
-                      ; focusable
+                      ; mouse_enabled
                       ; zindex
                       ; unparsed_fields
                       })
@@ -1108,6 +1147,29 @@ module Ui_event = struct
                          (name : string)
                          (params : Msgpack.t list)])
             |> Or_error.combine_errors
+          | "win_viewport_margins" ->
+            calls
+            |> List.map ~f:(fun params ->
+              (match params with
+               | Int grid
+                 :: win
+                 :: Int top
+                 :: Int bottom
+                 :: Int left
+                 :: Int right
+                 :: unparsed_fields ->
+                 let%bind win = Phantom.of_msgpack Window win in
+                 return
+                   (Win_viewport_margins
+                      { grid; win; top; bottom; left; right; unparsed_fields })
+               | _ -> Or_error.error_string "Arguments have wrong type or arity")
+              |> Or_error.tag_s_lazy
+                   ~tag:
+                     [%lazy_message
+                       "Failed to parse UI event"
+                         (name : string)
+                         (params : Msgpack.t list)])
+            |> Or_error.combine_errors
           | "win_extmark" ->
             calls
             |> List.map ~f:(fun params ->
@@ -1199,11 +1261,20 @@ module Ui_event = struct
                  :: String prompt
                  :: Int indent
                  :: Int level
+                 :: Int hl_id
                  :: unparsed_fields ->
                  let%bind content = Phantom.of_msgpack (Array Object) content in
                  return
                    (Cmdline_show
-                      { content; pos; firstc; prompt; indent; level; unparsed_fields })
+                      { content
+                      ; pos
+                      ; firstc
+                      ; prompt
+                      ; indent
+                      ; level
+                      ; hl_id
+                      ; unparsed_fields
+                      })
                | _ -> Or_error.error_string "Arguments have wrong type or arity")
               |> Or_error.tag_s_lazy
                    ~tag:
@@ -1244,8 +1315,8 @@ module Ui_event = struct
             calls
             |> List.map ~f:(fun params ->
               (match params with
-               | Int level :: unparsed_fields ->
-                 Ok (Cmdline_hide { level; unparsed_fields })
+               | Int level :: Bool abort :: unparsed_fields ->
+                 Ok (Cmdline_hide { level; abort; unparsed_fields })
                | _ -> Or_error.error_string "Arguments have wrong type or arity")
               |> Or_error.tag_s_lazy
                    ~tag:
@@ -1325,9 +1396,14 @@ module Ui_event = struct
             calls
             |> List.map ~f:(fun params ->
               (match params with
-               | String kind :: content :: Bool replace_last :: unparsed_fields ->
+               | String kind
+                 :: content
+                 :: Bool replace_last
+                 :: Bool history
+                 :: unparsed_fields ->
                  let%bind content = Phantom.of_msgpack (Array Object) content in
-                 return (Msg_show { kind; content; replace_last; unparsed_fields })
+                 return
+                   (Msg_show { kind; content; replace_last; history; unparsed_fields })
                | _ -> Or_error.error_string "Arguments have wrong type or arity")
               |> Or_error.tag_s_lazy
                    ~tag:
@@ -1404,6 +1480,20 @@ module Ui_event = struct
             calls
             |> List.map ~f:(fun params -> Msg_history_clear { unparsed_fields = params })
             |> Or_error.return
+          | "error_exit" ->
+            calls
+            |> List.map ~f:(fun params ->
+              (match params with
+               | Int status :: unparsed_fields ->
+                 Ok (Error_exit { status; unparsed_fields })
+               | _ -> Or_error.error_string "Arguments have wrong type or arity")
+              |> Or_error.tag_s_lazy
+                   ~tag:
+                     [%lazy_message
+                       "Failed to parse UI event"
+                         (name : string)
+                         (params : Msgpack.t list)])
+            |> Or_error.combine_errors
           | _ ->
             calls
             |> List.map ~f:(fun params ->
@@ -1704,11 +1794,6 @@ let nvim_buf_get_commands ~buffer ~opts =
   { Api_result.name = "nvim_buf_get_commands"; params = [ buffer; opts ]; witness = Dict }
 ;;
 
-let nvim_get_option_info ~name =
-  let name = Phantom.to_msgpack String name in
-  { Api_result.name = "nvim_get_option_info"; params = [ name ]; witness = Dict }
-;;
-
 let nvim_create_namespace ~name =
   let name = Phantom.to_msgpack String name in
   { Api_result.name = "nvim_create_namespace"; params = [ name ]; witness = Int }
@@ -1763,19 +1848,6 @@ let nvim_buf_del_extmark ~buffer ~ns_id ~id =
   }
 ;;
 
-let nvim_buf_add_highlight ~buffer ~ns_id ~hl_group ~line ~col_start ~col_end =
-  let buffer = Buffer.Or_current.to_msgpack buffer in
-  let ns_id = Phantom.to_msgpack Int ns_id in
-  let hl_group = Phantom.to_msgpack String hl_group in
-  let line = Phantom.to_msgpack Int line in
-  let col_start = Phantom.to_msgpack Int col_start in
-  let col_end = Phantom.to_msgpack Int col_end in
-  { Api_result.name = "nvim_buf_add_highlight"
-  ; params = [ buffer; ns_id; hl_group; line; col_start; col_end ]
-  ; witness = Int
-  }
-;;
-
 let nvim_buf_clear_namespace ~buffer ~ns_id ~line_start ~line_end =
   let buffer = Buffer.Or_current.to_msgpack buffer in
   let ns_id = Phantom.to_msgpack Int ns_id in
@@ -1811,49 +1883,6 @@ let nvim_get_option_info2 ~name ~opts =
   let name = Phantom.to_msgpack String name in
   let opts = Phantom.to_msgpack Dict opts in
   { Api_result.name = "nvim_get_option_info2"; params = [ name; opts ]; witness = Dict }
-;;
-
-let nvim_set_option ~name ~value =
-  let name = Phantom.to_msgpack String name in
-  let value = Phantom.to_msgpack Object value in
-  { Api_result.name = "nvim_set_option"; params = [ name; value ]; witness = Nil }
-;;
-
-let nvim_get_option ~name =
-  let name = Phantom.to_msgpack String name in
-  { Api_result.name = "nvim_get_option"; params = [ name ]; witness = Object }
-;;
-
-let nvim_buf_get_option ~buffer ~name =
-  let buffer = Buffer.Or_current.to_msgpack buffer in
-  let name = Phantom.to_msgpack String name in
-  { Api_result.name = "nvim_buf_get_option"; params = [ buffer; name ]; witness = Object }
-;;
-
-let nvim_buf_set_option ~buffer ~name ~value =
-  let buffer = Buffer.Or_current.to_msgpack buffer in
-  let name = Phantom.to_msgpack String name in
-  let value = Phantom.to_msgpack Object value in
-  { Api_result.name = "nvim_buf_set_option"
-  ; params = [ buffer; name; value ]
-  ; witness = Nil
-  }
-;;
-
-let nvim_win_get_option ~window ~name =
-  let window = Window.Or_current.to_msgpack window in
-  let name = Phantom.to_msgpack String name in
-  { Api_result.name = "nvim_win_get_option"; params = [ window; name ]; witness = Object }
-;;
-
-let nvim_win_set_option ~window ~name ~value =
-  let window = Window.Or_current.to_msgpack window in
-  let name = Phantom.to_msgpack String name in
-  let value = Phantom.to_msgpack Object value in
-  { Api_result.name = "nvim_win_set_option"
-  ; params = [ window; name; value ]
-  ; witness = Nil
-  }
 ;;
 
 let nvim_tabpage_list_wins ~tabpage =
@@ -1892,6 +1921,12 @@ let nvim_tabpage_del_var ~tabpage ~name =
 let nvim_tabpage_get_win ~tabpage =
   let tabpage = Tabpage.Or_current.to_msgpack tabpage in
   { Api_result.name = "nvim_tabpage_get_win"; params = [ tabpage ]; witness = Window }
+;;
+
+let nvim_tabpage_set_win ~tabpage ~win =
+  let tabpage = Tabpage.Or_current.to_msgpack tabpage in
+  let win = Phantom.to_msgpack Window win in
+  { Api_result.name = "nvim_tabpage_set_win"; params = [ tabpage; win ]; witness = Nil }
 ;;
 
 let nvim_tabpage_get_number ~tabpage =
@@ -1959,6 +1994,12 @@ let nvim_ui_pum_set_bounds ~width ~height ~row ~col =
   }
 ;;
 
+let nvim_ui_term_event ~event ~value =
+  let event = Phantom.to_msgpack String event in
+  let value = Phantom.to_msgpack Object value in
+  { Api_result.name = "nvim_ui_term_event"; params = [ event; value ]; witness = Nil }
+;;
+
 let nvim_get_hl_id_by_name ~name =
   let name = Phantom.to_msgpack String name in
   { Api_result.name = "nvim_get_hl_id_by_name"; params = [ name ]; witness = Int }
@@ -1975,6 +2016,11 @@ let nvim_set_hl ~ns_id ~name ~val_ =
   let name = Phantom.to_msgpack String name in
   let val_ = Phantom.to_msgpack Dict val_ in
   { Api_result.name = "nvim_set_hl"; params = [ ns_id; name; val_ ]; witness = Nil }
+;;
+
+let nvim_get_hl_ns ~opts =
+  let opts = Phantom.to_msgpack Dict opts in
+  { Api_result.name = "nvim_get_hl_ns"; params = [ opts ]; witness = Int }
 ;;
 
 let nvim_set_hl_ns ~ns_id =
@@ -2022,13 +2068,6 @@ let nvim_exec_lua ~code ~args =
   let code = Phantom.to_msgpack String code in
   let args = Phantom.to_msgpack (Array Object) args in
   { Api_result.name = "nvim_exec_lua"; params = [ code; args ]; witness = Object }
-;;
-
-let nvim_notify ~msg ~log_level ~opts =
-  let msg = Phantom.to_msgpack String msg in
-  let log_level = Phantom.to_msgpack Int log_level in
-  let opts = Phantom.to_msgpack Dict opts in
-  { Api_result.name = "nvim_notify"; params = [ msg; log_level; opts ]; witness = Object }
 ;;
 
 let nvim_strwidth ~text =
@@ -2099,21 +2138,6 @@ let nvim_echo ~chunks ~history ~opts =
   let history = Phantom.to_msgpack Bool history in
   let opts = Phantom.to_msgpack Dict opts in
   { Api_result.name = "nvim_echo"; params = [ chunks; history; opts ]; witness = Nil }
-;;
-
-let nvim_out_write ~str =
-  let str = Phantom.to_msgpack String str in
-  { Api_result.name = "nvim_out_write"; params = [ str ]; witness = Nil }
-;;
-
-let nvim_err_write ~str =
-  let str = Phantom.to_msgpack String str in
-  { Api_result.name = "nvim_err_write"; params = [ str ]; witness = Nil }
-;;
-
-let nvim_err_writeln ~str =
-  let str = Phantom.to_msgpack String str in
-  { Api_result.name = "nvim_err_writeln"; params = [ str ]; witness = Nil }
 ;;
 
 let nvim_list_bufs =
@@ -2191,16 +2215,6 @@ let nvim_put ~lines ~type_ ~after ~follow =
   }
 ;;
 
-let nvim_subscribe ~event =
-  let event = Phantom.to_msgpack String event in
-  { Api_result.name = "nvim_subscribe"; params = [ event ]; witness = Nil }
-;;
-
-let nvim_unsubscribe ~event =
-  let event = Phantom.to_msgpack String event in
-  { Api_result.name = "nvim_unsubscribe"; params = [ event ]; witness = Nil }
-;;
-
 let nvim_get_color_by_name ~name =
   let name = Phantom.to_msgpack String name in
   { Api_result.name = "nvim_get_color_by_name"; params = [ name ]; witness = Int }
@@ -2267,11 +2281,6 @@ let nvim_get_chan_info ~chan =
 
 let nvim_list_chans =
   { Api_result.name = "nvim_list_chans"; params = []; witness = Array Object }
-;;
-
-let nvim_call_atomic ~calls =
-  let calls = Phantom.to_msgpack (Array Object) calls in
-  { Api_result.name = "nvim_call_atomic"; params = [ calls ]; witness = Array Object }
 ;;
 
 let nvim_list_uis =
@@ -2488,6 +2497,12 @@ let nvim_win_set_hl_ns ~window ~ns_id =
   { Api_result.name = "nvim_win_set_hl_ns"; params = [ window; ns_id ]; witness = Nil }
 ;;
 
+let nvim_win_text_height ~window ~opts =
+  let window = Window.Or_current.to_msgpack window in
+  let opts = Phantom.to_msgpack Dict opts in
+  { Api_result.name = "nvim_win_text_height"; params = [ window; opts ]; witness = Dict }
+;;
+
 module Options = struct
   module Data = struct
     module Type = struct
@@ -2536,14 +2551,13 @@ module Options = struct
       ; { name = "cmdwinheight"; global_local = false; type_ = Int }
       ; { name = "columns"; global_local = false; type_ = Int }
       ; { name = "compatible"; global_local = false; type_ = Bool }
-      ; { name = "completeopt"; global_local = false; type_ = String_list }
-      ; { name = "completeslash"; global_local = false; type_ = String }
+      ; { name = "completeitemalign"; global_local = false; type_ = String_list }
       ; { name = "confirm"; global_local = false; type_ = Bool }
       ; { name = "cpoptions"
         ; global_local = false
         ; type_ = Char_list { commalist = false }
         }
-      ; { name = "debug"; global_local = false; type_ = String }
+      ; { name = "debug"; global_local = false; type_ = String_list }
       ; { name = "delcombine"; global_local = false; type_ = Bool }
       ; { name = "diffexpr"; global_local = false; type_ = String }
       ; { name = "diffopt"; global_local = false; type_ = String_list }
@@ -2608,6 +2622,7 @@ module Options = struct
       ; { name = "maxmapdepth"; global_local = false; type_ = Int }
       ; { name = "maxmempattern"; global_local = false; type_ = Int }
       ; { name = "menuitems"; global_local = false; type_ = Int }
+      ; { name = "messagesopt"; global_local = false; type_ = String_list }
       ; { name = "mkspellmem"; global_local = false; type_ = String }
       ; { name = "modelineexpr"; global_local = false; type_ = Bool }
       ; { name = "modelines"; global_local = false; type_ = Int }
@@ -2677,6 +2692,7 @@ module Options = struct
       ; { name = "startofline"; global_local = false; type_ = Bool }
       ; { name = "suffixes"; global_local = false; type_ = String_list }
       ; { name = "switchbuf"; global_local = false; type_ = String_list }
+      ; { name = "tabclose"; global_local = false; type_ = String_list }
       ; { name = "tabline"; global_local = false; type_ = String }
       ; { name = "tabpagemax"; global_local = false; type_ = Int }
       ; { name = "tagbsearch"; global_local = false; type_ = Bool }
@@ -2686,6 +2702,7 @@ module Options = struct
       ; { name = "termbidi"; global_local = false; type_ = Bool }
       ; { name = "termguicolors"; global_local = false; type_ = Bool }
       ; { name = "termpastefilter"; global_local = false; type_ = String_list }
+      ; { name = "termsync"; global_local = false; type_ = Bool }
       ; { name = "tildeop"; global_local = false; type_ = Bool }
       ; { name = "timeout"; global_local = false; type_ = Bool }
       ; { name = "timeoutlen"; global_local = false; type_ = Int }
@@ -2702,8 +2719,6 @@ module Options = struct
       ; { name = "verbose"; global_local = false; type_ = Int }
       ; { name = "verbosefile"; global_local = false; type_ = String }
       ; { name = "viewdir"; global_local = false; type_ = String }
-      ; { name = "viminfo"; global_local = false; type_ = String }
-      ; { name = "viminfofile"; global_local = false; type_ = String }
       ; { name = "visualbell"; global_local = false; type_ = Bool }
       ; { name = "warn"; global_local = false; type_ = Bool }
       ; { name = "whichwrap"
@@ -2718,6 +2733,7 @@ module Options = struct
       ; { name = "wildmode"; global_local = false; type_ = String_list }
       ; { name = "wildoptions"; global_local = false; type_ = String_list }
       ; { name = "winaltkeys"; global_local = false; type_ = String }
+      ; { name = "winborder"; global_local = false; type_ = String }
       ; { name = "window"; global_local = false; type_ = Int }
       ; { name = "winheight"; global_local = false; type_ = Int }
       ; { name = "winminheight"; global_local = false; type_ = Int }
@@ -2752,6 +2768,8 @@ module Options = struct
       ; { name = "commentstring"; global_local = false; type_ = String }
       ; { name = "complete"; global_local = false; type_ = String_list }
       ; { name = "completefunc"; global_local = false; type_ = String }
+      ; { name = "completeopt"; global_local = true; type_ = String_list }
+      ; { name = "completeslash"; global_local = false; type_ = String }
       ; { name = "copyindent"; global_local = false; type_ = Bool }
       ; { name = "define"; global_local = true; type_ = String }
       ; { name = "dictionary"; global_local = true; type_ = String_list }
@@ -2763,6 +2781,7 @@ module Options = struct
       ; { name = "fileencoding"; global_local = false; type_ = String }
       ; { name = "fileformat"; global_local = false; type_ = String }
       ; { name = "filetype"; global_local = false; type_ = String }
+      ; { name = "findfunc"; global_local = true; type_ = String }
       ; { name = "fixendofline"; global_local = false; type_ = Bool }
       ; { name = "formatexpr"; global_local = false; type_ = String }
       ; { name = "formatlistpat"; global_local = false; type_ = String }
@@ -2831,13 +2850,17 @@ module Options = struct
       ; { name = "breakindent"; global_local = false; type_ = Bool }
       ; { name = "breakindentopt"; global_local = false; type_ = String_list }
       ; { name = "colorcolumn"; global_local = false; type_ = String_list }
-      ; { name = "concealcursor"; global_local = false; type_ = String }
+      ; { name = "concealcursor"
+        ; global_local = false
+        ; type_ = Char_list { commalist = false }
+        }
       ; { name = "conceallevel"; global_local = false; type_ = Int }
       ; { name = "cursorbind"; global_local = false; type_ = Bool }
       ; { name = "cursorcolumn"; global_local = false; type_ = Bool }
       ; { name = "cursorline"; global_local = false; type_ = Bool }
       ; { name = "cursorlineopt"; global_local = false; type_ = String_list }
       ; { name = "diff"; global_local = false; type_ = Bool }
+      ; { name = "eventignorewin"; global_local = false; type_ = String_list }
       ; { name = "fillchars"; global_local = true; type_ = String_list }
       ; { name = "foldcolumn"; global_local = false; type_ = String }
       ; { name = "foldenable"; global_local = false; type_ = Bool }
@@ -2857,19 +2880,21 @@ module Options = struct
       ; { name = "previewwindow"; global_local = false; type_ = Bool }
       ; { name = "relativenumber"; global_local = false; type_ = Bool }
       ; { name = "rightleft"; global_local = false; type_ = Bool }
-      ; { name = "rightleftcmd"; global_local = false; type_ = String }
+      ; { name = "rightleftcmd"; global_local = false; type_ = String_list }
       ; { name = "scroll"; global_local = false; type_ = Int }
       ; { name = "scrollbind"; global_local = false; type_ = Bool }
       ; { name = "scrolloff"; global_local = true; type_ = Int }
       ; { name = "showbreak"; global_local = true; type_ = String }
       ; { name = "sidescrolloff"; global_local = true; type_ = Int }
       ; { name = "signcolumn"; global_local = false; type_ = String }
+      ; { name = "smoothscroll"; global_local = false; type_ = Bool }
       ; { name = "spell"; global_local = false; type_ = Bool }
       ; { name = "statuscolumn"; global_local = false; type_ = String }
       ; { name = "statusline"; global_local = true; type_ = String }
       ; { name = "virtualedit"; global_local = true; type_ = String_list }
       ; { name = "winbar"; global_local = true; type_ = String }
       ; { name = "winblend"; global_local = false; type_ = Int }
+      ; { name = "winfixbuf"; global_local = false; type_ = Bool }
       ; { name = "winfixheight"; global_local = false; type_ = Bool }
       ; { name = "winfixwidth"; global_local = false; type_ = Bool }
       ; { name = "winhighlight"; global_local = false; type_ = String_list }

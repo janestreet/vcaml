@@ -4,20 +4,12 @@ open Vcaml
 open Vcaml_test_helpers
 module Notifier = Vcaml.Expert.Notifier
 
-let get_current_channel ~client =
-  let%map.Deferred.Or_error channels = Nvim.channels client in
-  List.hd_exn channels
-;;
-
 let%expect_test "Simple asynchronous notification" =
   let result =
     let result = Ivar.create () in
     with_client (fun client ->
       let open Deferred.Or_error.Let_syntax in
-      let%bind channel =
-        let%map channel_info = get_current_channel ~client in
-        channel_info.id
-      in
+      let%bind channel = Nvim.get_channel_info client in
       let name = "async_func" in
       Ocaml_from_nvim.register_request_async
         (Connected client)
@@ -29,7 +21,7 @@ let%expect_test "Simple asynchronous notification" =
           client
           ~name:(`Viml "rpcnotify")
           ~type_:Notifier.Func.(Int @-> String @-> unit)
-          channel
+          channel.id
           name
       in
       Ivar.read result |> Deferred.ok)

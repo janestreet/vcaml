@@ -71,7 +71,7 @@ module Persistent : sig
       -> f:('state -> client:[ `asynchronous ] Client.t -> 'fn)
       -> 'state t
 
-    (** Given an RPC that takes an ['a] state and a way to produce a ['a] from a ['b],
+    (** Given an RPC that takes a ['a] state and a way to produce a ['a] from a ['b],
         return an RPC that takes a ['b] state that when called will convert the state to
         ['a] and invoke the original RPC. *)
     val contra_map : 'a t -> f:('b -> 'a) -> 'b t

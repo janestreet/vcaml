@@ -45,6 +45,7 @@ module Event : sig
     | CursorHold
     | CursorHoldI
     | CursorMoved
+    | CursorMovedC
     | CursorMovedI
     | DiffUpdated
     | DirChanged
@@ -77,6 +78,9 @@ module Event : sig
     | InsertLeavePre
     | LspAttach
     | LspDetach
+    | LspNotify
+    | LspProgress
+    | LspRequest
     | LspTokenUpdate
     | MenuPopup
     | ModeChanged
@@ -87,8 +91,10 @@ module Event : sig
     | RecordingEnter
     | RecordingLeave
     | RemoteReply
+    | SafeState
     | SearchWrapped
     | SessionLoadPost
+    | SessionWritePost
     | ShellCmdPost
     | ShellFilterPost
     | Signal
@@ -109,6 +115,7 @@ module Event : sig
     | TermEnter
     | TermLeave
     | TermOpen
+    | TermRequest
     | TermResponse
     | TextChanged
     | TextChangedI

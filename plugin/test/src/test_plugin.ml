@@ -231,8 +231,8 @@ let%expect_test "Persistent plugin shows errors when they occur during Lua [noti
     │                                                                                │
     │((vcaml-test-persistent-plugin                                                  │
     │  (("Vim returned error"                                                        │
-    │     "Error executing lua: vim/_editor.lua:0: nvim_exec2(): Vim(echoerr):Failure│
-    │\                                                                               │
+    │     "Error executing lua: vim/_editor.lua:0: nvim_exec2(), line 1: Vim(echoerr)│
+    │:Failure\                                                                       │
     │    \nstack traceback:\                                                         │
     │    \n\t[C]: in function 'nvim_exec2'\                                          │
     │    \n\tvim/_editor.lua: in function 'cmd'\                                     │

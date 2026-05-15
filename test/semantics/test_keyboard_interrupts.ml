@@ -12,7 +12,7 @@ let grantpt = ok_exn Unix_pseudo_terminal.grantpt
 let unlockpt = ok_exn Unix_pseudo_terminal.unlockpt
 let ptsname = ok_exn Unix_pseudo_terminal.ptsname
 
-let run_neovim_with_pty ~time_source ~f =
+let run_neovim_with_pty ?verbose ~time_source f =
   let pty_master = posix_openpt [ O_RDWR; O_NOCTTY ] in
   grantpt pty_master;
   unlockpt pty_master;
@@ -47,7 +47,7 @@ let run_neovim_with_pty ~time_source ~f =
       match%bind spin_until_nvim_creates_socket_file nvim ~socket with
       | `Nvim_crashed exit_or_signal -> return (`Already_reaped exit_or_signal)
       | `Socket_created ->
-        let%bind client = socket_client socket ?time_source >>| ok_exn in
+        let%bind client = socket_client socket ?verbose ?time_source >>| ok_exn in
         let send_keys bytes =
           let buf = Bytes.of_string bytes in
           let bytes_written = Core_unix.single_write pty_master ~buf in
@@ -60,41 +60,49 @@ let run_neovim_with_pty ~time_source ~f =
          | `Still_running -> `Need_to_reap `Impatient)))
 ;;
 
+let test_timeout_secs = 10
+
 let%expect_test "Keyboard interrupt aborts simple RPC request" =
   Dynamic.set_root Backtrace.elide true;
   let%bind () =
-    run_neovim_with_pty ~time_source:None ~f:(fun ~tmp_dir ~client ~send_keys ->
-      let fifo = tmp_dir ^/ "fifo" in
-      let%bind () = Unix.mkfifo fifo in
-      let sleep =
-        writefile
-          client
-          fifo
-          ~contents:"Sleeping"
-          ~then_do:
-            [ T
-                (Private.Nvim_internal.nvim_cmd
-                   ~cmd:
-                     ([ "cmd", Msgpack.String "sleep"; "args", Array [ String "100" ] ]
-                      |> String.Map.of_alist_exn)
-                   ~opts:String.Map.empty)
-            ]
-      in
-      let%bind reader = Reader.open_file fifo in
-      let%bind message = Reader.read_line reader in
-      print_s [%sexp (message : string Reader.Read_result.t)];
-      send_keys "\003";
-      let%bind sleep in
-      print_s [%message (sleep : unit Or_error.t)];
-      let%bind () = attempt_to_quit ~tmp_dir ~client in
-      return `Closed)
+    run_neovim_with_pty
+      ~verbose:false
+      ~time_source:None
+      (fun ~tmp_dir ~client ~send_keys ->
+         let fifo = tmp_dir ^/ "fifo" in
+         let%bind () = Unix.mkfifo fifo in
+         let sleep_time = Int.to_string test_timeout_secs in
+         let sleep =
+           writefile
+             client
+             fifo
+             ~contents:"Sleeping"
+             ~then_do:
+               [ T
+                   (Private.Nvim_internal.nvim_cmd
+                      ~cmd:
+                        ([ "cmd", Msgpack.String "sleep"
+                         ; "args", Array [ String sleep_time ]
+                         ]
+                         |> String.Map.of_alist_exn)
+                      ~opts:String.Map.empty)
+               ]
+         in
+         let%bind reader = Reader.open_file fifo in
+         let%bind message = Reader.read_line reader in
+         print_s [%sexp (message : string Reader.Read_result.t)];
+         send_keys "\003";
+         let%bind sleep in
+         print_s [%message (sleep : unit Or_error.t)];
+         let%bind () = attempt_to_quit ~tmp_dir ~client in
+         return `Closed)
   in
   [%expect
     {|
     (Ok Sleeping)
     (sleep
      (Error
-      (("One of the calls in the nvim_call_atomic batch failed"
+      (("One of the calls in the Atomic.run batch failed"
         (partial_results ((Int 0))) (index_of_failure 1) (error_type Exception)
         "Keyboard interrupt")
        (("Called from"
@@ -105,50 +113,61 @@ let%expect_test "Keyboard interrupt aborts simple RPC request" =
   return ()
 ;;
 
-let on_keyboard_interrupt_abort_rpcrequest_and_notify_callback ~timeout ~time_source ~f =
-  run_neovim_with_pty ~time_source ~f:(fun ~tmp_dir ~client ~send_keys ->
+let on_keyboard_interrupt_abort_rpcrequest_and_notify_callback
+  ?verbose
+  ?(timeout = Time_float.Span.of_int_sec test_timeout_secs)
+  ~time_source
+  f
+  =
+  run_neovim_with_pty ?verbose ~time_source (fun ~tmp_dir ~client ~send_keys ->
+    let interrupt_every_second () =
+      Deferred.repeat_until_finished 0 (fun repeats ->
+        send_keys "\003";
+        let%bind () =
+          Time_source.after (Time_source.wall_clock ()) (Time_ns.Span.of_int_sec 1)
+        in
+        if repeats >= test_timeout_secs
+        then return (`Finished ())
+        else return (`Repeat (repeats + 1)))
+    in
     let rpc_result =
       let%bind rpc_result =
         block_nvim client ~f:(fun client ->
-          send_keys "\003";
+          let (_ : unit Deferred.t) = interrupt_every_second () in
           f client)
       in
       let%bind () = attempt_to_quit ~tmp_dir ~client in
       return rpc_result
     in
-    match timeout with
-    | None ->
-      let%map rpc_result in
-      print_s [%message (rpc_result : unit Or_error.t)];
-      `Closed
-    | Some timeout ->
-      let%map rpc_result = with_timeout timeout rpc_result in
-      print_s [%message (rpc_result : unit Or_error.t Clock_ns.Or_timeout.t)];
-      (match rpc_result with
-       | `Timeout -> `Still_running
-       | `Result _ -> `Closed))
+    let%map rpc_result = with_timeout timeout rpc_result in
+    print_s [%message (rpc_result : unit Or_error.t Clock_ns.Or_timeout.t)];
+    match rpc_result with
+    | `Timeout -> `Still_running
+    | `Result _ -> `Closed)
 ;;
 
 let%expect_test "Keyboard interrupt learned by RPC response aborts [rpcrequest]" =
   Dynamic.set_root Backtrace.elide true;
   let%bind () =
     on_keyboard_interrupt_abort_rpcrequest_and_notify_callback
-      ~timeout:None
+      ~verbose:false
+      ~timeout:(Time_float.Span.of_sec 5.0)
       ~time_source:None
-      ~f:(fun client ->
-        let sleep_and_print_result ?(here = Stdlib.Lexing.dummy_pos) () =
-          Command.exec ~here client "sleep" ~args:[ "100" ]
-          >>| [%sexp_of: unit Or_error.t]
-          >>| print_s
-        in
-        (* Sleep to make sure that this command will see the Ctrl-C that was sent. This
-           works even if it was sent before the sleep began because Neovim has not yet had
-           an opportunity to communicate the interrupt. *)
-        let%bind () = sleep_and_print_result () in
-        (* After a keyboard interrupt [client] should be rendered unusable, so we should
-           not actually send the sleep command. *)
-        let%bind () = sleep_and_print_result () in
-        return (Ok ()))
+      (fun client ->
+         let sleep_time = Int.to_string test_timeout_secs in
+         let sleep_and_print_result ?(here = Stdlib.Lexing.dummy_pos) () =
+           Command.exec ~here client "sleep" ~args:[ sleep_time ]
+           >>| [%sexp_of: unit Or_error.t]
+           >>| print_s
+         in
+         (* Sleep to make sure that this command will see the Ctrl-C that was sent. This
+            works even if it was sent before the sleep began because Neovim has not yet
+            had an opportunity to communicate the interrupt. *)
+         let%bind () = sleep_and_print_result () in
+         (* After a keyboard interrupt [client] should be rendered unusable, so we should
+            not actually send the sleep command. *)
+         let%bind () = sleep_and_print_result () in
+         return (Ok ()))
   in
   [%expect
     {|
@@ -161,10 +180,11 @@ let%expect_test "Keyboard interrupt learned by RPC response aborts [rpcrequest]"
       (("Called from"
         lib/vcaml/test/semantics/test_keyboard_interrupts.ml:LINE:COL))))
     (rpc_result
-     (Error
-      (("Vim returned error" "Keyboard interrupt" (error_type Exception))
-       (("Called from"
-         lib/vcaml/test/semantics/test_keyboard_interrupts.ml:LINE:COL)))))
+     (Result
+      (Error
+       (("Vim returned error" "Keyboard interrupt" (error_type Exception))
+        (("Called from"
+          lib/vcaml/test/semantics/test_keyboard_interrupts.ml:LINE:COL))))))
     ("nvim exited" (exit_or_signal (Ok ())))
     |}];
   Dynamic.set_root Backtrace.elide false;
@@ -175,17 +195,19 @@ let%expect_test "Keyboard interrupt learned by heartbeating aborts [rpcrequest]"
   Dynamic.set_root Backtrace.elide true;
   let%bind () =
     on_keyboard_interrupt_abort_rpcrequest_and_notify_callback
-      ~timeout:None
+      ~verbose:false
+      ~timeout:(Time_float.Span.of_sec 5.0)
       ~time_source:(Some (Time_source.wall_clock ()))
-      ~f:(fun _ -> Deferred.never () |> Deferred.ok)
+      (fun _ -> Deferred.never () |> Deferred.ok)
   in
   [%expect
     {|
     (rpc_result
-     (Error
-      (("Vim returned error" "Keyboard interrupt" (error_type Exception))
-       (("Called from"
-         lib/vcaml/test/semantics/test_keyboard_interrupts.ml:LINE:COL)))))
+     (Result
+      (Error
+       (("Vim returned error" "Keyboard interrupt" (error_type Exception))
+        (("Called from"
+          lib/vcaml/test/semantics/test_keyboard_interrupts.ml:LINE:COL))))))
     ("nvim exited" (exit_or_signal (Ok ())))
     |}];
   Dynamic.set_root Backtrace.elide false;
@@ -195,9 +217,9 @@ let%expect_test "Keyboard interrupt learned by heartbeating aborts [rpcrequest]"
 let%expect_test "Keyboard interrupt learned by ??? - Neovim's semantics have changed!" =
   let%bind () =
     on_keyboard_interrupt_abort_rpcrequest_and_notify_callback
-      ~timeout:(Some Time_float.Span.second)
+      ~timeout:Time_float.Span.second
       ~time_source:None
-      ~f:(fun _ -> Deferred.never () |> Deferred.ok)
+      (fun _ -> Deferred.never () |> Deferred.ok)
   in
   (* If this test succeeds then Neovim's semantics around when it alerts have changed. We
      should investigate - heartbeating may no longer be required. *)

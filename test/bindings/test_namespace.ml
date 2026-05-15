@@ -18,8 +18,10 @@ let%expect_test "create, all_named" =
   in
   [%expect
     {|
-    ((unnamed ((id 1) (name ()))) (named ((id 2) (name (foo))))
-     (all_named ((foo ((id 2) (name (foo)))))))
+    ((unnamed ((id 2) (name ()))) (named ((id 3) (name (foo))))
+     (all_named
+      ((foo ((id 3) (name (foo))))
+       (nvim.terminal.prompt ((id 1) (name (nvim.terminal.prompt)))))))
     |}];
   return ()
 ;;

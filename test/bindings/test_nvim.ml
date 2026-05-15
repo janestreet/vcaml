@@ -18,7 +18,7 @@ let%expect_test "get_channel_info" =
   let%bind () =
     with_client (fun client ->
       let open Deferred.Or_error.Let_syntax in
-      let%map (_ : Channel_info.t) = Nvim.get_channel_info client 1 in
+      let%map (_ : Channel_info.t) = Nvim.get_channel_info ~channel:1 client in
       print_endline "call-succeeded")
   in
   [%expect "call-succeeded"];
@@ -130,8 +130,12 @@ let%expect_test "set_client_info" =
             { major = Some 1
             ; minor = Some 2
             ; patch = Some 3
-            ; prerelease = Some "test_prerelease"
+            ; prerelease = Some true
             ; commit = Some "test_commit"
+            ; api_level = None
+            ; api_compatible = None
+            ; api_prerelease = None
+            ; build = None
             }
           ~attributes:(String.Map.of_alist_exn [ "attr1", "val1" ])
           ~client_type:Embedder
@@ -149,13 +153,15 @@ let%expect_test "set_client_info" =
     ((client_before_setting_info
       (((name (test-client))
         (version
-         (((major (0)) (minor ()) (patch ()) (prerelease ()) (commit ()))))
+         (((major (0)) (minor ()) (patch ()) (prerelease ()) (commit ())
+           (api_level ()) (api_compatible ()) (api_prerelease ()) (build ()))))
         (client_type (Remote)) (methods ()) (attributes ()))))
      (client_after_setting_info
       (((name (test-client))
         (version
-         (((major (1)) (minor (2)) (patch (3)) (prerelease (test_prerelease))
-           (commit (test_commit)))))
+         (((major (1)) (minor (2)) (patch (3)) (prerelease (true))
+           (commit (test_commit)) (api_level ()) (api_compatible ())
+           (api_prerelease ()) (build ()))))
         (client_type (Embedder)) (methods ((test_method ((async (false))))))
         (attributes ((attr1 val1)))))))
     |}];
@@ -299,7 +305,7 @@ let%expect_test "color_map" =
      (Cornsilk #fff8dc) (Cornsilk1 #fff8dc) (Cornsilk2 #eee8cd)
      (Cornsilk3 #cdc8b1) (Cornsilk4 #8b8878) (Crimson #dc143c) (Cyan #00ffff)
      (Cyan1 #00ffff) (Cyan2 #00eeee) (Cyan3 #00cdcd) (Cyan4 #008b8b)
-     (DarkBlue #00008b) (DarkCyan #008b8b) (DarkGoldenRod #b8860b)
+     (DarkBlue #00008b) (DarkCyan #008b8b) (DarkGoldenrod #b8860b)
      (DarkGoldenrod1 #ffb90f) (DarkGoldenrod2 #eead0e) (DarkGoldenrod3 #cd950c)
      (DarkGoldenrod4 #8b6508) (DarkGray #a9a9a9) (DarkGreen #006400)
      (DarkGrey #a9a9a9) (DarkKhaki #bdb76b) (DarkMagenta #8b008b)
@@ -323,7 +329,7 @@ let%expect_test "color_map" =
      (Firebrick2 #ee2c2c) (Firebrick3 #cd2626) (Firebrick4 #8b1a1a)
      (FloralWhite #fffaf0) (ForestGreen #228b22) (Fuchsia #ff00ff)
      (Gainsboro #dcdcdc) (GhostWhite #f8f8ff) (Gold #ffd700) (Gold1 #ffd700)
-     (Gold2 #eec900) (Gold3 #cdad00) (Gold4 #8b7500) (GoldenRod #daa520)
+     (Gold2 #eec900) (Gold3 #cdad00) (Gold4 #8b7500) (Goldenrod #daa520)
      (Goldenrod1 #ffc125) (Goldenrod2 #eeb422) (Goldenrod3 #cd9b1d)
      (Goldenrod4 #8b6914) (Gray #808080) (Gray0 #000000) (Gray1 #030303)
      (Gray10 #1a1a1a) (Gray100 #ffffff) (Gray11 #1c1c1c) (Gray12 #1f1f1f)
@@ -392,59 +398,70 @@ let%expect_test "color_map" =
      (LightBlue #add8e6) (LightBlue1 #bfefff) (LightBlue2 #b2dfee)
      (LightBlue3 #9ac0cd) (LightBlue4 #68838b) (LightCoral #f08080)
      (LightCyan #e0ffff) (LightCyan1 #e0ffff) (LightCyan2 #d1eeee)
-     (LightCyan3 #b4cdcd) (LightCyan4 #7a8b8b) (LightGoldenRodYellow #fafad2)
-     (LightGoldenrod #eedd82) (LightGoldenrod1 #ffec8b) (LightGoldenrod2 #eedc82)
-     (LightGoldenrod3 #cdbe70) (LightGoldenrod4 #8b814c) (LightGray #d3d3d3)
-     (LightGreen #90ee90) (LightGrey #d3d3d3) (LightMagenta #ffbbff)
-     (LightPink #ffb6c1) (LightPink1 #ffaeb9) (LightPink2 #eea2ad)
-     (LightPink3 #cd8c95) (LightPink4 #8b5f65) (LightRed #ffbbbb)
-     (LightSalmon #ffa07a) (LightSalmon1 #ffa07a) (LightSalmon2 #ee9572)
-     (LightSalmon3 #cd8162) (LightSalmon4 #8b5742) (LightSeaGreen #20b2aa)
-     (LightSkyBlue #87cefa) (LightSkyBlue1 #b0e2ff) (LightSkyBlue2 #a4d3ee)
-     (LightSkyBlue3 #8db6cd) (LightSkyBlue4 #607b8b) (LightSlateBlue #8470ff)
-     (LightSlateGray #778899) (LightSlateGrey #778899) (LightSteelBlue #b0c4de)
-     (LightSteelBlue1 #cae1ff) (LightSteelBlue2 #bcd2ee)
-     (LightSteelBlue3 #a2b5cd) (LightSteelBlue4 #6e7b8b) (LightYellow #ffffe0)
-     (LightYellow1 #ffffe0) (LightYellow2 #eeeed1) (LightYellow3 #cdcdb4)
-     (LightYellow4 #8b8b7a) (Lime #00ff00) (LimeGreen #32cd32) (Linen #faf0e6)
-     (Magenta #ff00ff) (Magenta1 #ff00ff) (Magenta2 #ee00ee) (Magenta3 #cd00cd)
-     (Magenta4 #8b008b) (Maroon #800000) (Maroon1 #ff34b3) (Maroon2 #ee30a7)
-     (Maroon3 #cd2990) (Maroon4 #8b1c62) (MediumAquamarine #66cdaa)
-     (MediumBlue #0000cd) (MediumOrchid #ba55d3) (MediumOrchid1 #e066ff)
-     (MediumOrchid2 #d15fee) (MediumOrchid3 #b452cd) (MediumOrchid4 #7a378b)
-     (MediumPurple #9370db) (MediumPurple1 #ab82ff) (MediumPurple2 #9f79ee)
-     (MediumPurple3 #8968cd) (MediumPurple4 #5d478b) (MediumSeaGreen #3cb371)
-     (MediumSlateBlue #7b68ee) (MediumSpringGreen #00fa9a)
-     (MediumTurquoise #48d1cc) (MediumVioletRed #c71585) (MidnightBlue #191970)
-     (MintCream #f5fffa) (MistyRose #ffe4e1) (MistyRose1 #ffe4e1)
-     (MistyRose2 #eed5d2) (MistyRose3 #cdb7b5) (MistyRose4 #8b7d7b)
-     (Moccasin #ffe4b5) (NavajoWhite #ffdead) (NavajoWhite1 #ffdead)
-     (NavajoWhite2 #eecfa1) (NavajoWhite3 #cdb38b) (NavajoWhite4 #8b795e)
-     (Navy #000080) (NavyBlue #000080) (OldLace #fdf5e6) (Olive #808000)
-     (OliveDrab #6b8e23) (OliveDrab1 #c0ff3e) (OliveDrab2 #b3ee3a)
-     (OliveDrab3 #9acd32) (OliveDrab4 #698b22) (Orange #ffa500) (Orange1 #ffa500)
-     (Orange2 #ee9a00) (Orange3 #cd8500) (Orange4 #8b5a00) (OrangeRed #ff4500)
-     (OrangeRed1 #ff4500) (OrangeRed2 #ee4000) (OrangeRed3 #cd3700)
-     (OrangeRed4 #8b2500) (Orchid #da70d6) (Orchid1 #ff83fa) (Orchid2 #ee7ae9)
-     (Orchid3 #cd69c9) (Orchid4 #8b4789) (PaleGoldenRod #eee8aa)
-     (PaleGreen #98fb98) (PaleGreen1 #9aff9a) (PaleGreen2 #90ee90)
-     (PaleGreen3 #7ccd7c) (PaleGreen4 #548b54) (PaleTurquoise #afeeee)
-     (PaleTurquoise1 #bbffff) (PaleTurquoise2 #aeeeee) (PaleTurquoise3 #96cdcd)
-     (PaleTurquoise4 #668b8b) (PaleVioletRed #db7093) (PaleVioletRed1 #ff82ab)
-     (PaleVioletRed2 #ee799f) (PaleVioletRed3 #cd6889) (PaleVioletRed4 #8b475d)
-     (PapayaWhip #ffefd5) (PeachPuff #ffdab9) (PeachPuff1 #ffdab9)
-     (PeachPuff2 #eecbad) (PeachPuff3 #cdaf95) (PeachPuff4 #8b7765)
-     (Peru #cd853f) (Pink #ffc0cb) (Pink1 #ffb5c5) (Pink2 #eea9b8)
-     (Pink3 #cd919e) (Pink4 #8b636c) (Plum #dda0dd) (Plum1 #ffbbff)
-     (Plum2 #eeaeee) (Plum3 #cd96cd) (Plum4 #8b668b) (PowderBlue #b0e0e6)
-     (Purple #800080) (Purple1 #9b30ff) (Purple2 #912cee) (Purple3 #7d26cd)
-     (Purple4 #551a8b) (RebeccaPurple #663399) (Red #ff0000) (Red1 #ff0000)
-     (Red2 #ee0000) (Red3 #cd0000) (Red4 #8b0000) (RosyBrown #bc8f8f)
-     (RosyBrown1 #ffc1c1) (RosyBrown2 #eeb4b4) (RosyBrown3 #cd9b9b)
-     (RosyBrown4 #8b6969) (RoyalBlue #4169e1) (RoyalBlue1 #4876ff)
-     (RoyalBlue2 #436eee) (RoyalBlue3 #3a5fcd) (RoyalBlue4 #27408b)
-     (SaddleBrown #8b4513) (Salmon #fa8072) (Salmon1 #ff8c69) (Salmon2 #ee8262)
-     (Salmon3 #cd7054) (Salmon4 #8b4c39) (SandyBrown #f4a460) (SeaGreen #2e8b57)
+     (LightCyan3 #b4cdcd) (LightCyan4 #7a8b8b) (LightGoldenrod #eedd82)
+     (LightGoldenrod1 #ffec8b) (LightGoldenrod2 #eedc82)
+     (LightGoldenrod3 #cdbe70) (LightGoldenrod4 #8b814c)
+     (LightGoldenrodYellow #fafad2) (LightGray #d3d3d3) (LightGreen #90ee90)
+     (LightGrey #d3d3d3) (LightMagenta #ffbbff) (LightPink #ffb6c1)
+     (LightPink1 #ffaeb9) (LightPink2 #eea2ad) (LightPink3 #cd8c95)
+     (LightPink4 #8b5f65) (LightRed #ffbbbb) (LightSalmon #ffa07a)
+     (LightSalmon1 #ffa07a) (LightSalmon2 #ee9572) (LightSalmon3 #cd8162)
+     (LightSalmon4 #8b5742) (LightSeaGreen #20b2aa) (LightSkyBlue #87cefa)
+     (LightSkyBlue1 #b0e2ff) (LightSkyBlue2 #a4d3ee) (LightSkyBlue3 #8db6cd)
+     (LightSkyBlue4 #607b8b) (LightSlateBlue #8470ff) (LightSlateGray #778899)
+     (LightSlateGrey #778899) (LightSteelBlue #b0c4de) (LightSteelBlue1 #cae1ff)
+     (LightSteelBlue2 #bcd2ee) (LightSteelBlue3 #a2b5cd)
+     (LightSteelBlue4 #6e7b8b) (LightYellow #ffffe0) (LightYellow1 #ffffe0)
+     (LightYellow2 #eeeed1) (LightYellow3 #cdcdb4) (LightYellow4 #8b8b7a)
+     (Lime #00ff00) (LimeGreen #32cd32) (Linen #faf0e6) (Magenta #ff00ff)
+     (Magenta1 #ff00ff) (Magenta2 #ee00ee) (Magenta3 #cd00cd) (Magenta4 #8b008b)
+     (Maroon #800000) (Maroon1 #ff34b3) (Maroon2 #ee30a7) (Maroon3 #cd2990)
+     (Maroon4 #8b1c62) (MediumAquamarine #66cdaa) (MediumBlue #0000cd)
+     (MediumOrchid #ba55d3) (MediumOrchid1 #e066ff) (MediumOrchid2 #d15fee)
+     (MediumOrchid3 #b452cd) (MediumOrchid4 #7a378b) (MediumPurple #9370db)
+     (MediumPurple1 #ab82ff) (MediumPurple2 #9f79ee) (MediumPurple3 #8968cd)
+     (MediumPurple4 #5d478b) (MediumSeaGreen #3cb371) (MediumSlateBlue #7b68ee)
+     (MediumSpringGreen #00fa9a) (MediumTurquoise #48d1cc)
+     (MediumVioletRed #c71585) (MidnightBlue #191970) (MintCream #f5fffa)
+     (MistyRose #ffe4e1) (MistyRose1 #ffe4e1) (MistyRose2 #eed5d2)
+     (MistyRose3 #cdb7b5) (MistyRose4 #8b7d7b) (Moccasin #ffe4b5)
+     (NavajoWhite #ffdead) (NavajoWhite1 #ffdead) (NavajoWhite2 #eecfa1)
+     (NavajoWhite3 #cdb38b) (NavajoWhite4 #8b795e) (Navy #000080)
+     (NavyBlue #000080) (NvimDarkBlue #004c73) (NvimDarkCyan #007373)
+     (NvimDarkGray1 #07080d) (NvimDarkGray2 #14161b) (NvimDarkGray3 #2c2e33)
+     (NvimDarkGray4 #4f5258) (NvimDarkGreen #005523) (NvimDarkGrey1 #07080d)
+     (NvimDarkGrey2 #14161b) (NvimDarkGrey3 #2c2e33) (NvimDarkGrey4 #4f5258)
+     (NvimDarkMagenta #470045) (NvimDarkRed #590008) (NvimDarkYellow #6b5300)
+     (NvimLightBlue #a6dbff) (NvimLightCyan #8cf8f7) (NvimLightGray1 #eef1f8)
+     (NvimLightGray2 #e0e2ea) (NvimLightGray3 #c4c6cd) (NvimLightGray4 #9b9ea4)
+     (NvimLightGreen #b3f6c0) (NvimLightGrey1 #eef1f8) (NvimLightGrey2 #e0e2ea)
+     (NvimLightGrey3 #c4c6cd) (NvimLightGrey4 #9b9ea4) (NvimLightMagenta #ffcaff)
+     (NvimLightRed #ffc0b9) (NvimLightYellow #fce094) (OldLace #fdf5e6)
+     (Olive #808000) (OliveDrab #6b8e23) (OliveDrab1 #c0ff3e)
+     (OliveDrab2 #b3ee3a) (OliveDrab3 #9acd32) (OliveDrab4 #698b22)
+     (Orange #ffa500) (Orange1 #ffa500) (Orange2 #ee9a00) (Orange3 #cd8500)
+     (Orange4 #8b5a00) (OrangeRed #ff4500) (OrangeRed1 #ff4500)
+     (OrangeRed2 #ee4000) (OrangeRed3 #cd3700) (OrangeRed4 #8b2500)
+     (Orchid #da70d6) (Orchid1 #ff83fa) (Orchid2 #ee7ae9) (Orchid3 #cd69c9)
+     (Orchid4 #8b4789) (PaleGoldenrod #eee8aa) (PaleGreen #98fb98)
+     (PaleGreen1 #9aff9a) (PaleGreen2 #90ee90) (PaleGreen3 #7ccd7c)
+     (PaleGreen4 #548b54) (PaleTurquoise #afeeee) (PaleTurquoise1 #bbffff)
+     (PaleTurquoise2 #aeeeee) (PaleTurquoise3 #96cdcd) (PaleTurquoise4 #668b8b)
+     (PaleVioletRed #db7093) (PaleVioletRed1 #ff82ab) (PaleVioletRed2 #ee799f)
+     (PaleVioletRed3 #cd6889) (PaleVioletRed4 #8b475d) (PapayaWhip #ffefd5)
+     (PeachPuff #ffdab9) (PeachPuff1 #ffdab9) (PeachPuff2 #eecbad)
+     (PeachPuff3 #cdaf95) (PeachPuff4 #8b7765) (Peru #cd853f) (Pink #ffc0cb)
+     (Pink1 #ffb5c5) (Pink2 #eea9b8) (Pink3 #cd919e) (Pink4 #8b636c)
+     (Plum #dda0dd) (Plum1 #ffbbff) (Plum2 #eeaeee) (Plum3 #cd96cd)
+     (Plum4 #8b668b) (PowderBlue #b0e0e6) (Purple #800080) (Purple1 #9b30ff)
+     (Purple2 #912cee) (Purple3 #7d26cd) (Purple4 #551a8b)
+     (RebeccaPurple #663399) (Red #ff0000) (Red1 #ff0000) (Red2 #ee0000)
+     (Red3 #cd0000) (Red4 #8b0000) (RosyBrown #bc8f8f) (RosyBrown1 #ffc1c1)
+     (RosyBrown2 #eeb4b4) (RosyBrown3 #cd9b9b) (RosyBrown4 #8b6969)
+     (RoyalBlue #4169e1) (RoyalBlue1 #4876ff) (RoyalBlue2 #436eee)
+     (RoyalBlue3 #3a5fcd) (RoyalBlue4 #27408b) (SaddleBrown #8b4513)
+     (Salmon #fa8072) (Salmon1 #ff8c69) (Salmon2 #ee8262) (Salmon3 #cd7054)
+     (Salmon4 #8b4c39) (SandyBrown #f4a460) (SeaGreen #2e8b57)
      (SeaGreen1 #54ff9f) (SeaGreen2 #4eee94) (SeaGreen3 #43cd80)
      (SeaGreen4 #2e8b57) (SeaShell #fff5ee) (Seashell1 #fff5ee)
      (Seashell2 #eee5de) (Seashell3 #cdc5bf) (Seashell4 #8b8682) (Sienna #a0522d)
@@ -490,11 +507,7 @@ let%expect_test "get_hl_by_name" =
           (color256 : Color256.t Highlight.t) (true_color : True_color.t Highlight.t)];
       return ())
   in
-  [%expect
-    {|
-    ((color256 ((fg (15)) (bg (1))))
-     (true_color ((fg (#ffffff)) (bg (#ff0000)))))
-    |}];
+  [%expect {| ((color256 ((fg (9)) (bg ()))) (true_color ((fg (#ffc0b9)) (bg ())))) |}];
   return ()
 ;;
 
@@ -511,11 +524,7 @@ let%expect_test "get_hl_id_by_name, get_hl_by_id" =
           (color256 : Color256.t Highlight.t) (true_color : True_color.t Highlight.t)];
       return ())
   in
-  [%expect
-    {|
-    ((color256 ((fg (15)) (bg (1))))
-     (true_color ((fg (#ffffff)) (bg (#ff0000)))))
-    |}];
+  [%expect {| ((color256 ((fg (9)) (bg ()))) (true_color ((fg (#ffc0b9)) (bg ())))) |}];
   return ()
 ;;
 
@@ -705,42 +714,6 @@ let%expect_test "get_current_line, set_current_line, delete_current_line" =
     let%bind () = Nvim.delete_current_line client in
     let%bind () = print_lines () in
     [%expect {| bar |}];
-    return ())
-;;
-
-let%expect_test "subscribe_to_broadcast, unsubscribe_from_broadcast" =
-  with_client (fun client ->
-    let open Deferred.Or_error.Let_syntax in
-    let received_event = Mvar.create () in
-    let name = "rpc" in
-    Ocaml_from_nvim.register_request_async
-      (Connected client)
-      ~name
-      ~type_:Ocaml_from_nvim.Async.(Int @-> unit)
-      ~f:(fun ~client:_ count -> Mvar.put received_event count |> Deferred.ok);
-    let broadcast n =
-      Nvim.call_function
-        client
-        ~name:(`Viml "rpcnotify")
-        ~type_:Nvim.Func.(Int @-> String @-> Int @-> return Int)
-        0
-        name
-        n
-      |> Deferred.Or_error.ignore_m
-    in
-    let%bind () = broadcast 1 in
-    let%bind () = Ocaml_from_nvim.subscribe_to_broadcast client ~name in
-    let%bind () = broadcast 2 in
-    let%bind count = Mvar.take received_event |> Deferred.ok in
-    printf "%d\n" count;
-    [%expect {| 2 |}];
-    let%bind () = Ocaml_from_nvim.unsubscribe_from_broadcast client ~name in
-    let%bind () = broadcast 3 in
-    let%bind () = Ocaml_from_nvim.subscribe_to_broadcast client ~name in
-    let%bind () = broadcast 4 in
-    let%bind count = Mvar.take received_event |> Deferred.ok in
-    printf "%d\n" count;
-    [%expect {| 4 |}];
     return ())
 ;;
 

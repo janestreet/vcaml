@@ -10,7 +10,7 @@ let time_source_at_epoch =
 ;;
 
 (* Start with no init.vim, no shada file, and no swap files. *)
-let default_args = [ "--clean"; "-n" ]
+let default_args = [ "--clean"; "-n"; "--cmd"; "set shortmess+=I" ]
 
 (* Start the editor without a gui, use stdin and stdout instead of Unix pipe for
    communication with the plugin, place socket relative to the temporary working directory
@@ -325,7 +325,7 @@ module Test_ui = struct
       (match Mvar.peek t.flushed with
        | Some `Awaiting_first_flush -> ignore (Mvar.take_now_exn t.flushed : _)
        | None | Some (`Flush _) -> Mvar.set t.flushed (`Flush (ui_to_string t)))
-    | Grid_line { grid = 1; row; col_start; data; unparsed_fields = _ } ->
+    | Grid_line { grid = 1; row; col_start; data; wrap = _; unparsed_fields = _ } ->
       unflush t;
       let col = ref col_start in
       let write str =
@@ -383,6 +383,7 @@ module Test_ui = struct
       ()
     | Busy_start _
     | Busy_stop _
+    | Chdir _
     | Default_colors_set _
     | Highlight_set _
     | Hl_attr_define _
@@ -428,12 +429,12 @@ module Test_ui = struct
   ;;
 end
 
-let rec get_screen_contents ui =
-  match Pipe.is_closed ui.Test_ui.reader with
+let rec get_screen_contents (ui : Test_ui.t) =
+  match Pipe.is_closed ui.reader with
   | true ->
     Deferred.Or_error.error_s [%message "Tried to get screen contents of detached UI"]
   | false ->
-    (match Mvar.peek ui.Test_ui.flushed with
+    (match Mvar.peek ui.flushed with
      | None ->
        let%bind () = Mvar.value_available ui.flushed in
        get_screen_contents ui

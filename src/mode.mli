@@ -3,6 +3,7 @@ open Core
 (** See `:h mode()` for descriptions of these modes. *)
 type t =
   | Command_line_editing
+  | Command_line_editing_overstrike
   | Confirm_dialog
   | External_command
   | Hit_enter_prompt
@@ -28,6 +29,7 @@ type t =
   | Select_by_line
   | Terminal
   | Vim_ex_mode
+  | Vim_ex_mode_overstrike
   | Virtual_replace
   | Virtual_replace_mode_completion
   | Virtual_replace_mode_i_ctrl_x_completion

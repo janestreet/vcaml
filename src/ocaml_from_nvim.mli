@@ -71,21 +71,6 @@ val register_request_async
   -> f:(client:[ `asynchronous ] Client.t -> 'fn)
   -> unit
 
-(** Neovim supports a broadcast mode for [rpcnotify] (when the channel argument is 0).
-    When the RPC [name] is called from an [rpcnotify] broadcast, the RPC will only be sent
-    to channels that have subscribed to broadcasts for [name]. *)
-val subscribe_to_broadcast
-  :  ?here:Stdlib.Lexing.position
-  -> _ Client.t
-  -> name:string
-  -> unit Deferred.Or_error.t
-
-val unsubscribe_from_broadcast
-  :  ?here:Stdlib.Lexing.position
-  -> _ Client.t
-  -> name:string
-  -> unit Deferred.Or_error.t
-
 module Callback : sig
   type 'a anon_rpc
 

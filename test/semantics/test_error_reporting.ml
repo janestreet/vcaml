@@ -55,10 +55,10 @@ let%expect_test "Error in the middle of an atomic call is returned correctly" =
   in
   [%expect
     {|
-    (("One of the calls in the nvim_call_atomic batch failed"
+    (("One of the calls in the Atomic.run batch failed"
       (partial_results (Nil Nil (Bool true)))
       (index_of_failure 3)
-      (error_type       Validation)
+      (error_type       Exception)
       "Key not found: bar")
      (("Called from" lib/vcaml/test/semantics/test_error_reporting.ml:LINE:COL)))
     |}];

@@ -14,12 +14,16 @@ module Mouse = struct
       | Left
       | Right
       | Middle
+      | X1
+      | X2
     [@@deriving sexp_of]
 
     let to_string = function
       | Left -> "left"
       | Right -> "right"
       | Middle -> "middle"
+      | X1 -> "x1"
+      | X2 -> "x2"
     ;;
   end
 
@@ -91,8 +95,8 @@ let list_bufs ?(here = Stdlib.Lexing.dummy_pos) client =
   Nvim_internal.nvim_list_bufs |> run ~here client
 ;;
 
-let get_channel_info ?(here = Stdlib.Lexing.dummy_pos) client chan =
-  Nvim_internal.nvim_get_chan_info ~chan
+let get_channel_info ?(here = Stdlib.Lexing.dummy_pos) ?(channel = 0) client =
+  Nvim_internal.nvim_get_chan_info ~chan:channel
   |> map_witness ~f:Channel_info.of_msgpack_map
   |> run ~here client
 ;;
@@ -341,32 +345,26 @@ let list_runtime_paths ?(here = Stdlib.Lexing.dummy_pos) client =
   Nvim_internal.nvim_list_runtime_paths |> run ~here client
 ;;
 
-let out_write ?(here = Stdlib.Lexing.dummy_pos) client str =
-  Nvim_internal.nvim_out_write ~str |> run ~here client
-;;
-
-(* For some reason this isn't a supported API function like [err_writeln]. *)
-let out_writeln ?(here = Stdlib.Lexing.dummy_pos) client str =
-  Nvim_internal.nvim_out_write ~str:(str ^ "\n") |> run ~here client
-;;
-
-let err_write ?(here = Stdlib.Lexing.dummy_pos) client str =
-  Nvim_internal.nvim_err_write ~str |> run ~here client
-;;
-
-let err_writeln ?(here = Stdlib.Lexing.dummy_pos) client str =
-  Nvim_internal.nvim_err_writeln ~str |> run ~here client
-;;
-
-let echo ?(here = Stdlib.Lexing.dummy_pos) client message ~add_to_history =
+let echo ?(here = Stdlib.Lexing.dummy_pos) ?(err = false) client message ~add_to_history =
   (* [opts] is not used by this version of Neovim, but may be used in the future. If we
      expose it, we should do so in a typeful way rather than asking the user to build
      [Msgpack.t] values. *)
+  let opts = String.Map.singleton "err" (Msgpack.Bool err) in
   Nvim_internal.nvim_echo
     ~chunks:(Highlighted_text.to_msgpack message)
     ~history:add_to_history
-    ~opts:String.Map.empty
+    ~opts
   |> run ~here client
+;;
+
+(* [nvim_out_write] is deprecated, but it's still convenient to have a wrapper. *)
+let out_writeln ?(here = Stdlib.Lexing.dummy_pos) client str =
+  echo ~here client [ { text = str; hl_group = None } ] ~add_to_history:true
+;;
+
+(* [nvim_err_write] is deprecated, but it's still convenient to have a wrapper. *)
+let err_writeln ?(here = Stdlib.Lexing.dummy_pos) client str =
+  echo ~here ~err:true client [ { text = str; hl_group = None } ] ~add_to_history:true
 ;;
 
 module Tabline = Statusline [@@alert "-vcaml_do_not_export"]
@@ -573,18 +571,6 @@ module Log_level = struct
   ;;
 end
 
-let notify ?(here = Stdlib.Lexing.dummy_pos) client log_level message =
-  (* [opts] is not used by this version of Neovim, but may be used in the future. If we
-     expose it, we should do so in a typeful way rather than asking the user to build
-     [Msgpack.t] values. *)
-  Nvim_internal.nvim_notify
-    ~msg:message
-    ~log_level:(Log_level.to_int log_level)
-    ~opts:String.Map.empty
-  |> map_witness ~f:(Type.of_msgpack Nil)
-  |> run ~here client
-;;
-
 let send_to_channel ?(here = Stdlib.Lexing.dummy_pos) client ~channel data =
   Nvim_internal.nvim_chan_send ~chan:channel ~data |> run ~here client
 ;;
@@ -722,11 +708,10 @@ module Option = struct
     | Cmdwinheight : int t
     | Columns : int t
     | Compatible : bool t
-    | Completeopt : string list t
-    | Completeslash : string t
+    | Completeitemalign : string list t
     | Confirm : bool t
     | Cpoptions : char list t
-    | Debug : string t
+    | Debug : string list t
     | Delcombine : bool t
     | Diffexpr : string t
     | Diffopt : string list t
@@ -788,6 +773,7 @@ module Option = struct
     | Maxmapdepth : int t
     | Maxmempattern : int t
     | Menuitems : int t
+    | Messagesopt : string list t
     | Mkspellmem : string t
     | Modelineexpr : bool t
     | Modelines : int t
@@ -854,6 +840,7 @@ module Option = struct
     | Startofline : bool t
     | Suffixes : string list t
     | Switchbuf : string list t
+    | Tabclose : string list t
     | Tabline : string t
     | Tabpagemax : int t
     | Tagbsearch : bool t
@@ -863,6 +850,7 @@ module Option = struct
     | Termbidi : bool t
     | Termguicolors : bool t
     | Termpastefilter : string list t
+    | Termsync : bool t
     | Tildeop : bool t
     | Timeout : bool t
     | Timeoutlen : int t
@@ -879,8 +867,6 @@ module Option = struct
     | Verbose : int t
     | Verbosefile : string t
     | Viewdir : string t
-    | Viminfo : string t
-    | Viminfofile : string t
     | Visualbell : bool t
     | Warn : bool t
     | Whichwrap : char list t
@@ -892,6 +878,7 @@ module Option = struct
     | Wildmode : string list t
     | Wildoptions : string list t
     | Winaltkeys : string t
+    | Winborder : string t
     | Window : int t
     | Winheight : int t
     | Winminheight : int t
@@ -929,8 +916,7 @@ module Option = struct
     | Cmdwinheight -> "cmdwinheight"
     | Columns -> "columns"
     | Compatible -> "compatible"
-    | Completeopt -> "completeopt"
-    | Completeslash -> "completeslash"
+    | Completeitemalign -> "completeitemalign"
     | Confirm -> "confirm"
     | Cpoptions -> "cpoptions"
     | Debug -> "debug"
@@ -995,6 +981,7 @@ module Option = struct
     | Maxmapdepth -> "maxmapdepth"
     | Maxmempattern -> "maxmempattern"
     | Menuitems -> "menuitems"
+    | Messagesopt -> "messagesopt"
     | Mkspellmem -> "mkspellmem"
     | Modelineexpr -> "modelineexpr"
     | Modelines -> "modelines"
@@ -1061,6 +1048,7 @@ module Option = struct
     | Startofline -> "startofline"
     | Suffixes -> "suffixes"
     | Switchbuf -> "switchbuf"
+    | Tabclose -> "tabclose"
     | Tabline -> "tabline"
     | Tabpagemax -> "tabpagemax"
     | Tagbsearch -> "tagbsearch"
@@ -1070,6 +1058,7 @@ module Option = struct
     | Termbidi -> "termbidi"
     | Termguicolors -> "termguicolors"
     | Termpastefilter -> "termpastefilter"
+    | Termsync -> "termsync"
     | Tildeop -> "tildeop"
     | Timeout -> "timeout"
     | Timeoutlen -> "timeoutlen"
@@ -1086,8 +1075,6 @@ module Option = struct
     | Verbose -> "verbose"
     | Verbosefile -> "verbosefile"
     | Viewdir -> "viewdir"
-    | Viminfo -> "viminfo"
-    | Viminfofile -> "viminfofile"
     | Visualbell -> "visualbell"
     | Warn -> "warn"
     | Whichwrap -> "whichwrap"
@@ -1099,6 +1086,7 @@ module Option = struct
     | Wildmode -> "wildmode"
     | Wildoptions -> "wildoptions"
     | Winaltkeys -> "winaltkeys"
+    | Winborder -> "winborder"
     | Window -> "window"
     | Winheight -> "winheight"
     | Winminheight -> "winminheight"
@@ -1138,11 +1126,10 @@ module Option = struct
     | Cmdwinheight -> Type.of_msgpack Int msgpack
     | Columns -> Type.of_msgpack Int msgpack
     | Compatible -> Type.of_msgpack Bool msgpack
-    | Completeopt -> Type.of_msgpack (Custom (module String_list)) msgpack
-    | Completeslash -> Type.of_msgpack String msgpack
+    | Completeitemalign -> Type.of_msgpack (Custom (module String_list)) msgpack
     | Confirm -> Type.of_msgpack Bool msgpack
     | Cpoptions -> Type.of_msgpack (Custom (module Char_list)) msgpack
-    | Debug -> Type.of_msgpack String msgpack
+    | Debug -> Type.of_msgpack (Custom (module String_list)) msgpack
     | Delcombine -> Type.of_msgpack Bool msgpack
     | Diffexpr -> Type.of_msgpack String msgpack
     | Diffopt -> Type.of_msgpack (Custom (module String_list)) msgpack
@@ -1204,6 +1191,7 @@ module Option = struct
     | Maxmapdepth -> Type.of_msgpack Int msgpack
     | Maxmempattern -> Type.of_msgpack Int msgpack
     | Menuitems -> Type.of_msgpack Int msgpack
+    | Messagesopt -> Type.of_msgpack (Custom (module String_list)) msgpack
     | Mkspellmem -> Type.of_msgpack String msgpack
     | Modelineexpr -> Type.of_msgpack Bool msgpack
     | Modelines -> Type.of_msgpack Int msgpack
@@ -1270,6 +1258,7 @@ module Option = struct
     | Startofline -> Type.of_msgpack Bool msgpack
     | Suffixes -> Type.of_msgpack (Custom (module String_list)) msgpack
     | Switchbuf -> Type.of_msgpack (Custom (module String_list)) msgpack
+    | Tabclose -> Type.of_msgpack (Custom (module String_list)) msgpack
     | Tabline -> Type.of_msgpack String msgpack
     | Tabpagemax -> Type.of_msgpack Int msgpack
     | Tagbsearch -> Type.of_msgpack Bool msgpack
@@ -1279,6 +1268,7 @@ module Option = struct
     | Termbidi -> Type.of_msgpack Bool msgpack
     | Termguicolors -> Type.of_msgpack Bool msgpack
     | Termpastefilter -> Type.of_msgpack (Custom (module String_list)) msgpack
+    | Termsync -> Type.of_msgpack Bool msgpack
     | Tildeop -> Type.of_msgpack Bool msgpack
     | Timeout -> Type.of_msgpack Bool msgpack
     | Timeoutlen -> Type.of_msgpack Int msgpack
@@ -1295,8 +1285,6 @@ module Option = struct
     | Verbose -> Type.of_msgpack Int msgpack
     | Verbosefile -> Type.of_msgpack String msgpack
     | Viewdir -> Type.of_msgpack String msgpack
-    | Viminfo -> Type.of_msgpack String msgpack
-    | Viminfofile -> Type.of_msgpack String msgpack
     | Visualbell -> Type.of_msgpack Bool msgpack
     | Warn -> Type.of_msgpack Bool msgpack
     | Whichwrap -> Type.of_msgpack (Custom (module Char_list.Comma_separated)) msgpack
@@ -1308,6 +1296,7 @@ module Option = struct
     | Wildmode -> Type.of_msgpack (Custom (module String_list)) msgpack
     | Wildoptions -> Type.of_msgpack (Custom (module String_list)) msgpack
     | Winaltkeys -> Type.of_msgpack String msgpack
+    | Winborder -> Type.of_msgpack String msgpack
     | Window -> Type.of_msgpack Int msgpack
     | Winheight -> Type.of_msgpack Int msgpack
     | Winminheight -> Type.of_msgpack Int msgpack
@@ -1347,11 +1336,10 @@ module Option = struct
     | Cmdwinheight -> Type.to_msgpack Int value
     | Columns -> Type.to_msgpack Int value
     | Compatible -> Type.to_msgpack Bool value
-    | Completeopt -> Type.to_msgpack (Custom (module String_list)) value
-    | Completeslash -> Type.to_msgpack String value
+    | Completeitemalign -> Type.to_msgpack (Custom (module String_list)) value
     | Confirm -> Type.to_msgpack Bool value
     | Cpoptions -> Type.to_msgpack (Custom (module Char_list)) value
-    | Debug -> Type.to_msgpack String value
+    | Debug -> Type.to_msgpack (Custom (module String_list)) value
     | Delcombine -> Type.to_msgpack Bool value
     | Diffexpr -> Type.to_msgpack String value
     | Diffopt -> Type.to_msgpack (Custom (module String_list)) value
@@ -1413,6 +1401,7 @@ module Option = struct
     | Maxmapdepth -> Type.to_msgpack Int value
     | Maxmempattern -> Type.to_msgpack Int value
     | Menuitems -> Type.to_msgpack Int value
+    | Messagesopt -> Type.to_msgpack (Custom (module String_list)) value
     | Mkspellmem -> Type.to_msgpack String value
     | Modelineexpr -> Type.to_msgpack Bool value
     | Modelines -> Type.to_msgpack Int value
@@ -1479,6 +1468,7 @@ module Option = struct
     | Startofline -> Type.to_msgpack Bool value
     | Suffixes -> Type.to_msgpack (Custom (module String_list)) value
     | Switchbuf -> Type.to_msgpack (Custom (module String_list)) value
+    | Tabclose -> Type.to_msgpack (Custom (module String_list)) value
     | Tabline -> Type.to_msgpack String value
     | Tabpagemax -> Type.to_msgpack Int value
     | Tagbsearch -> Type.to_msgpack Bool value
@@ -1488,6 +1478,7 @@ module Option = struct
     | Termbidi -> Type.to_msgpack Bool value
     | Termguicolors -> Type.to_msgpack Bool value
     | Termpastefilter -> Type.to_msgpack (Custom (module String_list)) value
+    | Termsync -> Type.to_msgpack Bool value
     | Tildeop -> Type.to_msgpack Bool value
     | Timeout -> Type.to_msgpack Bool value
     | Timeoutlen -> Type.to_msgpack Int value
@@ -1504,8 +1495,6 @@ module Option = struct
     | Verbose -> Type.to_msgpack Int value
     | Verbosefile -> Type.to_msgpack String value
     | Viewdir -> Type.to_msgpack String value
-    | Viminfo -> Type.to_msgpack String value
-    | Viminfofile -> Type.to_msgpack String value
     | Visualbell -> Type.to_msgpack Bool value
     | Warn -> Type.to_msgpack Bool value
     | Whichwrap -> Type.to_msgpack (Custom (module Char_list.Comma_separated)) value
@@ -1517,6 +1506,7 @@ module Option = struct
     | Wildmode -> Type.to_msgpack (Custom (module String_list)) value
     | Wildoptions -> Type.to_msgpack (Custom (module String_list)) value
     | Winaltkeys -> Type.to_msgpack String value
+    | Winborder -> Type.to_msgpack String value
     | Window -> Type.to_msgpack Int value
     | Winheight -> Type.to_msgpack Int value
     | Winminheight -> Type.to_msgpack Int value
@@ -1550,7 +1540,7 @@ module Option = struct
   ;;
 
   let get_dynamic_info (type a) ?(here = Stdlib.Lexing.dummy_pos) client (t : a t) =
-    Nvim_internal.nvim_get_option_info ~name:(to_string t)
+    Nvim_internal.nvim_get_option_info2 ~name:(to_string t) ~opts:String.Map.empty
     |> map_witness
          ~f:(Dynamic_option_info.of_msgpack_map ~default_of_msgpack:(of_msgpack t))
     |> run ~here client

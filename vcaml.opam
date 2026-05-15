@@ -23,7 +23,7 @@ depends: [
   "core_kernel"
   "core_unix"
   "expect_test_helpers_async"
-  "expect_test_helpers_core"
+  "expect_test_helpers_base"
   "jsonaf"
   "man_in_the_middle_debugger"
   "ppx_jane"
@@ -37,7 +37,7 @@ depends: [
   "faraday"                    {>= "0.8.1"}
   "re"                         {>= "1.8.0"}
 ]
-available: arch != "arm32" & arch != "x86_32"
+available: arch != "x86_32"
 synopsis: "OCaml bindings for the Neovim API"
 description: "
 
@@ -48,7 +48,7 @@ details).
 "
 post-messages: "
 
-This version of VCaml is built and tested against Neovim 0.9.1. Because Neovim
+This version of VCaml is built and tested against Neovim 0.11.2. Because Neovim
 is an evolving project and VCaml does not provide versionining guarantees,
 expect the degree of breakage to increase the further away your version of
 Neovim is from the tested version. The best way to ensure that nothing will

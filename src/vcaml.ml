@@ -39,7 +39,7 @@ module Nvim_version = struct
 
   let%expect_test "Display version" =
     print_endline (to_string t);
-    [%expect {| 0.9.1 |}];
+    [%expect {| 0.11.2 |}];
     return ()
   ;;
 end
