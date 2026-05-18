@@ -26,6 +26,10 @@ let get_win ~(here : [%call_pos]) client t =
   Nvim_internal.nvim_tabpage_get_win ~tabpage:t |> run ~here client
 ;;
 
+let set_win ~(here : [%call_pos]) client t win =
+  Nvim_internal.nvim_tabpage_set_win ~tabpage:t ~win |> run ~here client
+;;
+
 let get_number ~(here : [%call_pos]) client t =
   Nvim_internal.nvim_tabpage_get_number ~tabpage:t |> run ~here client
 ;;
@@ -73,7 +77,7 @@ module Option = struct
   ;;
 
   let get_dynamic_info (type a) ~(here : [%call_pos]) client (t : a t) =
-    Nvim_internal.nvim_get_option_info ~name:(to_string t)
+    Nvim_internal.nvim_get_option_info2 ~name:(to_string t) ~opts:String.Map.empty
     |> map_witness
          ~f:(Dynamic_option_info.of_msgpack_map ~default_of_msgpack:(of_msgpack t))
     |> run ~here client

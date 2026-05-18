@@ -204,14 +204,6 @@ let register_request_blocking
     ~wrap_f:(fun f -> f ())
 ;;
 
-let subscribe_to_broadcast ~(here : [%call_pos]) client ~name =
-  Nvim_internal.nvim_subscribe ~event:name |> run ~here client
-;;
-
-let unsubscribe_from_broadcast ~(here : [%call_pos]) client ~name =
-  Nvim_internal.nvim_unsubscribe ~event:name |> run ~here client
-;;
-
 module Callback = struct
   type 'a anon_rpc =
     { on_keyboard_interrupt : (unit -> unit) option

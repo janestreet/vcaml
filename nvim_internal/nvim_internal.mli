@@ -70,6 +70,8 @@ module Window : Nvim_id with type t = window and type 'a phantom := 'a Phantom.t
 module Tabpage : Nvim_id with type t = tabpage and type 'a phantom := 'a Phantom.t
 
 module Api_result : sig
+  (** If we call the api function [name] with input [params], we expect to get back the
+      result-type indicated by [witness]. *)
   type 'result t =
     { name : string
     ; params : Msgpack.t list
@@ -128,6 +130,10 @@ module Ui_event : sig
     | Option_set of
         { name : string
         ; value : Msgpack.t
+        ; unparsed_fields : Msgpack.t list
+        }
+    | Chdir of
+        { path : string
         ; unparsed_fields : Msgpack.t list
         }
     | Update_fg of
@@ -214,6 +220,7 @@ module Ui_event : sig
         ; row : int
         ; col_start : int
         ; data : Msgpack.t list
+        ; wrap : bool
         ; unparsed_fields : Msgpack.t list
         }
     | Grid_scroll of
@@ -246,7 +253,7 @@ module Ui_event : sig
         ; anchor_grid : int
         ; anchor_row : float
         ; anchor_col : float
-        ; focusable : bool
+        ; mouse_enabled : bool
         ; zindex : int
         ; unparsed_fields : Msgpack.t list
         }
@@ -279,6 +286,15 @@ module Ui_event : sig
         ; curcol : int
         ; line_count : int
         ; scroll_delta : int
+        ; unparsed_fields : Msgpack.t list
+        }
+    | Win_viewport_margins of
+        { grid : int
+        ; win : Window.t
+        ; top : int
+        ; bottom : int
+        ; left : int
+        ; right : int
         ; unparsed_fields : Msgpack.t list
         }
     | Win_extmark of
@@ -317,6 +333,7 @@ module Ui_event : sig
         ; prompt : string
         ; indent : int
         ; level : int
+        ; hl_id : int
         ; unparsed_fields : Msgpack.t list
         }
     | Cmdline_pos of
@@ -332,6 +349,7 @@ module Ui_event : sig
         }
     | Cmdline_hide of
         { level : int
+        ; abort : bool
         ; unparsed_fields : Msgpack.t list
         }
     | Cmdline_block_show of
@@ -356,6 +374,7 @@ module Ui_event : sig
         { kind : string
         ; content : Msgpack.t list
         ; replace_last : bool
+        ; history : bool
         ; unparsed_fields : Msgpack.t list
         }
     | Msg_clear of { unparsed_fields : Msgpack.t list }
@@ -376,6 +395,10 @@ module Ui_event : sig
         ; unparsed_fields : Msgpack.t list
         }
     | Msg_history_clear of { unparsed_fields : Msgpack.t list }
+    | Error_exit of
+        { status : int
+        ; unparsed_fields : Msgpack.t list
+        }
     | Unknown_event of
         { name : string
         ; unparsed_fields : Msgpack.t list
@@ -538,7 +561,6 @@ val nvim_buf_get_commands
   -> opts:Msgpack.t String.Map.t
   -> Msgpack.t String.Map.t Api_result.t
 
-val nvim_get_option_info : name:string -> Msgpack.t String.Map.t Api_result.t
 val nvim_create_namespace : name:string -> int Api_result.t
 val nvim_get_namespaces : Msgpack.t String.Map.t Api_result.t
 
@@ -571,15 +593,6 @@ val nvim_buf_del_extmark
   -> id:int
   -> bool Api_result.t
 
-val nvim_buf_add_highlight
-  :  buffer:Buffer.Or_current.t
-  -> ns_id:int
-  -> hl_group:string
-  -> line:int
-  -> col_start:int
-  -> col_end:int
-  -> int Api_result.t
-
 val nvim_buf_clear_namespace
   :  buffer:Buffer.Or_current.t
   -> ns_id:int
@@ -605,31 +618,6 @@ val nvim_get_option_info2
   -> opts:Msgpack.t String.Map.t
   -> Msgpack.t String.Map.t Api_result.t
 
-val nvim_set_option : name:string -> value:Msgpack.t -> unit Api_result.t
-val nvim_get_option : name:string -> Msgpack.t Api_result.t
-
-val nvim_buf_get_option
-  :  buffer:Buffer.Or_current.t
-  -> name:string
-  -> Msgpack.t Api_result.t
-
-val nvim_buf_set_option
-  :  buffer:Buffer.Or_current.t
-  -> name:string
-  -> value:Msgpack.t
-  -> unit Api_result.t
-
-val nvim_win_get_option
-  :  window:Window.Or_current.t
-  -> name:string
-  -> Msgpack.t Api_result.t
-
-val nvim_win_set_option
-  :  window:Window.Or_current.t
-  -> name:string
-  -> value:Msgpack.t
-  -> unit Api_result.t
-
 val nvim_tabpage_list_wins : tabpage:Tabpage.Or_current.t -> Window.t list Api_result.t
 
 val nvim_tabpage_get_var
@@ -649,6 +637,12 @@ val nvim_tabpage_del_var
   -> unit Api_result.t
 
 val nvim_tabpage_get_win : tabpage:Tabpage.Or_current.t -> Window.t Api_result.t
+
+val nvim_tabpage_set_win
+  :  tabpage:Tabpage.Or_current.t
+  -> win:Window.t
+  -> unit Api_result.t
+
 val nvim_tabpage_get_number : tabpage:Tabpage.Or_current.t -> int Api_result.t
 val nvim_tabpage_is_valid : tabpage:Tabpage.t -> bool Api_result.t
 
@@ -672,6 +666,7 @@ val nvim_ui_pum_set_bounds
   -> col:float
   -> unit Api_result.t
 
+val nvim_ui_term_event : event:string -> value:Msgpack.t -> unit Api_result.t
 val nvim_get_hl_id_by_name : name:string -> int Api_result.t
 
 val nvim_get_hl
@@ -685,6 +680,7 @@ val nvim_set_hl
   -> val_:Msgpack.t String.Map.t
   -> unit Api_result.t
 
+val nvim_get_hl_ns : opts:Msgpack.t String.Map.t -> int Api_result.t
 val nvim_set_hl_ns : ns_id:int -> unit Api_result.t
 val nvim_feedkeys : keys:string -> mode:string -> escape_ks:bool -> unit Api_result.t
 val nvim_input : keys:string -> int Api_result.t
@@ -706,13 +702,6 @@ val nvim_replace_termcodes
   -> string Api_result.t
 
 val nvim_exec_lua : code:string -> args:Msgpack.t list -> Msgpack.t Api_result.t
-
-val nvim_notify
-  :  msg:string
-  -> log_level:int
-  -> opts:Msgpack.t String.Map.t
-  -> Msgpack.t Api_result.t
-
 val nvim_strwidth : text:string -> int Api_result.t
 val nvim_list_runtime_paths : string list Api_result.t
 val nvim_get_runtime_file : name:string -> all:bool -> string list Api_result.t
@@ -732,9 +721,6 @@ val nvim_echo
   -> opts:Msgpack.t String.Map.t
   -> unit Api_result.t
 
-val nvim_out_write : str:string -> unit Api_result.t
-val nvim_err_write : str:string -> unit Api_result.t
-val nvim_err_writeln : str:string -> unit Api_result.t
 val nvim_list_bufs : Buffer.t list Api_result.t
 val nvim_get_current_buf : Buffer.t Api_result.t
 val nvim_set_current_buf : buffer:Buffer.t -> unit Api_result.t
@@ -761,8 +747,6 @@ val nvim_put
   -> follow:bool
   -> unit Api_result.t
 
-val nvim_subscribe : event:string -> unit Api_result.t
-val nvim_unsubscribe : event:string -> unit Api_result.t
 val nvim_get_color_by_name : name:string -> int Api_result.t
 val nvim_get_color_map : Msgpack.t String.Map.t Api_result.t
 val nvim_get_context : opts:Msgpack.t String.Map.t -> Msgpack.t String.Map.t Api_result.t
@@ -790,7 +774,6 @@ val nvim_set_client_info
 
 val nvim_get_chan_info : chan:int -> Msgpack.t String.Map.t Api_result.t
 val nvim_list_chans : Msgpack.t list Api_result.t
-val nvim_call_atomic : calls:Msgpack.t list -> Msgpack.t list Api_result.t
 val nvim_list_uis : Msgpack.t list Api_result.t
 val nvim_get_proc_children : pid:int -> Msgpack.t list Api_result.t
 val nvim_get_proc : pid:int -> Msgpack.t Api_result.t
@@ -874,6 +857,11 @@ val nvim_win_is_valid : window:Window.t -> bool Api_result.t
 val nvim_win_hide : window:Window.Or_current.t -> unit Api_result.t
 val nvim_win_close : window:Window.Or_current.t -> force:bool -> unit Api_result.t
 val nvim_win_set_hl_ns : window:Window.Or_current.t -> ns_id:int -> unit Api_result.t
+
+val nvim_win_text_height
+  :  window:Window.Or_current.t
+  -> opts:Msgpack.t String.Map.t
+  -> Msgpack.t String.Map.t Api_result.t
 
 module Options : sig
   module Data : sig

@@ -5,8 +5,12 @@ module Version : sig
     { major : int option
     ; minor : int option
     ; patch : int option
-    ; prerelease : string option
+    ; prerelease : bool option
     ; commit : string option
+    ; api_level : int option
+    ; api_compatible : int option
+    ; api_prerelease : bool option
+    ; build : string option
     }
 
   val to_msgpack_map : t -> Msgpack.t String.Map.t
@@ -15,6 +19,7 @@ end
 module Client_type : sig
   type t =
     | Remote
+    | Msgpack_rpc
     | Ui
     | Embedder
     | Host

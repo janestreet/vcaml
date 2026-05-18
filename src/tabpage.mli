@@ -49,6 +49,14 @@ val get_win
   -> Or_current.t
   -> Nvim_internal.Window.t Deferred.Or_error.t
 
+(* Set the current window for a tabpage. *)
+val set_win
+  :  here:[%call_pos]
+  -> 'a Client.t
+  -> Or_current.t
+  -> Nvim_internal.window
+  -> unit Deferred.Or_error.t
+
 (** Tabpages are both identified by unique ids (represented by [t]) as well as by relative
     numbers based on the currently available tabs, indexed from 1. This function returns
     the number of the given tab, and will return an error if the tab no longer exists. *)

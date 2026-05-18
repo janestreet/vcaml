@@ -274,6 +274,8 @@ module Option : sig
     | Commentstring : (string, [ `copied ]) t
     | Complete : (string list, [ `copied ]) t
     | Completefunc : (string, [ `copied ]) t
+    | Completeopt : (string list, [ `global ]) t
+    | Completeslash : (string, [ `copied ]) t
     | Copyindent : (bool, [ `copied ]) t
     | Define : (string, [ `global ]) t
     | Dictionary : (string list, [ `global ]) t
@@ -285,6 +287,7 @@ module Option : sig
     | Fileencoding : (string, [ `copied ]) t
     | Fileformat : (string, [ `copied ]) t
     | Filetype : (string, [ `none ]) t
+    | Findfunc : (string, [ `global ]) t
     | Fixendofline : (bool, [ `copied ]) t
     | Formatexpr : (string, [ `copied ]) t
     | Formatlistpat : (string, [ `copied ]) t
@@ -397,18 +400,6 @@ module Option : sig
 end
 
 module Untested : sig
-  val add_highlight
-    :  here:[%call_pos]
-    -> _ Client.t
-    -> ?changedtick:changedtick
-    -> Or_current.t
-    -> namespace:Namespace.t
-    -> hl_group:string
-    -> line:int
-    -> col_start:int
-    -> col_end:int
-    -> unit Deferred.Or_error.t
-
   val clear_namespace
     :  here:[%call_pos]
     -> _ Client.t
@@ -477,12 +468,20 @@ module Untested : sig
       [virt_lines]. *)
   type 'a with_extmark_options :=
     ?end_exclusive:Position.t
-    -> ?hl_group:string
+    -> ?hl_group:string list (** highest priority last *)
     -> ?virtual_text:Highlighted_text.t
-    -> ?virtual_text_pos:[ `Eol | `Overlay | `Right_align | `At_column of int ]
+    -> ?virtual_text_pos:
+         [ `Eol
+         | `Overlay
+         | `Right_align
+         | `Eol_right_align
+         | `At_column of int
+         | `Inline
+         ]
     -> ?hide_virtual_text_when_overlaying_selection:bool
     -> ?virtual_lines:Highlighted_text.t list
     -> ?virtual_lines_pos:[ `Above | `Below ]
+    -> ?virtual_lines_overflow:[ `Truncate | `Scroll ]
     -> ?bypass_sign_and_number_columns:bool
     -> ?when_underlying_highlight_conflicts:[ `Override | `Combine_with_bg | `Blend ]
     -> ?extend_highlight_across_screen:bool
@@ -497,8 +496,10 @@ module Untested : sig
     -> ?line_hl_group:string
     -> ?cursorline_hl_group:string
     -> ?conceal:[ `With_default | `With of char ]
+    -> ?conceal_lines:bool
     -> ?spell:bool
     -> ?ui_watched:bool
+    -> ?url:string
     -> unit
     -> 'a
 

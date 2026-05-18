@@ -2,7 +2,15 @@ open Core
 open Async
 open Import0
 
-(** This module is internal to VCaml. See [Vcaml.Client] for the public interface. *)
+(** This module is internal to VCaml. See [Vcaml.Client] for the public interface.
+
+    vcaml --> nvim calls go through [call_nvim_api_fn].
+
+    nvim --> vcaml calls go through functions set up by [register_request_async] or
+    [register_request_blocking].
+
+    [block_nvim] uses both: registering an "anonymous" blocking request then using the api
+    to ask nvim to call that request. *)
 
 type 'kind t
 
@@ -62,6 +70,8 @@ module Private : sig
 
     val name : t -> string
 
+    (** Used to register ocaml functions that can be called by nvim. See
+        [ocaml_from_nvim.mli] and [vcaml_plugin.mli]. *)
     val register_request_async
       :  here:[%call_pos]
       -> t
@@ -69,6 +79,8 @@ module Private : sig
       -> f:Callbacks.async
       -> unit
 
+    (** Used to register ocaml functions that can be called by nvim. See
+        [ocaml_from_nvim.mli] and [vcaml_plugin.mli]. *)
     val register_request_blocking
       :  here:[%call_pos]
       -> t

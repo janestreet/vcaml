@@ -6,8 +6,12 @@ module Version = struct
     { major : int option
     ; minor : int option
     ; patch : int option
-    ; prerelease : string option
+    ; prerelease : bool option
     ; commit : string option
+    ; api_level : int option
+    ; api_compatible : int option
+    ; api_prerelease : bool option
+    ; build : string option
     }
   [@@deriving fields ~iterators:to_list, sexp_of]
 
@@ -16,9 +20,42 @@ module Version = struct
     let%bind major = find_and_convert map "major" (Type.of_msgpack Int) in
     let%bind minor = find_and_convert map "minor" (Type.of_msgpack Int) in
     let%bind patch = find_and_convert map "patch" (Type.of_msgpack Int) in
-    let%bind prerelease = find_and_convert map "prerelease" (Type.of_msgpack String) in
+    let%bind prerelease =
+      find_and_convert map "prerelease" (function
+        | Bool b -> Ok b
+        | String "" -> Ok false
+        | String _ -> Ok true
+        | other ->
+          Or_error.error_s
+            [%message "Expected bool or string for prerelease" (other : Msgpack.t)])
+    in
     let%bind commit = find_and_convert map "commit" (Type.of_msgpack String) in
-    return { major; minor; patch; prerelease; commit }
+    let%bind api_level = find_and_convert map "api_level" (Type.of_msgpack Int) in
+    let%bind api_compatible =
+      find_and_convert map "api_compatible" (Type.of_msgpack Int)
+    in
+    let%bind api_prerelease =
+      find_and_convert map "api_prerelease" (Type.of_msgpack Bool)
+    in
+    let%bind build =
+      find_and_convert map "build" (function
+        | String s -> Ok s
+        | Nil -> Ok ""
+        | other ->
+          Or_error.error_s
+            [%message "Expected string or nil for build" (other : Msgpack.t)])
+    in
+    return
+      { major
+      ; minor
+      ; patch
+      ; prerelease
+      ; commit
+      ; api_level
+      ; api_compatible
+      ; api_prerelease
+      ; build
+      }
   ;;
 
   let to_msgpack_map t =
@@ -31,8 +68,12 @@ module Version = struct
       ~major:(conv Int)
       ~minor:(conv Int)
       ~patch:(conv Int)
-      ~prerelease:(conv String)
+      ~prerelease:(conv Bool)
       ~commit:(conv String)
+      ~api_level:(conv Int)
+      ~api_compatible:(conv Int)
+      ~api_prerelease:(conv Bool)
+      ~build:(conv String)
     |> List.filter_opt
     |> String.Map.of_alist_exn
   ;;
@@ -41,6 +82,7 @@ end
 module Client_type = struct
   type t =
     | Remote
+    | Msgpack_rpc
     | Ui
     | Embedder
     | Host
@@ -60,6 +102,7 @@ module Client_type = struct
 
   let to_string = function
     | Remote -> "remote"
+    | Msgpack_rpc -> "msgpack-rpc"
     | Ui -> "ui"
     | Embedder -> "embedder"
     | Host -> "host"
@@ -123,7 +166,14 @@ let convert_methods msgpack =
 let convert_attributes msgpack =
   let open Or_error.Let_syntax in
   let%bind map = Type.of_msgpack Dict msgpack in
-  map |> Map.map ~f:(Type.of_msgpack String) |> Map.combine_errors
+  map
+  |> Map.map ~f:(function
+    | String s -> Ok s
+    | Int i -> Ok (Int.to_string i)
+    | other ->
+      Or_error.error_s
+        [%message "Expected string or int for attribute value" (other : Msgpack.t)])
+  |> Map.combine_errors
 ;;
 
 let of_msgpack msgpack =

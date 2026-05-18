@@ -9,8 +9,7 @@ let run_echo_tests ~f ~message =
       , fun ~(here : [%call_pos]) client ->
           Command.exec ~here client "echo" ~args:[ [%string "'%{message}'"] ] )
     ; ( "api_out_write"
-      , fun ~(here : [%call_pos]) client -> Nvim.out_write ~here client (message ^ "\n")
-      )
+      , fun ~(here : [%call_pos]) client -> Nvim.out_writeln ~here client message )
     ; ( "api_echo"
       , fun ~(here : [%call_pos]) client ->
           Nvim.echo
@@ -18,8 +17,6 @@ let run_echo_tests ~f ~message =
             client
             [ { text = message; hl_group = None } ]
             ~add_to_history:false )
-    ; ( "api_notify"
-      , fun ~(here : [%call_pos]) client -> Nvim.notify ~here client Info message )
     ]
   in
   Deferred.List.map tests ~how:`Sequential ~f:(fun (name, echo) ->
@@ -41,7 +38,7 @@ let%expect_test "Show echoed content in command line" =
   in
   [%expect
     {|
-    Output for: native_echo, api_out_write, api_echo, api_notify
+    Output for: native_echo, api_out_write, api_echo
     ╭────────────────────────────────────────────────────────────────────────────────╮
     │                                                                                │
     │~                                                                               │
@@ -82,13 +79,10 @@ let%expect_test "Test sending errors" =
   let%bind () =
     with_ui_client (fun client ui ->
       let open Deferred.Or_error.Let_syntax in
-      let%bind () = Nvim.err_write client "This should not display yet..." in
+      let%bind () = Nvim.err_writeln client "This error should be displayed on-screen." in
       let%bind screen = get_screen_contents ui in
       print_endline screen;
-      let%bind () = Nvim.err_write client "but now it should!\n" in
-      let%bind screen = get_screen_contents ui in
-      print_endline screen;
-      let%bind () = Nvim.err_writeln client "This should display now." in
+      let%bind () = Nvim.err_writeln client "Then this one should replace it." in
       let%bind screen = get_screen_contents ui in
       print_endline screen;
       return ())
@@ -125,7 +119,7 @@ let%expect_test "Test sending errors" =
     │~                                                                               │
     │~                                                                               │
     │[No Name]                                                     0,0-1          All│
-    │                                                                                │
+    │This error should be displayed on-screen.                                       │
     ╰────────────────────────────────────────────────────────────────────────────────╯
     ╭────────────────────────────────────────────────────────────────────────────────╮
     │                                                                                │
@@ -157,39 +151,7 @@ let%expect_test "Test sending errors" =
     │~                                                                               │
     │~                                                                               │
     │[No Name]                                                     0,0-1          All│
-    │This should not display yet...but now it should!                                │
-    ╰────────────────────────────────────────────────────────────────────────────────╯
-    ╭────────────────────────────────────────────────────────────────────────────────╮
-    │                                                                                │
-    │~                                                                               │
-    │~                                                                               │
-    │~                                                                               │
-    │~                                                                               │
-    │~                                                                               │
-    │~                                                                               │
-    │~                                                                               │
-    │~                                                                               │
-    │~                                                                               │
-    │~                                                                               │
-    │~                                                                               │
-    │~                                                                               │
-    │~                                                                               │
-    │~                                                                               │
-    │~                                                                               │
-    │~                                                                               │
-    │~                                                                               │
-    │~                                                                               │
-    │~                                                                               │
-    │~                                                                               │
-    │~                                                                               │
-    │~                                                                               │
-    │~                                                                               │
-    │~                                                                               │
-    │~                                                                               │
-    │~                                                                               │
-    │~                                                                               │
-    │[No Name]                                                     0,0-1          All│
-    │This should display now.                                                        │
+    │Then this one should replace it.                                                │
     ╰────────────────────────────────────────────────────────────────────────────────╯
     |}];
   return ()
@@ -221,7 +183,7 @@ let%expect_test "Naively calling [echo] from inside [rpcrequest] fails" =
   in
   [%expect
     {|
-    Output for: native_echo, api_out_write, api_echo, api_notify
+    Output for: native_echo, api_out_write, api_echo
     ╭────────────────────────────────────────────────────────────────────────────────╮
     │                                                                                │
     │~                                                                               │
@@ -313,176 +275,6 @@ let%expect_test "[echo_in_rpcrequest] hack" =
     │~                                                                               │
     │[No Name]                                                     0,0-1          All│
     │Hello, world! 'Quotes' "work" too.                                              │
-    ╰────────────────────────────────────────────────────────────────────────────────╯
-    |}];
-  return ()
-;;
-
-let%expect_test "notify" =
-  let test client ui =
-    let open Deferred.Or_error.Let_syntax in
-    Deferred.Or_error.List.map ~how:`Sequential Nvim.Log_level.all ~f:(fun log_level ->
-      let%bind () = Nvim.notify client log_level "Test message" in
-      let%map output = get_screen_contents ui in
-      output, log_level)
-    >>| String.Map.of_alist_multi
-    >>| Map.iteri ~f:(fun ~key:output ~data:names ->
-      print_s [%message "Output for" (names : Nvim.Log_level.t list)];
-      print_endline output)
-  in
-  let%bind () = with_ui_client test in
-  [%expect
-    {|
-    ("Output for" (names (Trace Debug Info Warn Error)))
-    ╭────────────────────────────────────────────────────────────────────────────────╮
-    │                                                                                │
-    │~                                                                               │
-    │~                                                                               │
-    │~                                                                               │
-    │~                                                                               │
-    │~                                                                               │
-    │~                                                                               │
-    │~                                                                               │
-    │~                                                                               │
-    │~                                                                               │
-    │~                                                                               │
-    │~                                                                               │
-    │~                                                                               │
-    │~                                                                               │
-    │~                                                                               │
-    │~                                                                               │
-    │~                                                                               │
-    │~                                                                               │
-    │~                                                                               │
-    │~                                                                               │
-    │~                                                                               │
-    │~                                                                               │
-    │~                                                                               │
-    │~                                                                               │
-    │~                                                                               │
-    │~                                                                               │
-    │~                                                                               │
-    │~                                                                               │
-    │[No Name]                                                     0,0-1          All│
-    │Test message                                                                    │
-    ╰────────────────────────────────────────────────────────────────────────────────╯
-    |}];
-  let%bind () =
-    with_ui_client (fun client ui ->
-      let%bind.Deferred.Or_error () =
-        Nvim.exec_lua
-          client
-          {|
-          function vim.notify(msg, level)
-            if level == vim.log.levels.ERROR then
-              print("ERROR: "..msg)
-            elseif level == vim.log.levels.WARN then
-              print("WARNING: "..msg)
-            end
-          end |}
-      in
-      test client ui)
-  in
-  [%expect
-    {|
-    ("Output for" (names (Trace Debug Info)))
-    ╭────────────────────────────────────────────────────────────────────────────────╮
-    │                                                                                │
-    │~                                                                               │
-    │~                                                                               │
-    │~                                                                               │
-    │~                                                                               │
-    │~                                                                               │
-    │~                                                                               │
-    │~                                                                               │
-    │~                                                                               │
-    │~                                                                               │
-    │~                                                                               │
-    │~                                                                               │
-    │~                                                                               │
-    │~                                                                               │
-    │~                                                                               │
-    │~                                                                               │
-    │~                                                                               │
-    │~                                                                               │
-    │~                                                                               │
-    │~                                                                               │
-    │~                                                                               │
-    │~                                                                               │
-    │~                                                                               │
-    │~                                                                               │
-    │~                                                                               │
-    │~                                                                               │
-    │~                                                                               │
-    │~                                                                               │
-    │[No Name]                                                     0,0-1          All│
-    │                                                                                │
-    ╰────────────────────────────────────────────────────────────────────────────────╯
-    ("Output for" (names (Error)))
-    ╭────────────────────────────────────────────────────────────────────────────────╮
-    │                                                                                │
-    │~                                                                               │
-    │~                                                                               │
-    │~                                                                               │
-    │~                                                                               │
-    │~                                                                               │
-    │~                                                                               │
-    │~                                                                               │
-    │~                                                                               │
-    │~                                                                               │
-    │~                                                                               │
-    │~                                                                               │
-    │~                                                                               │
-    │~                                                                               │
-    │~                                                                               │
-    │~                                                                               │
-    │~                                                                               │
-    │~                                                                               │
-    │~                                                                               │
-    │~                                                                               │
-    │~                                                                               │
-    │~                                                                               │
-    │~                                                                               │
-    │~                                                                               │
-    │~                                                                               │
-    │~                                                                               │
-    │~                                                                               │
-    │~                                                                               │
-    │[No Name]                                                     0,0-1          All│
-    │ERROR: Test message                                                             │
-    ╰────────────────────────────────────────────────────────────────────────────────╯
-    ("Output for" (names (Warn)))
-    ╭────────────────────────────────────────────────────────────────────────────────╮
-    │                                                                                │
-    │~                                                                               │
-    │~                                                                               │
-    │~                                                                               │
-    │~                                                                               │
-    │~                                                                               │
-    │~                                                                               │
-    │~                                                                               │
-    │~                                                                               │
-    │~                                                                               │
-    │~                                                                               │
-    │~                                                                               │
-    │~                                                                               │
-    │~                                                                               │
-    │~                                                                               │
-    │~                                                                               │
-    │~                                                                               │
-    │~                                                                               │
-    │~                                                                               │
-    │~                                                                               │
-    │~                                                                               │
-    │~                                                                               │
-    │~                                                                               │
-    │~                                                                               │
-    │~                                                                               │
-    │~                                                                               │
-    │~                                                                               │
-    │~                                                                               │
-    │[No Name]                                                     0,0-1          All│
-    │WARNING: Test message                                                           │
     ╰────────────────────────────────────────────────────────────────────────────────╯
     |}];
   return ()

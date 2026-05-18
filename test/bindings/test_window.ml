@@ -306,6 +306,7 @@ let%expect_test "open_floating, get_config, set_config" =
           ; corner_pos = Relative_to_editor { pos = { row = 2; col = 10 } }
           ; zindex = None
           ; focusable = false
+          ; mouse = Some false
           ; border = Some Single_line
           ; title = None
           }
@@ -355,7 +356,7 @@ let%expect_test "open_floating, get_config, set_config" =
       ((Floating
         ((width 20) (height 2) (corner Top_left)
          (corner_pos (Relative_to_editor (pos ((row 2) (col 10))))) (zindex (50))
-         (focusable false)
+         (focusable false) (mouse (false))
          (border
           ((Custom
             (((text "\226\148\140") (hl_group ()))
@@ -380,6 +381,7 @@ let%expect_test "open_floating, get_config, set_config" =
                Relative_to_window { window = Current; pos = { row = 5; col = 5 } }
            ; zindex = None
            ; focusable = false
+           ; mouse = None
            ; border =
                Some
                  (Custom
@@ -430,7 +432,7 @@ let%expect_test "open_floating, get_config, set_config" =
         ((width 20) (height 2) (corner Top_left)
          (corner_pos
           (Relative_to_window (window (Id 1000)) (pos ((row 5) (col 5)))))
-         (zindex (50)) (focusable false)
+         (zindex (50)) (focusable false) (mouse (false))
          (border
           ((Custom
             (((text +) (hl_group ())) ((text -) (hl_group ()))
@@ -470,6 +472,7 @@ let%expect_test "open_floating, get_config, set_config" =
                Relative_to_cursor_in_current_window { pos = { row = 0; col = 0 } }
            ; zindex = None
            ; focusable = false
+           ; mouse = None
            ; border = None
            ; title = None
            })
@@ -513,7 +516,7 @@ let%expect_test "open_floating, get_config, set_config" =
         ((width 1) (height 1) (corner Top_left)
          (corner_pos
           (Relative_to_window (window (Id 1000)) (pos ((row 20) (col 14)))))
-         (zindex (50)) (focusable false) (border ()) (title ()))))
+         (zindex (50)) (focusable false) (mouse (false)) (border ()) (title ()))))
       |}];
     let%bind () =
       Buffer.set_lines
@@ -546,6 +549,7 @@ let%expect_test "open_floating, get_config, set_config" =
                  { window = Current; text_pos = { row = 25; col = 20 }; pos = None }
            ; zindex = None
            ; focusable = false
+           ; mouse = None
            ; border = Some Single_line_rounded_corners
            ; title =
                Some { text = [ { text = "Diagnostic"; hl_group = None } ]; pos = Center }
@@ -591,7 +595,7 @@ let%expect_test "open_floating, get_config, set_config" =
          (corner_pos
           (Relative_to_text_in_window (window (Id 1000))
            (text_pos ((row 25) (col 20))) (pos (((row 0) (col 0))))))
-         (zindex (50)) (focusable false)
+         (zindex (50)) (focusable false) (mouse (false))
          (border
           ((Custom
             (((text "\226\149\173") (hl_group ()))
@@ -626,7 +630,14 @@ let%expect_test "open_external" =
         ()
         ~buffer:(Id buffer)
         ~enter:false
-        ~config:{ width = 20; height = 2; focusable = false; border = None; title = None }
+        ~config:
+          { width = 20
+          ; height = 2
+          ; focusable = false
+          ; mouse = Some true
+          ; border = None
+          ; title = None
+          }
         ~minimal_style:true
     in
     let print_config ~(here : [%call_pos]) () =
@@ -635,7 +646,11 @@ let%expect_test "open_external" =
     in
     let%bind () = print_config () in
     [%expect
-      {| ((External ((width 20) (height 2) (focusable false) (border ()) (title ())))) |}];
+      {|
+      ((External
+        ((width 20) (height 2) (focusable false) (mouse (true)) (border ())
+         (title ()))))
+      |}];
     return ())
 ;;
 

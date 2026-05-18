@@ -44,6 +44,7 @@ module Event = struct
       | CursorHold
       | CursorHoldI
       | CursorMoved
+      | CursorMovedC
       | CursorMovedI
       | DiffUpdated
       | DirChanged
@@ -76,6 +77,9 @@ module Event = struct
       | InsertLeavePre
       | LspAttach
       | LspDetach
+      | LspNotify
+      | LspProgress
+      | LspRequest
       | LspTokenUpdate
       | MenuPopup
       | ModeChanged
@@ -86,8 +90,10 @@ module Event = struct
       | RecordingEnter
       | RecordingLeave
       | RemoteReply
+      | SafeState
       | SearchWrapped
       | SessionLoadPost
+      | SessionWritePost
       | ShellCmdPost
       | ShellFilterPost
       | Signal
@@ -108,6 +114,7 @@ module Event = struct
       | TermEnter
       | TermLeave
       | TermOpen
+      | TermRequest
       | TermResponse
       | TextChanged
       | TextChangedI

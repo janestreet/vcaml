@@ -65,15 +65,23 @@ module Helpers = struct
   let is_keyboard_interrupt_error = function
     | Msgpack.Array [ Int error_type; String message ] ->
       let error_type = Error_type.of_int error_type in
-      (match error_type, message with
-       | Exception, "Keyboard interrupt" -> true
+      (match error_type with
+       | Exception when String.is_substring message ~substring:"Keyboard interrupt" ->
+         true
        | _ -> false)
     | _ -> false
   ;;
 
-  let rec nvim_call_atomic_response_has_keyboard_interrupt ~name ~params ~response =
+  let rec nvim_response_has_keyboard_interrupt
+    ?(api_method = "nvim_exec_lua")
+    ~name
+    ~params
+    ~response
+    ()
+    =
     match name, params, response with
-    | "nvim_call_atomic", calls, Msgpack.Array [ Array partial_results; maybe_error ] ->
+    | name, calls, Msgpack.Array [ Array partial_results; maybe_error ]
+      when String.equal name api_method ->
       let has_keyboard_interrupt =
         match maybe_error with
         | Array (Int _idx :: error) -> is_keyboard_interrupt_error (Array error)
@@ -89,7 +97,7 @@ module Helpers = struct
           | false ->
             (match call with
              | Msgpack.Array [ String name; Array params ] ->
-               nvim_call_atomic_response_has_keyboard_interrupt ~name ~params ~response
+               nvim_response_has_keyboard_interrupt ~api_method ~name ~params ~response ()
              | _ -> false))
     | _ -> false
   ;;
@@ -150,7 +158,6 @@ open Error_pattern_helpers
 module Private = struct
   let unregister_blocking_rpc = unregister_blocking_rpc
   let before_sending_response_hook_for_tests = before_sending_response_hook_for_tests
-  let heartbeat_interval = Time_ns.Span.of_int_ms 100
 
   module Message_type = struct
     type ('in_, 'out) t =
@@ -247,6 +254,10 @@ module Private = struct
       ; patch = None
       ; prerelease = None
       ; commit = None
+      ; api_level = None
+      ; api_compatible = None
+      ; api_prerelease = None
+      ; build = None
       })
     ?(attributes = String.Map.empty)
     ?(client_type = Client_info.Client_type.Remote)
@@ -290,6 +301,13 @@ module Private = struct
       |> Or_error.combine_errors)
     |> t.call_nvim_api_fn ~here Request
   ;;
+
+  let channel_info ~(here : [%call_pos]) ?(chan = 0) t =
+    Nvim_internal.nvim_get_chan_info ~chan
+    |> map_witness ~f:(fun info ->
+      Channel_info.of_msgpack_map info |> Or_error.return |> Or_error.join)
+    |> t.call_nvim_api_fn ~here Request
+  ;;
 end
 
 include Private
@@ -308,6 +326,91 @@ module Expiration_reason = struct
     | Permission_expiration_reason of [ `Rpc_returned | `Keyboard_interrupt ] ref
 end
 
+module Heartbeat = struct
+  (* When Neovim is blocked on an [rpcrequest], we want [Ctrl-C] to interrupt the plugin.
+     Since https://github.com/neovim/neovim/pull/31600, neovim only notifies plugins of a
+     keyboard interrupt if it happens while neovim was processing a request from the
+     plugin. We therefore try to ensure that while neovim is blocked we always have a
+     request open instructing it to sleep. *)
+
+  type t =
+    { mutable should_heartbeat : bool
+    ; during_heartbeat : unit Mvar.Read_write.t
+    ; interval : Time_ns.Span.t
+    ; keyboard_interrupts : (unit, read_write) Bvar.t
+    ; rpc : Msgpack_rpc.t
+    ; time_source : Time_source.t
+    }
+
+  let create ~interval ~keyboard_interrupts ~rpc ~time_source =
+    { should_heartbeat = false
+    ; during_heartbeat = Mvar.create ()
+    ; interval
+    ; keyboard_interrupts
+    ; rpc
+    ; time_source
+    }
+  ;;
+
+  (* Turns on heartbeats so that next time [check_for_interrupts_while_nvim_is_blocked] is
+     called, we start instructing neovim to sleep. *)
+  let start t = t.should_heartbeat <- true
+
+  (* Turns off heartbeats and waits until the currently-active sleep (if any) completes. *)
+  let stop t =
+    t.should_heartbeat <- false;
+    match Mvar.peek t.during_heartbeat with
+    | Some () -> Mvar.taken t.during_heartbeat
+    | None -> return ()
+  ;;
+
+  (* Instructs neovim to sleep. If the request sends back a keyboard interrupt, we
+     broadcast on the [keyboard_interrupts] bvar and turn off subsequent heartbeats. *)
+  let sleep_and_listen_for_interrupts t =
+    let%bind () = Mvar.put t.during_heartbeat () in
+    let sleep_ms = Time_ns.Span.to_int_ms t.interval in
+    let { Nvim_internal.Api_result.name; params; witness = _ } =
+      let cmd =
+        String.Map.of_alist_exn
+          Msgpack.
+            [ "cmd", String "sleep"
+            ; "args", Array [ String [%string "%{sleep_ms#Int}m"] ]
+            ]
+      in
+      let opts = String.Map.empty in
+      Nvim_internal.nvim_cmd ~cmd ~opts
+    in
+    let%bind interrupted =
+      match%map Msgpack_rpc.call t.rpc ~method_name:name ~parameters:params with
+      | Error _ -> false
+      | Ok result ->
+        (match result with
+         | Ok response ->
+           nvim_response_has_keyboard_interrupt
+             ~api_method:"nvim_cmd"
+             ~name
+             ~params
+             ~response
+             ()
+         | Error e -> is_keyboard_interrupt_error e)
+    in
+    if interrupted
+    then (
+      t.should_heartbeat <- false;
+      Bvar.broadcast t.keyboard_interrupts ());
+    Mvar.take t.during_heartbeat
+  ;;
+
+  let check_for_interrupts_while_nvim_is_blocked ~stop t =
+    let%map () =
+      match t.should_heartbeat with
+      | false -> Time_source.after t.time_source t.interval
+      | true -> sleep_and_listen_for_interrupts t
+    in
+    if Deferred.is_determined stop then `Finished () else `Repeat ()
+  ;;
+end
+
 let connect
   ?(time_source = Time_source.wall_clock ())
   { Not_connected.name; async_callbacks; blocking_callbacks; on_error }
@@ -318,6 +421,10 @@ let connect
   let rpc =
     Msgpack_rpc.create ~on_error:(fun error ->
       on_error (Vcaml_error.Msgpack_rpc_error error))
+  in
+  let heartbeat =
+    let interval = Time_ns.Span.(of_int_ms 10) in
+    Heartbeat.create ~interval ~keyboard_interrupts ~rpc ~time_source
   in
   let rec call_nvim_api_fn_unthrottled
     : type a b.
@@ -360,10 +467,10 @@ let connect
          Msgpack_rpc.notify rpc ~method_name:name ~parameters:params
          >>| Result.map_error ~f:(tag_callsite here)
        | Request ->
-         let%map result = Msgpack_rpc.call rpc ~method_name:name ~parameters:params in
+         let%bind result = Msgpack_rpc.call rpc ~method_name:name ~parameters:params in
          (match%bind.Or_error result with
           | Ok response ->
-            if nvim_call_atomic_response_has_keyboard_interrupt ~name ~params ~response
+            if nvim_response_has_keyboard_interrupt ~name ~params ~response ()
             then Bvar.broadcast keyboard_interrupts ();
             Type.of_msgpack witness response
           | Error (Array [ Int error_type; String message ] as error) ->
@@ -373,7 +480,8 @@ let connect
             Error (vim_error error_type (Atom message))
           | Error error ->
             Or_error.error "Msgpack error response" error [%sexp_of: Msgpack.t])
-         |> Result.map_error ~f:(tag_callsite here))
+         |> Result.map_error ~f:(tag_callsite here)
+         |> return)
   in
   let call_nvim_api_fn
     ~(here : [%call_pos])
@@ -396,41 +504,15 @@ let connect
   let nvim_lock = Nvim_lock.create () in
   let permission_to_run_in_background = Nvim_lock.take nvim_lock in
   let () =
-    (* When Neovim is blocked on an [rpcrequest], send heartbeats every
-       [heartbeat_interval] to see if the user pressed Ctrl-C. We need to do this until
-       Neovim pushes notifications about this proactively
-       (https://github.com/neovim/neovim/issues/7546). Without this heartbeating, the
-       plugin wouldn't learn that the user pressed Ctrl-C until it called back into
-       Neovim. *)
-    let permission_to_heartbeat = Nvim_lock.(create () |> take) in
-    Time_source.every'
-      time_source
-      ~stop:(Writer.close_started writer)
-      heartbeat_interval
-      (fun () ->
-         let%bind () =
-           match Nvim_lock.Permission_to_run.peek permission_to_run_in_background with
-           | Some `Ok -> Nvim_lock.Permission_to_run.taken permission_to_run_in_background
-           | Some `Expired ->
-             failwith "Bug: Top-level [Permission_to_run.t] expired" [@nontail]
-           | None -> return ()
-         in
-         call_nvim_api_fn_unthrottled
-           [%here]
-           (* bfredl confirmed that if a request is sent immediately before a response,
-              Neovim might process that response as part of the batch of messages it
-              received before sending a reply to the request, and that would be considered
-              invalid and Neovim would close the connection. To ensure this does not occur
-              with heartbeats, we send them as notifications rather than as requests. *)
-           Notification
-           (* The method we call here seems to matter - some don't go through the code
-              path that would lead Neovim to notify us of a keyboard interrupt. *)
-           (Nvim_internal.nvim_eval ~expr:"0")
-           ~permission_to_run:permission_to_heartbeat
-           ~expiration_reason:Permission_expiration_is_a_bug
-         |> Deferred.ignore_m)
+    Deferred.repeat_until_finished () (fun () ->
+      Heartbeat.check_for_interrupts_while_nvim_is_blocked
+        ~stop:(Writer.close_started writer)
+        heartbeat)
+    |> Deferred.ignore_m
+    |> Deferred.don't_wait_for
   in
   let close () =
+    let%bind () = Heartbeat.stop heartbeat in
     let%bind () =
       (* To avoid a Neovim bug in which closing the connection immediately after returning
          a response can fail the request (https://github.com/neovim/neovim/issues/24214),
@@ -453,7 +535,10 @@ let connect
   let background_request_sequencer = Throttle.Sequencer.create () in
   let notify_nvim_of_error ~(here : [%call_pos]) error =
     let error = tag_callsite here (Error.tag error ~tag:name) in
-    Nvim_internal.nvim_err_writeln ~str:(Error.to_string_hum error)
+    Nvim_internal.nvim_echo
+      ~chunks:[ Msgpack.Array [ String (Error.to_string_hum error) ] ]
+      ~history:true
+      ~opts:(String.Map.singleton "err" (Msgpack.Bool true))
     |> call_nvim_api_fn
          Notification
          ~permission_to_run:permission_to_run_in_background
@@ -517,6 +602,7 @@ let connect
     Msgpack_rpc.register_request_handler
       rpc
       ~name
+      ~on_response_sent:(fun permission -> Nvim_lock.expire nvim_lock permission)
       ~f:(fun args ->
         let%bind () = Ivar.read client_is_ready in
         let request_sequencer = Throttle.Sequencer.create () in
@@ -572,6 +658,7 @@ let connect
           in
           let t = { t with call_nvim_api_fn } in
           let%bind () = flush_neovim_event_queue [%here] ~permission_to_run in
+          Heartbeat.start heartbeat;
           try_with ~here (fun () -> f ~run_in_background t args)
         in
         (* In the case of a keyboard interrupt we want to return an [Ok] result instead of
@@ -603,6 +690,7 @@ let connect
             ]
           |> Deferred.join
         in
+        let%bind () = Heartbeat.stop heartbeat in
         let permission_to_run =
           Nvim_lock.expire_other_users nvim_lock permission_to_run
         in
@@ -616,7 +704,6 @@ let connect
         | Some f ->
           let%map () = f () in
           response, permission_to_run)
-      ~on_response_sent:(fun p -> Nvim_lock.expire nvim_lock p)
     |> synchronous_rpcs_must_be_unique ~name
   and unregister_request_blocking ~name =
     Msgpack_rpc.Expert.unregister_request_handler rpc ~name
@@ -668,28 +755,18 @@ let connect
       ~attributes:String.Map.empty
     |> t.call_nvim_api_fn Request
   in
-  let%bind.Deferred.Or_error channels = nvim_list_chans t in
-  List.find_map channels ~f:(fun channel ->
-    let open Option.Let_syntax in
-    let%bind client = channel.client in
-    let%bind client_name = client.name in
-    match String.equal uuid client_name with
-    | true -> Some channel.id
-    | false -> None)
-  |> function
-  | None -> Deferred.Or_error.error_string "Failed to find current client in channel list"
-  | Some channel_id ->
-    Set_once.set_exn t.channel channel_id;
-    let%bind.Deferred.Or_error () = nvim_set_client_info t () in
-    let%bind.Deferred.Or_error vcaml_internal_group =
-      Nvim_internal.nvim_create_augroup
-        ~name:[%string "vcaml_internal__%{name}__%{uuid}"]
-        ~opts:String.Map.empty
-      |> t.call_nvim_api_fn Request
-    in
-    Set_once.set_exn t.vcaml_internal_group vcaml_internal_group;
-    Ivar.fill_exn client_is_ready ();
-    Deferred.Or_error.return t
+  let%bind.Deferred.Or_error channel_info = channel_info t in
+  Set_once.set_exn t.channel channel_info.id;
+  let%bind.Deferred.Or_error () = nvim_set_client_info t () in
+  let%bind.Deferred.Or_error vcaml_internal_group =
+    Nvim_internal.nvim_create_augroup
+      ~name:[%string "vcaml_internal__%{name}__%{uuid}"]
+      ~opts:String.Map.empty
+    |> t.call_nvim_api_fn Request
+  in
+  Set_once.set_exn t.vcaml_internal_group vcaml_internal_group;
+  Ivar.fill_exn client_is_ready ();
+  Deferred.Or_error.return t
 ;;
 
 (* If we have nested errors from VCaml, we extract the inner error and apply the outer
@@ -814,7 +891,7 @@ open struct
               let name, params = name_and_params call in
               Msgpack.Array [ String name; Array params ])
           in
-          "nvim_call_atomic", params
+          "nvim_exec_lua", params
       ;;
 
       let response t =
@@ -843,9 +920,7 @@ open struct
     let test scenario =
       let name, params = Scenario.name_and_params scenario in
       let response = Scenario.response scenario in
-      let result =
-        nvim_call_atomic_response_has_keyboard_interrupt ~name ~params ~response
-      in
+      let result = nvim_response_has_keyboard_interrupt ~name ~params ~response () in
       print_s [%sexp (result : bool)]
     in
     test Sleep;

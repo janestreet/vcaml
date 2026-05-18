@@ -640,10 +640,8 @@ let user_defined_commands ~(here : [%call_pos]) client ~scope =
     | `Global -> Nvim_internal.nvim_get_commands
     | `Buffer_local buffer -> Nvim_internal.nvim_buf_get_commands ~buffer
   in
-  (* [opts] is not used by this version of Neovim, but may be used in the future. If we
-     expose it, we should do so in a typeful way rather than asking the user to build
-     [Msgpack.t] values. *)
-  query ~opts:String.Map.empty
+  let opts = String.Map.singleton "builtin" (Msgpack.Bool false) in
+  query ~opts
   |> map_witness ~f:(Fn.compose Or_error.return (Map.map ~f:Definition.of_msgpack))
   |> run ~here client
 ;;

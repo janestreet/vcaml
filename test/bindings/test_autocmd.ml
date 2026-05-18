@@ -29,9 +29,11 @@ let%expect_test "Events are typed correctly" =
            | false -> None
            | true ->
              (match tag with
-              (* [LspProgressUpdate] and [LspRequest] are not autocommands themselves -
-                 they are valid patterns for the [User] autocmd. *)
-              | "LSP" | "LspProgressUpdate" | "LspRequest" -> None
+              | "LSP" -> None
+              | _ when String.is_prefix tag ~prefix:"Client:" ->
+                (* The [Client:] entries refer to methods from the [lsp.client] module,
+                   not Neovim events. *)
+                None
               | _ -> Some tag))
         | _ -> None)
       |> List.partition_map ~f:(fun event ->
@@ -78,12 +80,13 @@ let%expect_test "get, create, delete, clear" =
        stable modulo version upgrades, and changes due to upgrades are innocuous. *)
     [%expect
       {|
-      (((group ()) (count 10)) ((group (1)) (count 1)) ((group (2)) (count 1))
-       ((group (3)) (count 1)) ((group (4)) (count 1)) ((group (5)) (count 6))
-       ((group (6)) (count 1)) ((group (7)) (count 72)) ((group (8)) (count 9))
-       ((group (9)) (count 3)) ((group (10)) (count 48)) ((group (11)) (count 12))
-       ((group (12)) (count 20)) ((group (13)) (count 64)) ((group (14)) (count 3))
-       ((group (15)) (count 1)) ((group (17)) (count 1)))
+      (((group ()) (count 9)) ((group (1)) (count 1)) ((group (2)) (count 5))
+       ((group (3)) (count 1)) ((group (4)) (count 1)) ((group (5)) (count 1))
+       ((group (6)) (count 1)) ((group (7)) (count 6)) ((group (8)) (count 1))
+       ((group (9)) (count 88)) ((group (10)) (count 10)) ((group (11)) (count 3))
+       ((group (12)) (count 48)) ((group (13)) (count 12))
+       ((group (14)) (count 23)) ((group (15)) (count 63)) ((group (16)) (count 3))
+       ((group (17)) (count 1)) ((group (18)) (count 2)) ((group (20)) (count 1)))
       |}];
     let%bind () =
       Autocmd.get client ()
@@ -94,7 +97,7 @@ let%expect_test "get, create, delete, clear" =
         Autocmd.clear client () ~group:(`Group group) ~events:all_events)
     in
     let%bind () = print_summary () in
-    [%expect {| (((group ()) (count 10))) |}];
+    [%expect {| (((group ()) (count 9))) |}];
     let%bind () = Autocmd.clear client () ~group:`Not_in_any_group ~events:all_events in
     let%bind () = print_summary () in
     [%expect {| () |}];
@@ -138,24 +141,24 @@ let%expect_test "get, create, delete, clear" =
     let%bind () = get_and_print ~events:[ WinEnter ] () in
     [%expect
       {|
-      ((id (9)) (group (18)) (group_name (MyGroup1))
+      ((id (17)) (group (21)) (group_name (MyGroup1))
        (description ("First autocmd")) (event WinEnter)
        (pattern_or_buffer (Buffer 1)) (once true) (command "echo 'Hello!'"))
       |}];
     let%bind () = get_and_print ~group:group1 () in
     [%expect
       {|
-      ((id (9)) (group (18)) (group_name (MyGroup1))
+      ((id (17)) (group (21)) (group_name (MyGroup1))
        (description ("First autocmd")) (event WinEnter)
        (pattern_or_buffer (Buffer 1)) (once true) (command "echo 'Hello!'"))
       |}];
     let%bind () = get_and_print ~group:group2 () in
     [%expect
       {|
-      ((id (11)) (group (19)) (group_name (MyGroup2))
+      ((id (19)) (group (22)) (group_name (MyGroup2))
        (description ("Third autocmd")) (event BufWinEnter)
        (pattern_or_buffer (Pattern *)) (once false) (command "echo 'BufWinEnter'"))
-      ((id (10)) (group (19)) (group_name (MyGroup2))
+      ((id (18)) (group (22)) (group_name (MyGroup2))
        (description ("Second autocmd")) (event FileType)
        (pattern_or_buffer (Pattern *.lua)) (once false)
        (command "echo 'Hello, Lua!'"))
@@ -163,7 +166,7 @@ let%expect_test "get, create, delete, clear" =
     let%bind () = get_and_print ~patterns_or_buffer:(Patterns [ "*.lua" ]) () in
     [%expect
       {|
-      ((id (10)) (group (19)) (group_name (MyGroup2))
+      ((id (18)) (group (22)) (group_name (MyGroup2))
        (description ("Second autocmd")) (event FileType)
        (pattern_or_buffer (Pattern *.lua)) (once false)
        (command "echo 'Hello, Lua!'"))
@@ -171,7 +174,7 @@ let%expect_test "get, create, delete, clear" =
     let%bind () = get_and_print ~patterns_or_buffer:(Buffer Current) () in
     [%expect
       {|
-      ((id (9)) (group (18)) (group_name (MyGroup1))
+      ((id (17)) (group (21)) (group_name (MyGroup1))
        (description ("First autocmd")) (event WinEnter)
        (pattern_or_buffer (Buffer 1)) (once true) (command "echo 'Hello!'"))
       |}];
@@ -186,11 +189,11 @@ let%expect_test "get, create, delete, clear" =
     let%bind () = get_and_print () in
     [%expect
       {|
-      ((id (10)) (group (19)) (group_name (MyGroup2))
+      ((id (18)) (group (22)) (group_name (MyGroup2))
        (description ("Second autocmd")) (event FileType)
        (pattern_or_buffer (Pattern *.lua)) (once false)
        (command "echo 'Hello, Lua!'"))
-      ((id (9)) (group (18)) (group_name (MyGroup1))
+      ((id (17)) (group (21)) (group_name (MyGroup1))
        (description ("First autocmd")) (event WinEnter)
        (pattern_or_buffer (Buffer 1)) (once true) (command "echo 'Hello!'"))
       |}];
@@ -198,7 +201,7 @@ let%expect_test "get, create, delete, clear" =
     let%bind () = get_and_print () in
     [%expect
       {|
-      ((id (9)) (group (18)) (group_name (MyGroup1))
+      ((id (17)) (group (21)) (group_name (MyGroup1))
        (description ("First autocmd")) (event WinEnter)
        (pattern_or_buffer (Buffer 1)) (once true) (command "echo 'Hello!'"))
       |}];
@@ -209,7 +212,7 @@ let%expect_test "get, create, delete, clear" =
 ;;
 
 let%expect_test "exec" =
-  with_ui_client ~args:[ "--noplugin" ] (fun client ui ->
+  with_ui_client ~args:[ "--noplugin"; "--cmd"; "set shortmess+=I" ] (fun client ui ->
     let open Deferred.Or_error.Let_syntax in
     let%bind group = Autocmd.Group.create client "Test group" in
     let%bind (_ : Autocmd.Id.t) =

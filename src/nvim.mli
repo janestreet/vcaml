@@ -139,13 +139,17 @@ val exec_viml_and_capture_output
 (** Run a series of Lua commands, like [:source]-ing an anonymous Lua file. *)
 val exec_lua : here:[%call_pos] -> _ Client.t -> string -> unit Deferred.Or_error.t
 
-val out_write : here:[%call_pos] -> _ Client.t -> string -> unit Deferred.Or_error.t
+(** As of v0.11 the api no longer provides [nvim_out_write], so this is now just a
+    convenience-wrapper that calls [echo]. *)
 val out_writeln : here:[%call_pos] -> _ Client.t -> string -> unit Deferred.Or_error.t
-val err_write : here:[%call_pos] -> _ Client.t -> string -> unit Deferred.Or_error.t
+
+(** As of v0.11 the api no longer provides [nvim_err_write], so this is now just a
+    convenience-wrapper that calls [echo]. *)
 val err_writeln : here:[%call_pos] -> _ Client.t -> string -> unit Deferred.Or_error.t
 
 val echo
   :  here:[%call_pos]
+  -> ?err:bool
   -> _ Client.t
   -> Highlighted_text.t
   -> add_to_history:bool
@@ -168,22 +172,9 @@ module Log_level : sig
     | Warn
     | Error
   [@@deriving compare, enumerate, sexp_of]
+
+  val to_int : t -> int
 end
-
-(** Send a message to the notification handler. By default, the message is written to the
-    screen and saved in message history (same as [out_writeln]), but the behavior can be
-    customized by setting [vim.notify]. Customizing the behavior of [vim.notify] should be
-    left to the user or to plugins that are specifically intending to globally affect how
-    notifications are handled.
-
-    This function should not be confused with [Notifier.notify], which is used to send RPC
-    notifications to Neovim. *)
-val notify
-  :  here:[%call_pos]
-  -> _ Client.t
-  -> Log_level.t
-  -> string
-  -> unit Deferred.Or_error.t
 
 type keys_with_replaced_keycodes = private string
 
@@ -256,6 +247,8 @@ module Mouse : sig
       | Left
       | Right
       | Middle
+      | X1
+      | X2
     [@@deriving sexp_of]
   end
 
@@ -370,11 +363,11 @@ val put
   -> place_cursor:[ `At_start_of_text | `At_end_of_text ]
   -> unit Deferred.Or_error.t
 
-(** Get information about a given channel (see `:h channel`). *)
+(** Get information about a channel, defaulting to current (see `:h channel`). *)
 val get_channel_info
   :  here:[%call_pos]
+  -> ?channel:int
   -> _ Client.t
-  -> int
   -> Channel_info.t Deferred.Or_error.t
 
 (** List all channels connected to Neovim (see `:h channel`). *)
@@ -496,11 +489,10 @@ module Option : sig
     | Cmdwinheight : int t
     | Columns : int t
     | Compatible : bool t
-    | Completeopt : string list t
-    | Completeslash : string t
+    | Completeitemalign : string list t
     | Confirm : bool t
     | Cpoptions : char list t
-    | Debug : string t
+    | Debug : string list t
     | Delcombine : bool t
     | Diffexpr : string t
     | Diffopt : string list t
@@ -562,6 +554,7 @@ module Option : sig
     | Maxmapdepth : int t
     | Maxmempattern : int t
     | Menuitems : int t
+    | Messagesopt : string list t
     | Mkspellmem : string t
     | Modelineexpr : bool t
     | Modelines : int t
@@ -628,6 +621,7 @@ module Option : sig
     | Startofline : bool t
     | Suffixes : string list t
     | Switchbuf : string list t
+    | Tabclose : string list t
     | Tabline : string t
     | Tabpagemax : int t
     | Tagbsearch : bool t
@@ -637,6 +631,7 @@ module Option : sig
     | Termbidi : bool t
     | Termguicolors : bool t
     | Termpastefilter : string list t
+    | Termsync : bool t
     | Tildeop : bool t
     | Timeout : bool t
     | Timeoutlen : int t
@@ -653,8 +648,6 @@ module Option : sig
     | Verbose : int t
     | Verbosefile : string t
     | Viewdir : string t
-    | Viminfo : string t
-    | Viminfofile : string t
     | Visualbell : bool t
     | Warn : bool t
     | Whichwrap : char list t
@@ -666,6 +659,7 @@ module Option : sig
     | Wildmode : string list t
     | Wildoptions : string list t
     | Winaltkeys : string t
+    | Winborder : string t
     | Window : int t
     | Winheight : int t
     | Winminheight : int t

@@ -273,28 +273,6 @@ let get_byte_offset_of_line ~(here : [%call_pos]) client t ~line:index =
 ;;
 
 module Untested = struct
-  let add_highlight
-    ~(here : [%call_pos])
-    client
-    ?changedtick
-    t
-    ~namespace
-    ~hl_group
-    ~line
-    ~col_start
-    ~col_end
-    =
-    Nvim_internal.nvim_buf_add_highlight
-      ~buffer:t
-      ~ns_id:(Namespace.id namespace)
-      ~hl_group
-      ~line
-      ~col_start
-      ~col_end
-    |> run_with_changedtick_check here client ?changedtick t
-    |> Deferred.Or_error.ignore_m
-  ;;
-
   let clear_namespace ~(here : [%call_pos]) client t ~namespace ~line_start ~line_end =
     Nvim_internal.nvim_buf_clear_namespace
       ~buffer:t
@@ -331,12 +309,13 @@ module Untested = struct
     ?changedtick
     ~start_inclusive
     ?end_exclusive
-    ?hl_group
+    ?(hl_group = [])
     ?virtual_text
     ?virtual_text_pos
     ?hide_virtual_text_when_overlaying_selection
     ?virtual_lines
     ?virtual_lines_pos
+    ?virtual_lines_overflow
     ?bypass_sign_and_number_columns
     ?when_underlying_highlight_conflicts
     ?extend_highlight_across_screen
@@ -351,8 +330,10 @@ module Untested = struct
     ?line_hl_group
     ?cursorline_hl_group
     ?conceal
+    ?(conceal_lines = false)
     ?spell
     ?ui_watched
+    ?url
     ()
     =
     let open Deferred.Or_error.Let_syntax in
@@ -365,13 +346,16 @@ module Untested = struct
       [ bind id ~f:(fun id -> [ "id", M.Int id ])
       ; bind end_exclusive ~f:(fun { Position.row; col } ->
           [ "end_row", M.Int row; "end_col", Int col ])
-      ; bind hl_group ~f:(fun hl_group -> [ "hl_group", M.String hl_group ])
+      ; (let groups = List.map hl_group ~f:(fun g -> M.String g) in
+         [ "hl_group", M.Array groups ])
       ; bind virtual_text ~f:(fun virtual_text ->
           [ "virt_text", pack_highlighted_text virtual_text ])
       ; bind virtual_text_pos ~f:(function
           | `Eol -> [ "virt_text_pos", M.String "eol" ]
           | `Overlay -> [ "virt_text_pos", String "overlay" ]
           | `Right_align -> [ "virt_text_pos", String "right_align" ]
+          | `Inline -> [ "virt_text_pos", String "inline" ]
+          | `Eol_right_align -> [ "virt_text_pos", String "eol_right_align" ]
           | `At_column col -> [ "virt_text_win_col", Int col ])
       ; bind hide_virtual_text_when_overlaying_selection ~f:(fun hide_virtual_text ->
           [ "virt_text_hide", M.Bool hide_virtual_text ])
@@ -384,6 +368,9 @@ module Untested = struct
             | `Below -> false
           in
           [ "virt_lines_above", M.Bool virtual_lines_above ])
+      ; bind virtual_lines_overflow ~f:(function
+          | `Truncate -> [ "virt_lines_overflow", M.String "trunc" ]
+          | `Scroll -> [ "virt_lines_overflow", M.String "scroll" ])
       ; bind bypass_sign_and_number_columns ~f:(fun virtual_lines_leftcol ->
           [ "virt_lines_leftcol", M.Bool virtual_lines_leftcol ])
       ; bind when_underlying_highlight_conflicts ~f:(fun what_to_do ->
@@ -428,8 +415,10 @@ module Untested = struct
                  | `With_default -> ""
                  | `With ch -> Char.to_string ch) )
           ])
+      ; (if conceal_lines then [ "conceal_lines", M.String "" ] else [])
       ; bind spell ~f:(fun spell -> [ "spell", M.Bool spell ])
       ; bind ui_watched ~f:(fun ui_watched -> [ "ui_watched", M.Bool ui_watched ])
+      ; bind url ~f:(fun url -> [ "url", M.String url ])
       ]
       |> List.concat
       |> String.Map.of_alist_exn
@@ -642,6 +631,8 @@ module Option = struct
     | Commentstring : (string, [ `copied ]) t
     | Complete : (string list, [ `copied ]) t
     | Completefunc : (string, [ `copied ]) t
+    | Completeopt : (string list, [ `global ]) t
+    | Completeslash : (string, [ `copied ]) t
     | Copyindent : (bool, [ `copied ]) t
     | Define : (string, [ `global ]) t
     | Dictionary : (string list, [ `global ]) t
@@ -653,6 +644,7 @@ module Option = struct
     | Fileencoding : (string, [ `copied ]) t
     | Fileformat : (string, [ `copied ]) t
     | Filetype : (string, [ `none ]) t
+    | Findfunc : (string, [ `global ]) t
     | Fixendofline : (bool, [ `copied ]) t
     | Formatexpr : (string, [ `copied ]) t
     | Formatlistpat : (string, [ `copied ]) t
@@ -729,6 +721,8 @@ module Option = struct
     | Commentstring -> "commentstring"
     | Complete -> "complete"
     | Completefunc -> "completefunc"
+    | Completeopt -> "completeopt"
+    | Completeslash -> "completeslash"
     | Copyindent -> "copyindent"
     | Define -> "define"
     | Dictionary -> "dictionary"
@@ -740,6 +734,7 @@ module Option = struct
     | Fileencoding -> "fileencoding"
     | Fileformat -> "fileformat"
     | Filetype -> "filetype"
+    | Findfunc -> "findfunc"
     | Fixendofline -> "fixendofline"
     | Formatexpr -> "formatexpr"
     | Formatlistpat -> "formatlistpat"
@@ -818,6 +813,8 @@ module Option = struct
     | Commentstring -> Type.of_msgpack String msgpack
     | Complete -> Type.of_msgpack (Custom (module String_list)) msgpack
     | Completefunc -> Type.of_msgpack String msgpack
+    | Completeopt -> Type.of_msgpack (Custom (module String_list)) msgpack
+    | Completeslash -> Type.of_msgpack String msgpack
     | Copyindent -> Type.of_msgpack Bool msgpack
     | Define -> Type.of_msgpack String msgpack
     | Dictionary -> Type.of_msgpack (Custom (module String_list)) msgpack
@@ -829,6 +826,7 @@ module Option = struct
     | Fileencoding -> Type.of_msgpack String msgpack
     | Fileformat -> Type.of_msgpack String msgpack
     | Filetype -> Type.of_msgpack String msgpack
+    | Findfunc -> Type.of_msgpack String msgpack
     | Fixendofline -> Type.of_msgpack Bool msgpack
     | Formatexpr -> Type.of_msgpack String msgpack
     | Formatlistpat -> Type.of_msgpack String msgpack
@@ -907,6 +905,8 @@ module Option = struct
     | Commentstring -> Type.to_msgpack String value
     | Complete -> Type.to_msgpack (Custom (module String_list)) value
     | Completefunc -> Type.to_msgpack String value
+    | Completeopt -> Type.to_msgpack (Custom (module String_list)) value
+    | Completeslash -> Type.to_msgpack String value
     | Copyindent -> Type.to_msgpack Bool value
     | Define -> Type.to_msgpack String value
     | Dictionary -> Type.to_msgpack (Custom (module String_list)) value
@@ -918,6 +918,7 @@ module Option = struct
     | Fileencoding -> Type.to_msgpack String value
     | Fileformat -> Type.to_msgpack String value
     | Filetype -> Type.to_msgpack String value
+    | Findfunc -> Type.to_msgpack String value
     | Fixendofline -> Type.to_msgpack Bool value
     | Formatexpr -> Type.to_msgpack String value
     | Formatlistpat -> Type.to_msgpack String value
@@ -1001,6 +1002,8 @@ module Option = struct
     | Commentstring -> Copied
     | Complete -> Copied
     | Completefunc -> Copied
+    | Completeopt -> Global
+    | Completeslash -> Copied
     | Copyindent -> Copied
     | Define -> Global
     | Dictionary -> Global
@@ -1012,6 +1015,7 @@ module Option = struct
     | Fileencoding -> Copied
     | Fileformat -> Copied
     | Filetype -> None
+    | Findfunc -> Global
     | Fixendofline -> Copied
     | Formatexpr -> Copied
     | Formatlistpat -> Copied
@@ -1127,7 +1131,7 @@ module Option = struct
   let get_for_new_buffers = get_global
 
   let get_dynamic_info (type a g) ~(here : [%call_pos]) client (t : (a, g) t) =
-    Nvim_internal.nvim_get_option_info ~name:(to_string t)
+    Nvim_internal.nvim_get_option_info2 ~name:(to_string t) ~opts:String.Map.empty
     |> map_witness
          ~f:(Dynamic_option_info.of_msgpack_map ~default_of_msgpack:(of_msgpack t))
     |> run ~here client

@@ -3,9 +3,17 @@ open Async
 open Vcaml
 open Vcaml_test_helpers
 
+let clear_existing_user_commands ~(here : [%call_pos]) client =
+  let scope = `Global in
+  let%bind.Deferred.Or_error commands = Command.user_defined_commands client ~scope in
+  Deferred.Or_error.List.iter ~how:`Sequential (Map.keys commands) ~f:(fun name ->
+    Command.delete ~here client name ~scope)
+;;
+
 let%expect_test "create, delete, user_defined_commands" =
   with_client ~args:[ "--noplugin" ] (fun client ->
     let open Deferred.Or_error.Let_syntax in
+    let%bind () = clear_existing_user_commands client in
     let test ~scope =
       let%bind () =
         Command.create

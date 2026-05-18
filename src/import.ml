@@ -35,11 +35,10 @@ module Atomic = struct
         | Msgpack_rpc_error error -> [%sexp (error : Error.t)]
         | Unexpected_format msgpack ->
           [%message
-            "nvim_call_atomic returned OK result with unexpected format"
-              (msgpack : Msgpack.t)]
+            "Atomic.run returned OK result with unexpected format" (msgpack : Msgpack.t)]
         | Call_failed { partial_results; index_of_failure; error_type; message } ->
           [%message.omit_nil
-            "One of the calls in the nvim_call_atomic batch failed"
+            "One of the calls in the Atomic.run batch failed"
               (partial_results : Msgpack.t list)
               (index_of_failure : int)
               (error_type : Error_type.t)
@@ -51,17 +50,37 @@ module Atomic = struct
   end
 
   let run ~(here : [%call_pos]) client calls =
+    let lua_like_nvim_call_atomic =
+      {|
+      local calls = ...
+      local results = {}
+      for i, call in ipairs(calls) do
+        local ok, result = pcall(vim.api[call[1]], unpack(call[2]))
+        if result == nil then
+          result = vim.NIL
+        end
+        if ok then
+          results[i] = result
+        else
+          -- On first failure, stop executing and return partial results
+          return {results, {i - 1, 0, result}}
+        end
+      end
+      return {results, vim.NIL}
+      |}
+    in
     let calls =
       List.map calls ~f:(fun (T { name; params; witness = _ }) ->
         Msgpack.Array [ String name; Array params ])
     in
-    let nvim_call_atomic =
-      (* Since we already expect a particular output format below, we want to report any
-         failures due to unexpected format using [Unexpected_format]. *)
-      let api_result = Nvim_internal.nvim_call_atomic ~calls in
-      { api_result with witness = Object }
-    in
-    match%map run ~here client nvim_call_atomic with
+    match%map
+      run
+        ~here
+        client
+        (Nvim_internal.nvim_exec_lua
+           ~code:lua_like_nvim_call_atomic
+           ~args:[ Array calls ])
+    with
     | Error error -> Error (Error.Msgpack_rpc_error error, here)
     | Ok (Array [ Array results; Nil ]) -> Ok results
     | Ok

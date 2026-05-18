@@ -181,6 +181,8 @@ module Config : sig
           (** Note that mouse updates will be infrequent unless the 'mousemoveevent'
               option is set. This option has overhead, and when it is enabled mouse
               movement can abort pending mappings. *)
+          | Relative_to_laststatus of { pos : Position.t }
+          | Relative_to_tabline of { pos : Position.t }
       end
     end
 
@@ -191,6 +193,7 @@ module Config : sig
       ; corner_pos : Corner.Position.t
       ; zindex : int option
       ; focusable : bool
+      ; mouse : bool option
       ; border : Border.t option
       ; title : Title.t option
       }
@@ -202,6 +205,7 @@ module Config : sig
       { width : int
       ; height : int
       ; focusable : bool
+      ; mouse : bool option
       ; border : Border.t option
       ; title : Title.t option
       }
@@ -376,13 +380,14 @@ module Option : sig
       | Breakindent : (bool, [ `copied ]) t
       | Breakindentopt : (string list, [ `copied ]) t
       | Colorcolumn : (string list, [ `copied ]) t
-      | Concealcursor : (string, [ `copied ]) t
+      | Concealcursor : (char list, [ `copied ]) t
       | Conceallevel : (int, [ `copied ]) t
       | Cursorbind : (bool, [ `copied ]) t
       | Cursorcolumn : (bool, [ `copied ]) t
       | Cursorline : (bool, [ `copied ]) t
       | Cursorlineopt : (string list, [ `copied ]) t
       | Diff : (bool, [ `copied ]) t
+      | Eventignorewin : (string list, [ `copied ]) t
       | Fillchars : (string list, [ `global ]) t
       | Foldcolumn : (string, [ `copied ]) t
       | Foldenable : (bool, [ `copied ]) t
@@ -401,18 +406,20 @@ module Option : sig
       | Numberwidth : (int, [ `copied ]) t
       | Relativenumber : (bool, [ `copied ]) t
       | Rightleft : (bool, [ `copied ]) t
-      | Rightleftcmd : (string, [ `copied ]) t
+      | Rightleftcmd : (string list, [ `copied ]) t
       | Scrollbind : (bool, [ `copied ]) t
       | Scrolloff : (int, [ `global ]) t
       | Showbreak : (string, [ `global ]) t
       | Sidescrolloff : (int, [ `global ]) t
       | Signcolumn : (string, [ `copied ]) t
+      | Smoothscroll : (bool, [ `copied ]) t
       | Spell : (bool, [ `copied ]) t
       | Statuscolumn : (string, [ `copied ]) t
       | Statusline : (string, [ `global ]) t
       | Virtualedit : (string list, [ `global ]) t
       | Winbar : (string, [ `global ]) t
       | Winblend : (int, [ `copied ]) t
+      | Winfixbuf : (bool, [ `copied ]) t
       | Winhighlight : (string list, [ `copied ]) t
       | Wrap : (bool, [ `copied ]) t
     [@@deriving sexp_of]

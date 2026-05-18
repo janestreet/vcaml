@@ -39,26 +39,3 @@ let notify ~(here : [%call_pos]) client ~name ~type_ =
          ~args)
     |> client.call_nvim_api_fn ~here Notification)
 ;;
-
-module Untested = struct
-  let nvim_buf_add_highlight
-    ~(here : [%call_pos])
-    client
-    buffer
-    ~namespace
-    ~hl_group
-    ~line
-    ~col_start
-    ~col_end
-    =
-    let client = Type_equal.conv Client.Private.eq client in
-    Nvim_internal.nvim_buf_add_highlight
-      ~buffer
-      ~ns_id:(Namespace.id namespace)
-      ~hl_group
-      ~line
-      ~col_start
-      ~col_end
-    |> client.call_nvim_api_fn ~here Notification
-  ;;
-end

@@ -6,7 +6,7 @@
 
 set -euo pipefail
 {
-  EXPECTED_NVIM_VERSION="0.9.1"
+  EXPECTED_NVIM_VERSION="0.11.2"
   ACTUAL_NVIM_VERSION="$(nvim --version | head -n 1 | sed 's/^NVIM v//')"
   NAME="${1:-vcaml}"
   JOBS="${2:-${OPAMJOBS:-}}"

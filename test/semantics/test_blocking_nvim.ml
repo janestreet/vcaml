@@ -993,7 +993,7 @@ let%expect_test "Demonstrate disconnect induced by sleep" =
       (("Called from" lib/vcaml/test/semantics/test_blocking_nvim.ml:LINE:COL))))
 
     -----  NVIM_LOG_FILE  -----
-    ERR TIMESTAMP socket     chan_close_with_error:LINE: RPC: ch 1 returned a response with an unknown request id. Ensure the client is properly synchronized
+    ERR TIMESTAMP socket     chan_close_on_err:LINE: RPC: ch 1 (type=0) returned a response with an unknown request id 1. Ensure the client is properly synchronized
     ---------------------------
     |}];
   Dynamic.set_root Backtrace.elide false;

@@ -241,6 +241,8 @@ module Config = struct
               }
           | Relative_to_cursor_in_current_window of { pos : Position.t }
           | Relative_to_mouse of { pos : Position.t }
+          | Relative_to_laststatus of { pos : Position.t }
+          | Relative_to_tabline of { pos : Position.t }
         [@@deriving sexp_of]
 
         let to_msgpack_map t =
@@ -282,6 +284,10 @@ module Config = struct
               ; "row", Int pos.row
               ; "col", Int pos.col
               ]
+            | Relative_to_laststatus { pos } ->
+              [ "relative", String "laststatus"; "row", Int pos.row; "col", Int pos.col ]
+            | Relative_to_tabline { pos } ->
+              [ "relative", String "tabline"; "row", Int pos.row; "col", Int pos.col ]
           in
           String.Map.of_alist_exn map
         ;;
@@ -357,6 +363,7 @@ module Config = struct
       ; corner_pos : Corner.Position.t
       ; zindex : int option
       ; focusable : bool
+      ; mouse : bool option
       ; border : Border.t option
       ; title : Title.t option
       }
@@ -375,6 +382,11 @@ module Config = struct
         match t.zindex with
         | None -> map
         | Some zindex -> ("zindex", Int zindex) :: map
+      in
+      let map =
+        match t.mouse with
+        | None -> map
+        | Some mouse -> ("mouse", Bool mouse) :: map
       in
       List.reduce_exn
         [ String.Map.of_alist_exn map
@@ -400,9 +412,11 @@ module Config = struct
         find_and_convert map "focusable" (Type.of_msgpack Bool)
         >>| Option.value ~default:true
       in
+      let%bind mouse = find_and_convert map "mouse" (Type.of_msgpack Bool) in
       let%bind border = find_and_convert map "border" Border.of_msgpack >>| Option.join in
       let%bind title = Title.of_msgpack_map map in
-      return { width; height; corner; corner_pos; zindex; focusable; border; title }
+      return
+        { width; height; corner; corner_pos; zindex; focusable; mouse; border; title }
     ;;
   end
 
@@ -411,6 +425,7 @@ module Config = struct
       { width : int
       ; height : int
       ; focusable : bool
+      ; mouse : bool option
       ; border : Border.t option
       ; title : Title.t option
       }
@@ -424,6 +439,11 @@ module Config = struct
         ; "focusable", Bool t.focusable
         ; "external", Bool true
         ]
+      in
+      let map =
+        match t.mouse with
+        | None -> map
+        | Some mouse -> ("mouse", Bool mouse) :: map
       in
       Core.Map.merge_skewed
         (String.Map.of_alist_exn map)
@@ -440,9 +460,10 @@ module Config = struct
         find_and_convert map "focusable" (Type.of_msgpack Bool)
         >>| Option.value ~default:true
       in
+      let%bind mouse = find_and_convert map "mouse" (Type.of_msgpack Bool) in
       let%bind border = find_and_convert map "border" Border.of_msgpack >>| Option.join in
       let%bind title = Title.of_msgpack_map map in
-      return { width; height; focusable; border; title }
+      return { width; height; focusable; mouse; border; title }
     ;;
   end
 
@@ -636,7 +657,7 @@ module Option = struct
   (*$*)
 
   let get_dynamic_info (type a) ~(here : [%call_pos]) client (t : a t) =
-    Nvim_internal.nvim_get_option_info ~name:(to_string t)
+    Nvim_internal.nvim_get_option_info2 ~name:(to_string t) ~opts:String.Map.empty
     |> map_witness
          ~f:(Dynamic_option_info.of_msgpack_map ~default_of_msgpack:(of_msgpack t))
     |> run ~here client
@@ -667,13 +688,14 @@ module Option = struct
       | Breakindent : (bool, [ `copied ]) t
       | Breakindentopt : (string list, [ `copied ]) t
       | Colorcolumn : (string list, [ `copied ]) t
-      | Concealcursor : (string, [ `copied ]) t
+      | Concealcursor : (char list, [ `copied ]) t
       | Conceallevel : (int, [ `copied ]) t
       | Cursorbind : (bool, [ `copied ]) t
       | Cursorcolumn : (bool, [ `copied ]) t
       | Cursorline : (bool, [ `copied ]) t
       | Cursorlineopt : (string list, [ `copied ]) t
       | Diff : (bool, [ `copied ]) t
+      | Eventignorewin : (string list, [ `copied ]) t
       | Fillchars : (string list, [ `global ]) t
       | Foldcolumn : (string, [ `copied ]) t
       | Foldenable : (bool, [ `copied ]) t
@@ -692,18 +714,20 @@ module Option = struct
       | Numberwidth : (int, [ `copied ]) t
       | Relativenumber : (bool, [ `copied ]) t
       | Rightleft : (bool, [ `copied ]) t
-      | Rightleftcmd : (string, [ `copied ]) t
+      | Rightleftcmd : (string list, [ `copied ]) t
       | Scrollbind : (bool, [ `copied ]) t
       | Scrolloff : (int, [ `global ]) t
       | Showbreak : (string, [ `global ]) t
       | Sidescrolloff : (int, [ `global ]) t
       | Signcolumn : (string, [ `copied ]) t
+      | Smoothscroll : (bool, [ `copied ]) t
       | Spell : (bool, [ `copied ]) t
       | Statuscolumn : (string, [ `copied ]) t
       | Statusline : (string, [ `global ]) t
       | Virtualedit : (string list, [ `global ]) t
       | Winbar : (string, [ `global ]) t
       | Winblend : (int, [ `copied ]) t
+      | Winfixbuf : (bool, [ `copied ]) t
       | Winhighlight : (string list, [ `copied ]) t
       | Wrap : (bool, [ `copied ]) t
     [@@deriving sexp_of]
@@ -720,6 +744,7 @@ module Option = struct
       | Cursorline -> "cursorline"
       | Cursorlineopt -> "cursorlineopt"
       | Diff -> "diff"
+      | Eventignorewin -> "eventignorewin"
       | Fillchars -> "fillchars"
       | Foldcolumn -> "foldcolumn"
       | Foldenable -> "foldenable"
@@ -744,12 +769,14 @@ module Option = struct
       | Showbreak -> "showbreak"
       | Sidescrolloff -> "sidescrolloff"
       | Signcolumn -> "signcolumn"
+      | Smoothscroll -> "smoothscroll"
       | Spell -> "spell"
       | Statuscolumn -> "statuscolumn"
       | Statusline -> "statusline"
       | Virtualedit -> "virtualedit"
       | Winbar -> "winbar"
       | Winblend -> "winblend"
+      | Winfixbuf -> "winfixbuf"
       | Winhighlight -> "winhighlight"
       | Wrap -> "wrap"
     ;;
@@ -761,13 +788,14 @@ module Option = struct
       | Breakindent -> Type.of_msgpack Bool msgpack
       | Breakindentopt -> Type.of_msgpack (Custom (module String_list)) msgpack
       | Colorcolumn -> Type.of_msgpack (Custom (module String_list)) msgpack
-      | Concealcursor -> Type.of_msgpack String msgpack
+      | Concealcursor -> Type.of_msgpack (Custom (module Char_list)) msgpack
       | Conceallevel -> Type.of_msgpack Int msgpack
       | Cursorbind -> Type.of_msgpack Bool msgpack
       | Cursorcolumn -> Type.of_msgpack Bool msgpack
       | Cursorline -> Type.of_msgpack Bool msgpack
       | Cursorlineopt -> Type.of_msgpack (Custom (module String_list)) msgpack
       | Diff -> Type.of_msgpack Bool msgpack
+      | Eventignorewin -> Type.of_msgpack (Custom (module String_list)) msgpack
       | Fillchars -> Type.of_msgpack (Custom (module String_list)) msgpack
       | Foldcolumn -> Type.of_msgpack String msgpack
       | Foldenable -> Type.of_msgpack Bool msgpack
@@ -786,18 +814,20 @@ module Option = struct
       | Numberwidth -> Type.of_msgpack Int msgpack
       | Relativenumber -> Type.of_msgpack Bool msgpack
       | Rightleft -> Type.of_msgpack Bool msgpack
-      | Rightleftcmd -> Type.of_msgpack String msgpack
+      | Rightleftcmd -> Type.of_msgpack (Custom (module String_list)) msgpack
       | Scrollbind -> Type.of_msgpack Bool msgpack
       | Scrolloff -> Type.of_msgpack Int msgpack
       | Showbreak -> Type.of_msgpack String msgpack
       | Sidescrolloff -> Type.of_msgpack Int msgpack
       | Signcolumn -> Type.of_msgpack String msgpack
+      | Smoothscroll -> Type.of_msgpack Bool msgpack
       | Spell -> Type.of_msgpack Bool msgpack
       | Statuscolumn -> Type.of_msgpack String msgpack
       | Statusline -> Type.of_msgpack String msgpack
       | Virtualedit -> Type.of_msgpack (Custom (module String_list)) msgpack
       | Winbar -> Type.of_msgpack String msgpack
       | Winblend -> Type.of_msgpack Int msgpack
+      | Winfixbuf -> Type.of_msgpack Bool msgpack
       | Winhighlight -> Type.of_msgpack (Custom (module String_list)) msgpack
       | Wrap -> Type.of_msgpack Bool msgpack
     ;;
@@ -809,13 +839,14 @@ module Option = struct
       | Breakindent -> Type.to_msgpack Bool value
       | Breakindentopt -> Type.to_msgpack (Custom (module String_list)) value
       | Colorcolumn -> Type.to_msgpack (Custom (module String_list)) value
-      | Concealcursor -> Type.to_msgpack String value
+      | Concealcursor -> Type.to_msgpack (Custom (module Char_list)) value
       | Conceallevel -> Type.to_msgpack Int value
       | Cursorbind -> Type.to_msgpack Bool value
       | Cursorcolumn -> Type.to_msgpack Bool value
       | Cursorline -> Type.to_msgpack Bool value
       | Cursorlineopt -> Type.to_msgpack (Custom (module String_list)) value
       | Diff -> Type.to_msgpack Bool value
+      | Eventignorewin -> Type.to_msgpack (Custom (module String_list)) value
       | Fillchars -> Type.to_msgpack (Custom (module String_list)) value
       | Foldcolumn -> Type.to_msgpack String value
       | Foldenable -> Type.to_msgpack Bool value
@@ -834,18 +865,20 @@ module Option = struct
       | Numberwidth -> Type.to_msgpack Int value
       | Relativenumber -> Type.to_msgpack Bool value
       | Rightleft -> Type.to_msgpack Bool value
-      | Rightleftcmd -> Type.to_msgpack String value
+      | Rightleftcmd -> Type.to_msgpack (Custom (module String_list)) value
       | Scrollbind -> Type.to_msgpack Bool value
       | Scrolloff -> Type.to_msgpack Int value
       | Showbreak -> Type.to_msgpack String value
       | Sidescrolloff -> Type.to_msgpack Int value
       | Signcolumn -> Type.to_msgpack String value
+      | Smoothscroll -> Type.to_msgpack Bool value
       | Spell -> Type.to_msgpack Bool value
       | Statuscolumn -> Type.to_msgpack String value
       | Statusline -> Type.to_msgpack String value
       | Virtualedit -> Type.to_msgpack (Custom (module String_list)) value
       | Winbar -> Type.to_msgpack String value
       | Winblend -> Type.to_msgpack Int value
+      | Winfixbuf -> Type.to_msgpack Bool value
       | Winhighlight -> Type.to_msgpack (Custom (module String_list)) value
       | Wrap -> Type.to_msgpack Bool value
     ;;
@@ -853,7 +886,7 @@ module Option = struct
     (*$*)
 
     let get_dynamic_info (type a g) ~(here : [%call_pos]) client (t : (a, g) t) =
-      Nvim_internal.nvim_get_option_info ~name:(to_string t)
+      Nvim_internal.nvim_get_option_info2 ~name:(to_string t) ~opts:String.Map.empty
       |> map_witness
            ~f:(Dynamic_option_info.of_msgpack_map ~default_of_msgpack:(of_msgpack t))
       |> run ~here client
