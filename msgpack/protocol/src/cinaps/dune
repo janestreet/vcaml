@@ -1,0 +1,6 @@
+(library
+ (name msgpack_cinaps)
+ (public_name vcaml.msgpack.cinaps)
+ (libraries core msgpack)
+ (preprocess
+  (pps ppx_jane -compare-require-explicit-locality)))

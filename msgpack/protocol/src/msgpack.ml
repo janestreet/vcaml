@@ -1,6 +1,7 @@
 open Core
 
 module Internal = struct
+  module Constants = Constants
   module Parser = Parser
   module Serializer = Serializer
 end
