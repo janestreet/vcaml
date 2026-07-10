@@ -6,6 +6,7 @@ open Core
 include module type of Message
 
 module Internal : sig
+  module Constants : module type of Constants
   module Parser : module type of Parser
   module Serializer : module type of Serializer
 end
